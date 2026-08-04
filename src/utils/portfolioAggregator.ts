@@ -1,0 +1,239 @@
+import { Transaction, GroupedPortfolio, UserSettings, AggregatedAsset } from '../types';
+import { YahooQuote } from '../services/yahooFinance';
+import { calculateTransactionsXIRR } from './xirr';
+
+export interface PositionLot {
+  quantity: number;
+  purchasePrice: number;
+}
+
+export const calculateFifo = (transactions: Transaction[]): {
+  totalQuantity: number;
+  totalInvested: number;
+  averagePrice: number;
+} => {
+  const sortedTx = [...transactions].sort((a, b) => {
+    if (a.date < b.date) return -1;
+    if (a.date > b.date) return 1;
+    if (a.type === 'BUY' && b.type === 'SELL') return -1;
+    if (a.type === 'SELL' && b.type === 'BUY') return 1;
+    return 0;
+  });
+
+  const lots: PositionLot[] = [];
+
+  sortedTx.forEach(tx => {
+    const txType = tx.type || 'BUY';
+    const quantity = Number(tx.quantity) || 0;
+    const purchasePrice = Number(tx.purchasePrice) || 0;
+
+    if (quantity <= 0) return;
+
+    if (txType === 'BUY') {
+      lots.push({ quantity, purchasePrice });
+    } else {
+      let remainingToSell = quantity;
+      while (remainingToSell > 0 && lots.length > 0) {
+        if (lots[0].quantity <= remainingToSell) {
+          remainingToSell -= lots[0].quantity;
+          lots.shift();
+        } else {
+          lots[0].quantity -= remainingToSell;
+          remainingToSell = 0;
+        }
+      }
+    }
+  });
+
+  const totalQuantity = lots.reduce((acc, lot) => acc + lot.quantity, 0);
+  const totalInvested = lots.reduce((acc, lot) => acc + lot.quantity * lot.purchasePrice, 0);
+  const averagePrice = totalQuantity > 0 ? totalInvested / totalQuantity : 0;
+
+  return { totalQuantity, totalInvested, averagePrice };
+};
+
+export const calculatePortfolioAggregation = (
+  transactions: Transaction[],
+  quotes: Record<string, YahooQuote>,
+  assetCategories: Record<string, string>,
+  settings: UserSettings | null
+): {
+  groupedData: GroupedPortfolio[];
+  globalTotalValue: number;
+  globalInvested: number;
+  globalDailyChange: number;
+  globalPL: number;
+  globalPLPercent: number;
+  globalDailyChangePercent: number;
+  globalAnnualizedReturn: number | null;
+  globalIsAnnualizedExtrapolated: boolean;
+} => {
+  const groupsMap: Record<string, GroupedPortfolio> = {};
+
+  if (settings && settings.groups) {
+    settings.groups.forEach(g => {
+      groupsMap[g] = {
+        groupName: g,
+        totalInvested: 0,
+        currentTotalValue: 0,
+        profitOrLoss: 0,
+        profitOrLossPercent: 0,
+        dailyChange: 0,
+        dailyChangePercent: 0,
+        assets: []
+      };
+    });
+  }
+
+  const groupTxs: Record<string, Record<string, Transaction[]>> = {};
+  const globalTxs: Record<string, Transaction[]> = {};
+
+  transactions.forEach(tx => {
+    const txGroups = tx.groups || (tx.group ? [tx.group] : ['Generale']);
+
+    txGroups.forEach(gName => {
+      if (!groupsMap[gName]) {
+        groupsMap[gName] = {
+          groupName: gName,
+          totalInvested: 0,
+          currentTotalValue: 0,
+          profitOrLoss: 0,
+          profitOrLossPercent: 0,
+          dailyChange: 0,
+          dailyChangePercent: 0,
+          assets: []
+        };
+      }
+
+      if (!groupTxs[gName]) {
+        groupTxs[gName] = {};
+      }
+      if (!groupTxs[gName][tx.symbol]) {
+        groupTxs[gName][tx.symbol] = [];
+      }
+      groupTxs[gName][tx.symbol].push(tx);
+    });
+
+    if (!globalTxs[tx.symbol]) {
+      globalTxs[tx.symbol] = [];
+    }
+    globalTxs[tx.symbol].push(tx);
+  });
+
+  // Calculate FIFO and prepare assets for each group
+  Object.keys(groupsMap).forEach(gName => {
+    const groupAssetsMap = groupTxs[gName] || {};
+
+    Object.entries(groupAssetsMap).forEach(([symbol, txList]) => {
+      const { totalQuantity, totalInvested, averagePrice } = calculateFifo(txList);
+      const isin = txList.find(t => t.isin)?.isin;
+      const quote = quotes[symbol] || (isin ? quotes[isin] : undefined);
+      const latestNamedTx = [...txList].reverse().find(t => t.name);
+
+      const asset: AggregatedAsset = {
+        symbol,
+        name: latestNamedTx?.name || quote?.longName || quote?.shortName || symbol,
+        totalQuantity,
+        averagePrice,
+        totalInvested,
+        currentPrice: 0,
+        currentTotalValue: 0,
+        profitOrLoss: 0,
+        profitOrLossPercent: 0,
+        dailyChange: 0,
+        dailyChangePercent: 0,
+        currency: (txList.some(t => t.source === 'scalable_mcp' || t.currency === 'EUR') 
+          ? 'EUR' 
+          : (txList.find(t => t.currency)?.currency || quote?.currency || 'EUR')),
+        category: assetCategories[symbol] || (isin ? assetCategories[isin] : undefined) || 'Altro'
+      };
+
+      groupsMap[gName].assets.push(asset);
+    });
+  });
+
+  // Now compute current values, totals, and XIRR for groups and their assets
+  Object.values(groupsMap).forEach(g => {
+    const groupAssetsMap = groupTxs[g.groupName] || {};
+
+    g.assets.forEach(asset => {
+      const assetTxs = groupAssetsMap[asset.symbol] || [];
+      const isin = assetTxs.find(t => t.isin)?.isin;
+      const quote = quotes[asset.symbol] || (isin ? quotes[isin] : undefined);
+      const currentPrice = quote?.regularMarketPrice || (asset.averagePrice > 0 ? asset.averagePrice : 1);
+      const dailyChangePercent = quote?.regularMarketChangePercent || 0;
+      const dailyChangeAbs = quote?.regularMarketChange || 0;
+
+      asset.currentPrice = currentPrice;
+      asset.currentTotalValue = asset.totalQuantity * currentPrice;
+      asset.profitOrLoss = asset.currentTotalValue - asset.totalInvested;
+      asset.profitOrLossPercent = asset.totalInvested > 0 ? (asset.profitOrLoss / asset.totalInvested) * 100 : 0;
+      asset.dailyChange = asset.totalQuantity * dailyChangeAbs;
+      asset.dailyChangePercent = dailyChangePercent;
+
+      // Calculate XIRR for individual asset in this group
+      const assetXirr = calculateTransactionsXIRR(assetTxs, asset.currentTotalValue);
+      asset.annualizedReturn = assetXirr.annualizedPercent;
+      asset.isAnnualizedExtrapolated = assetXirr.isExtrapolated;
+      
+      g.totalInvested += asset.totalInvested;
+      g.currentTotalValue += asset.currentTotalValue;
+      g.dailyChange += asset.dailyChange;
+    });
+    
+    g.profitOrLoss = g.currentTotalValue - g.totalInvested;
+    g.profitOrLossPercent = g.totalInvested > 0 ? (g.profitOrLoss / g.totalInvested) * 100 : 0;
+    g.dailyChangePercent = g.currentTotalValue - g.dailyChange > 0
+      ? (g.dailyChange / (g.currentTotalValue - g.dailyChange)) * 100
+      : 0;
+
+    // Calculate XIRR for group
+    const allGroupTxs: Transaction[] = [];
+    Object.values(groupAssetsMap).forEach(list => allGroupTxs.push(...list));
+    const groupXirr = calculateTransactionsXIRR(allGroupTxs, g.currentTotalValue);
+    g.annualizedReturn = groupXirr.annualizedPercent;
+    g.isAnnualizedExtrapolated = groupXirr.isExtrapolated;
+      
+    // Ordina gli asset in ordine alfabetico per nome
+    g.assets.sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  const groupedData = Object.values(groupsMap).sort((a, b) => a.groupName.localeCompare(b.groupName));
+
+  // Global calculations using FIFO
+  let globalInvested = 0;
+  let globalTotalValue = 0;
+  let globalDailyChange = 0;
+
+  Object.entries(globalTxs).forEach(([symbol, txList]) => {
+    const { totalQuantity, totalInvested, averagePrice } = calculateFifo(txList);
+    const quote = quotes[symbol];
+    const currentPrice = quote?.regularMarketPrice || (averagePrice > 0 ? averagePrice : 1);
+    const dailyChangeAbs = quote?.regularMarketChange || 0;
+
+    globalInvested += totalInvested;
+    globalTotalValue += totalQuantity * currentPrice;
+    globalDailyChange += totalQuantity * dailyChangeAbs;
+  });
+
+  const globalPL = globalTotalValue - globalInvested;
+  const globalPLPercent = globalInvested > 0 ? (globalPL / globalInvested) * 100 : 0;
+  const globalDailyChangePercent = globalTotalValue - globalDailyChange > 0 
+    ? (globalDailyChange / (globalTotalValue - globalDailyChange)) * 100 
+    : 0;
+
+  // Calculate Global XIRR
+  const globalXirr = calculateTransactionsXIRR(transactions, globalTotalValue);
+
+  return {
+    groupedData,
+    globalTotalValue,
+    globalInvested,
+    globalDailyChange,
+    globalPL,
+    globalPLPercent,
+    globalDailyChangePercent,
+    globalAnnualizedReturn: globalXirr.annualizedPercent,
+    globalIsAnnualizedExtrapolated: globalXirr.isExtrapolated
+  };
+};

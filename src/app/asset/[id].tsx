@@ -1,0 +1,720 @@
+import { ThemeColors } from '../../theme/colors';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Modal, Pressable, Alert, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ArrowLeft, ChevronRight, Plus, Copy, Bell, TrendingDown, TrendingUp } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
+import { useAppTheme } from '../../theme/ThemeContext';
+import { db, auth } from '../../config/firebase';
+import { collection, query, where, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { Transaction } from '../../types';
+import { formatNumber, formatDate, getCurrencySymbol } from '../../utils/formatters';
+import { CopyableText } from '../../components/CopyableText';
+import { calculateFifo } from '../../utils/portfolioAggregator';
+import { calculateTransactionsXIRR } from '../../utils/xirr';
+import { getQuotes, YahooQuote } from '../../services/yahooFinance';
+import { useScalablePriceAlerts } from '../../hooks/useScalablePriceAlerts';
+import { calculateAlertStatus, getAlertsForSymbol } from '../../utils/priceAlerts';
+
+export const AssetDetailsScreen = () => {
+  const { colors } = useAppTheme();
+  const styles = getStyles(colors);
+  const showAlert = (title: string, message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n\n${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+  const router = useRouter();
+  const params = useLocalSearchParams<{
+    id?: string;
+    symbol?: string;
+    name?: string;
+    currentPrice?: string;
+    currency?: string;
+    groupName?: string;
+    dailyChange?: string;
+    dailyChangePercent?: string;
+  }>();
+
+  const effectiveSymbol = params.symbol || params.id || '';
+  const initialName = params.name || '';
+  const initialCurrentPrice = Number(params.currentPrice ?? 0);
+  const initialDailyChange = Number(params.dailyChange ?? 0);
+  const initialDailyChangePercent = Number(params.dailyChangePercent ?? 0);
+  const initialCurrency = params.currency || '';
+  const groupName = params.groupName;
+
+  const [liveQuote, setLiveQuote] = useState<YahooQuote | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const userId = auth.currentUser?.uid;
+  const { alerts: allScalableAlerts } = useScalablePriceAlerts(userId);
+  const assetAlerts = getAlertsForSymbol(allScalableAlerts, effectiveSymbol);
+  const [customCategory, setCustomCategory] = useState<string | null>(null);
+  const [scalableAssetData, setScalableAssetData] = useState<{ currentPrice?: number; currency?: string } | null>(null);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+
+  useEffect(() => {
+    if (!effectiveSymbol) return;
+    let isMounted = true;
+    getQuotes([effectiveSymbol]).then(quotes => {
+      if (isMounted && quotes && quotes.length > 0) {
+        setLiveQuote(quotes[0]);
+      }
+    }).catch(err => {
+      console.error('Error fetching quote in AssetDetailsScreen:', err);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveSymbol]);
+
+  useEffect(() => {
+    const userId = auth.currentUser?.uid;
+    if (!userId || !effectiveSymbol) return;
+
+    const unsubscribeAsset = onSnapshot(doc(db, 'portfolios', userId, 'assets', effectiveSymbol), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.category) setCustomCategory(data.category);
+        if (data.currentPrice || data.regularMarketPrice) {
+          setScalableAssetData({
+            currentPrice: Number(data.currentPrice || data.regularMarketPrice),
+            currency: data.currency || 'EUR',
+          });
+        }
+      } else {
+        setCustomCategory(null);
+      }
+    });
+
+    const unsubscribeQuotes = onSnapshot(doc(db, 'portfolios', userId, 'settings', 'scalable_quotes'), (sqSnap) => {
+      if (sqSnap.exists()) {
+        const sqData = sqSnap.data();
+        const targetIsin = transactions.find(t => t.isin)?.isin;
+        const q = sqData[effectiveSymbol] || (targetIsin ? sqData[targetIsin] : undefined);
+        if (q && q.regularMarketPrice > 0) {
+          setScalableAssetData({
+            currentPrice: Number(q.regularMarketPrice),
+            currency: q.currency || 'EUR',
+          });
+          setLiveQuote({
+            symbol: effectiveSymbol,
+            shortName: q.shortName || effectiveSymbol,
+            longName: q.longName || effectiveSymbol,
+            regularMarketPrice: Number(q.regularMarketPrice),
+            regularMarketChangePercent: 0,
+            regularMarketChange: 0,
+            currency: q.currency || 'EUR',
+          });
+        }
+      }
+    });
+
+    return () => {
+      unsubscribeAsset();
+      unsubscribeQuotes();
+    };
+  }, [effectiveSymbol, transactions]);
+
+  const ASSET_CATEGORIES = [
+    'Azioni',
+    'Obbligazioni',
+    'Materie prime',
+    'Criptovalute',
+    'Liquidità',
+    'Altro'
+  ];
+
+  const displayName = initialName || liveQuote?.longName || liveQuote?.shortName || transactions.find(t => t.name)?.name || effectiveSymbol;
+
+  const handleSelectCategory = async (cat: string) => {
+    const userId = auth.currentUser?.uid;
+    if (!userId || !effectiveSymbol) return;
+    try {
+      await setDoc(doc(db, 'portfolios', userId, 'assets', effectiveSymbol), {
+        category: cat,
+        symbol: effectiveSymbol,
+        name: displayName
+      }, { merge: true });
+      setShowCategoryModal(false);
+    } catch (e) {
+      console.error('Error saving category:', e);
+    }
+  };
+
+  const [activeGroups, setActiveGroups] = useState<string[]>([]);
+
+  useEffect(() => {
+    const userId = auth.currentUser?.uid;
+    if (!userId || !effectiveSymbol) {
+      const timer = setTimeout(() => setLoading(false), 0);
+      return () => clearTimeout(timer);
+    }
+
+    const q = query(
+      collection(db, 'portfolios', userId, 'transactions'),
+      where('symbol', '==', effectiveSymbol)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const txs: Transaction[] = [];
+      const qtyByGroup: Record<string, number> = {};
+
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        const txGroups = data.groups || (data.group ? [data.group] : ['Generale']);
+        
+        const type = data.type || 'BUY';
+        const qty = data.quantity || 0;
+        
+        txGroups.forEach((g: string) => {
+          if (!qtyByGroup[g]) qtyByGroup[g] = 0;
+          if (type === 'BUY') {
+            qtyByGroup[g] += qty;
+          } else {
+            qtyByGroup[g] -= qty;
+          }
+        });
+
+        if (!groupName || txGroups.includes(groupName)) {
+          txs.push({ id: docSnap.id, ...data } as Transaction);
+        }
+      });
+      
+      const active = Object.entries(qtyByGroup)
+        .filter(([_g, q]) => q > 0)
+        .map(([g]) => g);
+      setActiveGroups(active);
+
+      txs.sort((a, b) => {
+        if (a.date > b.date) return -1;
+        if (a.date < b.date) return 1;
+        return 0;
+      });
+      setTransactions(txs);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [effectiveSymbol, groupName]);
+
+  const { totalQuantity, totalInvested, averagePrice } = React.useMemo(() => {
+    return calculateFifo(transactions);
+  }, [transactions]);
+
+  const displayCurrency = scalableAssetData?.currency ||
+    (transactions.some(t => t.source === 'scalable_mcp' || t.currency === 'EUR') ? 'EUR' : undefined) ||
+    (initialCurrency && initialCurrency !== 'USD' ? initialCurrency : undefined) ||
+    liveQuote?.currency ||
+    'EUR';
+  const currencySymbol = getCurrencySymbol(displayCurrency);
+
+  const numericCurrentPrice = scalableAssetData?.currentPrice ??
+    liveQuote?.regularMarketPrice ??
+    (initialCurrentPrice > 0 ? initialCurrentPrice : averagePrice);
+  const numericDailyChange = liveQuote?.regularMarketChange ?? initialDailyChange;
+  const numericDailyChangePercent = liveQuote?.regularMarketChangePercent ?? initialDailyChangePercent;
+
+  const currentValue = totalQuantity * numericCurrentPrice;
+  const profitOrLoss = currentValue - totalInvested;
+  const profitOrLossPercent = totalInvested > 0 ? (profitOrLoss / totalInvested) * 100 : 0;
+
+  const assetXirr = React.useMemo(() => {
+    return calculateTransactionsXIRR(transactions, currentValue);
+  }, [transactions, currentValue]);
+
+  const isPositive = profitOrLoss >= 0;
+  const changeColor = isPositive ? colors.positive : colors.negative;
+  const changeSign = isPositive ? '+' : '';
+
+  const isDailyPositive = numericDailyChange >= 0;
+  const dailyChangeColor = isDailyPositive ? colors.positive : colors.negative;
+  const dailyChangeSign = isDailyPositive ? '+' : '';
+
+  const handleCopy = async () => {
+    await Clipboard.setStringAsync(effectiveSymbol);
+    showAlert('Copiato', 'Ticker copiato negli appunti!');
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
+          <ArrowLeft size={24} color={colors.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle} numberOfLines={1}>{displayName}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+            <Text style={styles.headerSubtitle}>{effectiveSymbol}</Text>
+            <TouchableOpacity onPress={handleCopy} style={{ marginLeft: 6, padding: 4 }}>
+              <Copy size={14} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowCategoryModal(true)}>
+              <Text style={styles.headerCategory}> • {customCategory || 'Imposta Categoria'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <TouchableOpacity 
+          style={styles.addButton} 
+          onPress={() => {
+            const groupsParam = activeGroups.length > 0 ? activeGroups.join(',') : (groupName || 'Generale');
+            router.push({ pathname: '/add-transaction', params: { symbol: effectiveSymbol, name: displayName, preselectedGroups: groupsParam } })
+          }}
+        >
+          <Plus size={24} color={colors.text} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.overview}>
+        <CopyableText style={styles.overviewValue} valueToCopy={currentValue.toString()}>{currencySymbol}{formatNumber(currentValue)}</CopyableText>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <View style={[styles.changeContainer, { backgroundColor: changeColor + '20', marginRight: 8, marginBottom: 8 }]}>
+            <Text style={[styles.change, { color: changeColor }]}>
+              Tot: {changeSign}{formatNumber(profitOrLoss)} ({changeSign}{formatNumber(profitOrLossPercent)}%)
+            </Text>
+          </View>
+          {assetXirr.annualizedPercent !== null && (
+            <View style={[styles.changeContainer, { backgroundColor: (assetXirr.annualizedPercent >= 0 ? colors.positive : colors.negative) + '20', marginRight: 8, marginBottom: 8 }]}>
+              <Text style={[styles.change, { color: assetXirr.annualizedPercent >= 0 ? colors.positive : colors.negative }]}>
+                Ann: {assetXirr.annualizedPercent >= 0 ? '+' : ''}{formatNumber(assetXirr.annualizedPercent)}%{assetXirr.isExtrapolated ? '*' : ''}
+              </Text>
+            </View>
+          )}
+          <View style={[styles.changeContainer, { backgroundColor: dailyChangeColor + '20', marginBottom: 8 }]}>
+            <Text style={[styles.change, { color: dailyChangeColor }]}>
+              Oggi: {dailyChangeSign}{formatNumber(numericDailyChange)} ({dailyChangeSign}{formatNumber(numericDailyChangePercent)}%)
+            </Text>
+          </View>
+        </View>
+        {assetXirr.isExtrapolated && assetXirr.annualizedPercent !== null && (
+          <Text style={{ fontSize: 11, color: colors.textSecondary, textAlign: 'center', marginTop: 2, marginBottom: 8 }}>
+            *Tasso annuo (XIRR) estrapolato su storico di {assetXirr.holdingDays} {assetXirr.holdingDays === 1 ? 'giorno' : 'giorni'} (&lt; 1 anno)
+          </Text>
+        )}
+      </View>
+
+      <View style={styles.metricsRow}>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricLabel}>Quantità</Text>
+          <CopyableText style={styles.metricValue} valueToCopy={totalQuantity.toString()}>{totalQuantity}</CopyableText>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricLabel}>Prezzo Medio</Text>
+          <CopyableText style={styles.metricValue} valueToCopy={averagePrice.toString()}>{currencySymbol}{formatNumber(averagePrice)}</CopyableText>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricLabel}>Prezzo Attuale</Text>
+          <CopyableText style={styles.metricValue} valueToCopy={numericCurrentPrice.toString()}>{currencySymbol}{formatNumber(numericCurrentPrice)}</CopyableText>
+        </View>
+      </View>
+
+      {/* Scalable Price Alerts (Punto 4: Price Alert Sincronizzati) */}
+      {assetAlerts.map(alert => {
+        const calc = calculateAlertStatus(alert, numericCurrentPrice);
+        return (
+          <View key={alert.id} style={styles.alertCard}>
+            <View style={styles.alertHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={styles.alertIconBadge}>
+                  <Bell size={13} color="#28EBCF" />
+                </View>
+                <Text style={styles.alertTitle}>Alert Scalable</Text>
+                <View style={[
+                  styles.alertStatusBadge,
+                  calc.statusBadge === 'triggered' && styles.alertStatusTriggered,
+                  calc.statusBadge === 'approaching' && styles.alertStatusApproaching,
+                  calc.statusBadge === 'active' && styles.alertStatusActive,
+                ]}>
+                  <Text style={[
+                    styles.alertStatusText,
+                    calc.statusBadge === 'triggered' && { color: colors.positive },
+                    calc.statusBadge === 'approaching' && { color: '#F59E0B' },
+                    calc.statusBadge === 'active' && { color: colors.textSecondary },
+                  ]}>
+                    {calc.statusLabel}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.alertBodyRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                {alert.direction === 'BELOW' ? (
+                  <TrendingDown size={15} color={colors.negative} style={{ marginRight: 6 }} />
+                ) : (
+                  <TrendingUp size={15} color={colors.positive} style={{ marginRight: 6 }} />
+                )}
+                <Text style={styles.alertThresholdText}>
+                  {calc.directionLabel}: <Text style={{ fontWeight: '700', color: colors.text }}>{calc.targetPriceFormatted}</Text>
+                </Text>
+              </View>
+              <Text style={[styles.alertDistanceText, calc.isTriggered && { color: colors.positive }]}>
+                {calc.isTriggered ? 'Soglia raggiunta!' : `Distanza: ${calc.distanceFormatted}`}
+              </Text>
+            </View>
+
+            {alert.note && (
+              <Text style={styles.alertNoteText}>{alert.note}</Text>
+            )}
+          </View>
+        );
+      })}
+
+      <Text style={styles.sectionTitle}>Transazioni</Text>
+      
+      {loading ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={colors.positive} />
+        </View>
+      ) : (
+        <FlatList
+          data={transactions}
+          keyExtractor={item => item.id!}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item }) => {
+            const isSell = item.type === 'SELL';
+            const txInvested = item.quantity * item.purchasePrice;
+            const txCurrent = item.quantity * numericCurrentPrice;
+            const txPL = txCurrent - txInvested;
+            const txPLPercent = txInvested > 0 ? (txPL / txInvested) * 100 : 0;
+            const txIsPositive = txPL >= 0;
+            
+            return (
+              <TouchableOpacity 
+                style={[styles.transactionCard, isSell && { borderLeftWidth: 4, borderLeftColor: colors.textSecondary }]}
+                onPress={() => router.push({ pathname: '/edit-transaction', params: {
+                  id: item.id,
+                  symbol: effectiveSymbol,
+                  name: displayName,
+                  quantity: item.quantity,
+                  purchasePrice: item.purchasePrice,
+                  date: item.date,
+                  type: item.type || 'BUY',
+                  groups: item.groups || (item.group ? [item.group] : ['Generale'])
+                }})}
+              >
+                <View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={styles.transactionDate}>{formatDate(item.date)}</Text>
+                    {item.source === 'scalable_mcp' && (
+                      <View style={{ backgroundColor: '#28EBCF20', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 6 }}>
+                        <Text style={{ color: '#28EBCF', fontSize: 10, fontWeight: '700' }}>SCALABLE</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.transactionQuantity}>
+                    {isSell ? 'Vendita: ' : ''}{formatNumber(item.quantity)} quote a {currencySymbol}{formatNumber(item.purchasePrice)}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'column', alignItems: 'flex-end' }}>
+                    {isSell ? (
+                      <Text style={[styles.transactionPrice, { color: colors.textSecondary }]}>{currencySymbol}{formatNumber(txInvested)}</Text>
+                    ) : (
+                      <>
+                        <Text style={styles.transactionPrice}>{currencySymbol}{formatNumber(txCurrent)}</Text>
+                        <Text style={[styles.transactionTotal, { color: txIsPositive ? colors.positive : colors.negative, fontWeight: '600' }]}>
+                          {txIsPositive ? '+' : ''}{formatNumber(txPL)} ({txIsPositive ? '+' : ''}{formatNumber(txPLPercent)}%)
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                  <View style={{ justifyContent: 'center', marginLeft: 8 }}>
+                    <ChevronRight size={20} color={colors.textSecondary} />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
+
+      {/* Modal Categoria */}
+      <Modal
+        visible={showCategoryModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCategoryModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowCategoryModal(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Seleziona Categoria</Text>
+            {ASSET_CATEGORIES.map(cat => (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.modalOption, customCategory === cat && styles.modalOptionSelected]}
+                onPress={() => handleSelectCategory(cat)}
+              >
+                <Text style={[styles.modalOptionText, customCategory === cat && styles.modalOptionTextSelected]}>
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+
+    </SafeAreaView>
+  );
+};
+
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  backButton: {
+    padding: 8,
+    marginLeft: -8,
+  },
+  addButton: {
+    padding: 8,
+    marginRight: -8,
+  },
+  headerTitleContainer: {
+    alignItems: 'center',
+    flex: 1,
+    paddingHorizontal: 12,
+  },
+  headerTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  headerSubtitle: {
+    color: colors.textSecondary,
+    fontSize: 13,
+  },
+  headerCategory: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '600',
+    paddingHorizontal: 4,
+  },
+  overview: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+    fontSize: 16,
+  },
+  overviewValue: {
+    color: colors.text,
+    fontSize: 40,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  changeContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  change: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  metricCard: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 4,
+    alignItems: 'center',
+  },
+  metricLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  metricValue: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  changeGroupButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    marginHorizontal: 20,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 32,
+  },
+  changeGroupText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 12,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginHorizontal: 20,
+    marginBottom: 16,
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  transactionCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  transactionDate: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  transactionQuantity: {
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  transactionPrice: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  transactionTotal: {
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 24,
+    width: '80%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalOption: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalOptionSelected: {
+    backgroundColor: colors.primary + '20',
+    borderRadius: 8,
+    borderBottomWidth: 0,
+    marginBottom: 4,
+    marginTop: 4,
+    paddingHorizontal: 12,
+  },
+  modalOptionText: {
+    color: colors.text,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  modalOptionTextSelected: {
+    color: colors.primary,
+    fontWeight: 'bold',
+  },
+  alertCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#28EBCF30',
+  },
+  alertHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  alertIconBadge: {
+    backgroundColor: '#28EBCF20',
+    borderRadius: 6,
+    padding: 4,
+    marginRight: 6,
+  },
+  alertTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#28EBCF',
+    marginRight: 8,
+  },
+  alertStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  alertStatusTriggered: {
+    backgroundColor: colors.positive + '20',
+  },
+  alertStatusApproaching: {
+    backgroundColor: '#F59E0B20',
+  },
+  alertStatusActive: {
+    backgroundColor: colors.inputBackground,
+  },
+  alertStatusText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  alertBodyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  alertThresholdText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  alertDistanceText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  alertNoteText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    marginTop: 4,
+  }
+});
+
+export default AssetDetailsScreen;
