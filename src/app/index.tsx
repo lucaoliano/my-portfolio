@@ -19,10 +19,12 @@ import { auth } from '../config/firebase';
 import { Coverage, GroupedPortfolio } from '../types';
 
 import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
+import { usePortfolioHistory, HistorySnapshot } from '../hooks/usePortfolioHistory';
+import { PortfolioTrendChart } from '../components/PortfolioTrendChart';
 import { useScalablePriceAlerts } from '../hooks/useScalablePriceAlerts';
 import { calculateCashYield } from '../utils/cashInterest';
 import { getTriggeredAlerts, getApproachingAlerts } from '../utils/priceAlerts';
-import { syncScalablePortfolio } from '../services/scalableMcp';
+import { syncScalablePortfolio, saveScalableConfig } from '../services/scalableMcp';
 
 // Oltre questa distanza di scroll il bilancio esce dallo schermo e il titolo della barra lo riprende
 const COMPACT_HEADER_OFFSET = 96;
@@ -48,6 +50,13 @@ const friendlySyncError = (msg: string) => {
   }
   return 'Sincronizzazione non riuscita. I dati mostrati sono quelli dell\'ultima sincronizzazione.';
 };
+
+type RowMetric = 'total' | 'daily' | 'annual';
+const ROW_METRICS: { key: RowMetric; label: string }[] = [
+  { key: 'total', label: 'Totale' },
+  { key: 'daily', label: 'Oggi' },
+  { key: 'annual', label: 'Annuo' },
+];
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -76,10 +85,26 @@ export const PortfolioScreen = () => {
   const { alerts: scalableAlerts } = useScalablePriceAlerts(userId);
   const { quotes, refreshing, error: quotesError, updatedAt: quotesUpdatedAt, refresh: refreshQuotes } = quotesState;
 
+  // Fotografia del giorno per lo storico: solo con prezzi freschi, altrimenti meglio non scrivere
+  const historySnapshot = useMemo<HistorySnapshot | null>(() => {
+    if (isInitialLoading || quotesError || !quotesUpdatedAt || aggregation.globalTotalValue <= 0) return null;
+    return {
+      invested: aggregation.globalTotalValue,
+      costBasis: aggregation.globalInvested,
+      cash: scalableCash,
+      complete: aggregation.missingPriceSymbols.length === 0 && aggregation.fxMissingSymbols.length === 0,
+    };
+  }, [isInitialLoading, quotesError, quotesUpdatedAt, aggregation, scalableCash]);
+  const historyPoints = usePortfolioHistory(userId, historySnapshot);
+
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // I gruppi con gli stessi titoli di un altro partono chiusi: si aprono solo se l'utente lo chiede
+  const [expandedDuplicates, setExpandedDuplicates] = useState<Set<string>>(new Set());
+  const [rowMetric, setRowMetric] = useState<RowMetric>('total');
   const [compositionGroup, setCompositionGroup] = useState<GroupedPortfolio | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [showCompactTitle, setShowCompactTitle] = useState(false);
+  const [incompleteVisible, setIncompleteVisible] = useState(false);
   const pullTriggeredRef = useRef(false);
 
   // Scalable Sync Feedback & State
@@ -148,12 +173,23 @@ export const PortfolioScreen = () => {
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const saved = await AsyncStorage.getItem('collapsedGroups');
+        const [saved, savedExpanded, savedMetric] = await Promise.all([
+          AsyncStorage.getItem('collapsedGroups'),
+          AsyncStorage.getItem('expandedDuplicateGroups'),
+          AsyncStorage.getItem('rowMetric'),
+        ]);
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed)) {
             setCollapsedGroups(new Set(parsed));
           }
+        }
+        if (savedExpanded) {
+          const parsed = JSON.parse(savedExpanded);
+          if (Array.isArray(parsed)) setExpandedDuplicates(new Set(parsed));
+        }
+        if (savedMetric === 'total' || savedMetric === 'daily' || savedMetric === 'annual') {
+          setRowMetric(savedMetric);
         }
       } catch (e) {
         console.error("Errore nel caricamento delle preferenze:", e);
@@ -162,7 +198,20 @@ export const PortfolioScreen = () => {
     loadPreferences();
   }, []);
 
-  const toggleGroup = async (groupName: string) => {
+  const changeRowMetric = (metric: RowMetric) => {
+    setRowMetric(metric);
+    AsyncStorage.setItem('rowMetric', metric).catch(() => {});
+  };
+
+  const toggleGroup = async (groupName: string, isDuplicate = false) => {
+    if (isDuplicate) {
+      const nextExpanded = new Set(expandedDuplicates);
+      if (nextExpanded.has(groupName)) nextExpanded.delete(groupName);
+      else nextExpanded.add(groupName);
+      setExpandedDuplicates(nextExpanded);
+      AsyncStorage.setItem('expandedDuplicateGroups', JSON.stringify(Array.from(nextExpanded))).catch(() => {});
+      return;
+    }
     const next = new Set(collapsedGroups);
     if (next.has(groupName)) {
       next.delete(groupName);
@@ -203,6 +252,15 @@ export const PortfolioScreen = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, scalableConfig]);
 
+  const toggleIncludeCash = async () => {
+    if (!userId) return;
+    try {
+      await saveScalableConfig(userId, { includeCashInTotal: !includeCashInTotal });
+    } catch (e) {
+      console.error('Errore salvataggio preferenza liquidità:', e);
+    }
+  };
+
   const onRefresh = () => {
     refreshQuotes(true);
     if (isScalableConnected) {
@@ -223,6 +281,8 @@ export const PortfolioScreen = () => {
     fxMissingSymbols,
     globalDailyCoverage,
     hasExtrapolatedAnnualized,
+    globalDailyEstimated,
+    latestMarketTime,
   } = aggregation;
 
   const displayTotalValue = (includeCashInTotal && scalableCash > 0)
@@ -240,9 +300,33 @@ export const PortfolioScreen = () => {
   const lastSyncLabel = lastSyncDate && !isNaN(lastSyncDate.getTime())
     ? formatWhen(lastSyncDate, { today: 'Scalable sincronizzato alle', other: 'Scalable sincronizzato il' })
     : null;
-  const quotesStatusLabel = quotesUpdatedAt
-    ? formatWhen(quotesUpdatedAt, { today: 'Prezzi delle', other: 'Prezzi del' })
-    : null;
+  // Meglio l'ora di mercato (quando il prezzo è nato) che l'ora in cui l'app l'ha scaricato
+  const marketDate = latestMarketTime ? new Date(latestMarketTime) : null;
+  const quotesStatusLabel = marketDate && !isNaN(marketDate.getTime())
+    ? formatWhen(marketDate, { today: 'Prezzi di mercato delle', other: 'Prezzi di mercato del' })
+    : quotesUpdatedAt
+      ? formatWhen(quotesUpdatedAt, { today: 'Prezzi aggiornati alle', other: 'Prezzi aggiornati il' })
+      : null;
+  // Se l'ultimo prezzo di mercato non è di oggi (sera tardi, weekend) "Oggi" sarebbe falso: diciamo quale chiusura è
+  const dailyLabel = marketDate && marketDate.toDateString() !== new Date().toDateString()
+    ? `Chiusura ${marketDate.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })}`
+    : 'Oggi';
+
+  // Titoli fuori dai calcoli, con il motivo: un solo punto d'ingresso invece di avvisi sparsi
+  const assetNames: Record<string, { name: string; currency: string }> = {};
+  groupedData.forEach(g => g.assets.forEach(a => { assetNames[a.symbol] = { name: a.name, currency: a.currency }; }));
+  const incompleteItems = [
+    ...fxMissingSymbols.map(sym => ({
+      symbol: sym,
+      name: assetNames[sym]?.name ?? sym,
+      reason: `Cambio ${assetNames[sym]?.currency ?? ''}→EUR non disponibile: escluso dai totali`,
+    })),
+    ...missingPriceSymbols.map(sym => ({
+      symbol: sym,
+      name: assetNames[sym]?.name ?? sym,
+      reason: 'Prezzo non disponibile: valutato al prezzo medio di carico',
+    })),
+  ];
 
   const scalableYield = useMemo(() => {
     return calculateCashYield(scalableCash, configuredInterestRate ?? 0);
@@ -292,6 +376,7 @@ export const PortfolioScreen = () => {
     daily: number;
     dailyPercent: number;
     coverage: Coverage;
+    estimated?: boolean;
     large?: boolean;
   }) => {
     const hasAnnualized = opts.annualized !== undefined && opts.annualized !== null;
@@ -300,20 +385,22 @@ export const PortfolioScreen = () => {
     const partialDaily = hasDaily && opts.coverage.withData < opts.coverage.total;
     return (
       <Text style={[styles.secondaryMetrics, opts.large && styles.secondaryMetricsLarge]}>
+        <Text style={styles.metricSeparator}>{dailyLabel} </Text>
         {hasDaily ? (
           <Text style={{ color: opts.daily >= 0 ? colors.positive : colors.negative }}>
-            Oggi {formatSignedCurrency(opts.daily)} ({signedPercent(opts.dailyPercent)})
+            {opts.estimated ? '≈' : ''}{formatSignedCurrency(opts.daily)} ({signedPercent(opts.dailyPercent)})
           </Text>
         ) : (
-          <Text style={styles.metricSeparator}>Oggi n/d</Text>
+          <Text style={styles.metricSeparator}>n/d</Text>
         )}
         {partialDaily && (
           <Text style={styles.metricSeparator}> su {opts.coverage.withData} di {opts.coverage.total} titoli</Text>
         )}
         {hasAnnualized && <Text style={styles.metricSeparator}>  ·  </Text>}
+        {hasAnnualized && <Text style={styles.metricSeparator}>Annuo </Text>}
         {hasAnnualized && (
           <Text style={{ color: opts.annualized! >= 0 ? colors.positive : colors.negative }}>
-            Annuo {signedPercent(opts.annualized!)}{opts.extrapolated ? '*' : ''}
+            {signedPercent(opts.annualized!)}{opts.extrapolated ? '*' : ''}
           </Text>
         )}
       </Text>
@@ -324,47 +411,96 @@ export const PortfolioScreen = () => {
   const syncIconOnly = showCompactTitle && transactions.length > 0;
   const alertCount = hasTriggeredAlerts ? triggeredAlerts.length : approachingAlerts.length;
 
-  // Una sola riga di stato sotto il bilancio: orari dei dati e titoli fuori dai calcoli
-  const statusParts: { text: string; warn?: boolean }[] = [];
-  if (quotesStatusLabel) statusParts.push({ text: quotesStatusLabel });
-  if (isScalableConnected && lastSyncLabel) statusParts.push({ text: lastSyncLabel });
-  if (missingPriceSymbols.length > 0) {
-    statusParts.push({
-      text: missingPriceSymbols.length === 1
-        ? '1 titolo senza prezzo, valutato al costo'
-        : `${missingPriceSymbols.length} titoli senza prezzo, valutati al costo`,
-      warn: true,
-    });
-  }
-  if (fxMissingSymbols.length > 0) {
-    statusParts.push({
-      text: `${plural(fxMissingSymbols.length, 'titolo escluso', 'titoli esclusi')}: cambio non disponibile`,
-      warn: true,
-    });
-  }
-  const noDailyForScalable = globalDailyCoverage.total > 0 && globalDailyCoverage.withData < globalDailyCoverage.total;
+  // Una sola riga di stato sotto il bilancio: quando sono nati i dati
+  const statusParts: string[] = [];
+  if (quotesStatusLabel) statusParts.push(quotesStatusLabel);
+  if (isScalableConnected && lastSyncLabel) statusParts.push(lastSyncLabel);
+
+  /** Un solo dato per gruppo, scelto dal selettore Totale / Oggi / Annuo. */
+  const renderGroupMetric = (group: GroupedPortfolio) => {
+    if (rowMetric === 'daily') {
+      const { withData, total } = group.dailyCoverage;
+      if (withData === 0) return <Text style={styles.metricMissing}>{dailyLabel} n/d</Text>;
+      return (
+        <>
+          <MetricChip value={group.dailyChange} style={{ alignSelf: 'flex-start' }}>
+            {dailyLabel} {group.dailyEstimated ? '≈' : ''}{formatSignedCurrency(group.dailyChange)} ({signedPercent(group.dailyChangePercent)})
+          </MetricChip>
+          {withData < total && <Text style={styles.footnote}>su {withData} di {total} titoli</Text>}
+        </>
+      );
+    }
+    if (rowMetric === 'annual') {
+      if (group.annualizedReturn === undefined || group.annualizedReturn === null) {
+        return <Text style={styles.metricMissing}>Annuo n/d</Text>;
+      }
+      return (
+        <MetricChip value={group.annualizedReturn} style={{ alignSelf: 'flex-start' }}>
+          Annuo {signedPercent(group.annualizedReturn)}{group.isAnnualizedExtrapolated ? '*' : ''}
+        </MetricChip>
+      );
+    }
+    return (
+      <MetricChip value={group.profitOrLoss} style={{ alignSelf: 'flex-start' }}>
+        Totale {formatSignedCurrency(group.profitOrLoss)} ({signedPercent(group.profitOrLossPercent)})
+      </MetricChip>
+    );
+  };
+
+  const metricSelector = (
+    <View style={styles.metricSelector} accessibilityRole="tablist" accessibilityLabel="Dato mostrato per gruppi e titoli">
+      {ROW_METRICS.map(m => (
+        <TouchableOpacity
+          key={m.key}
+          style={[styles.metricOption, rowMetric === m.key && styles.metricOptionActive]}
+          onPress={() => changeRowMetric(m.key)}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: rowMetric === m.key }}
+        >
+          <Text style={[styles.metricOptionText, rowMetric === m.key && styles.metricOptionTextActive]}>
+            {m.key === 'daily' ? dailyLabel : m.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
 
   const listHeader = (
     <View style={styles.header}>
-      <Text style={styles.headerSubtitle}>Bilancio totale</Text>
+      <Text style={styles.headerSubtitle}>{scalableCash > 0 && !includeCashInTotal ? 'Valore investito' : 'Bilancio totale'}</Text>
       <CopyableText
         style={styles.headerTitle}
         valueToCopy={displayTotalValue.toString()}
-        accessibilityLabel={`Bilancio totale €${formatNumber(displayTotalValue)}`}
+        accessibilityLabel={`${scalableCash > 0 && !includeCashInTotal ? 'Valore investito' : 'Bilancio totale'} €${formatNumber(displayTotalValue)}`}
       >
         €{formatNumber(displayTotalValue)}
       </CopyableText>
       {scalableCash > 0 && (
-        <Text style={styles.headerNote}>
-          {includeCashInTotal
-            ? `Investito €${formatNumber(globalTotalValue)} · Liquidità €${formatNumber(scalableCash)}`
-            : `Esclusa la liquidità Scalable (€${formatNumber(scalableCash)})`}
-        </Text>
+        <View style={styles.cashToggleRow}>
+          <Text style={styles.headerNote}>
+            {includeCashInTotal
+              ? `Investito €${formatNumber(globalTotalValue)} + liquidità €${formatNumber(scalableCash)}`
+              : `Liquidità Scalable esclusa (€${formatNumber(scalableCash)})`}
+          </Text>
+          {/* La stessa scelta vale per pesi e Salute del portafoglio: un solo "patrimonio" ovunque */}
+          <TouchableOpacity
+            onPress={toggleIncludeCash}
+            hitSlop={10}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: includeCashInTotal }}
+            accessibilityLabel="Includi la liquidità nel totale"
+          >
+            <Text style={styles.cashToggleText}>{includeCashInTotal ? 'Escludi' : 'Includi'}</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {transactions.length > 0 && (
         <View style={styles.headerMetrics}>
-          <Text style={[styles.heroReturn, { color: globalPL >= 0 ? colors.positive : colors.negative }]}>
+          <Text
+            style={[styles.heroReturn, { color: globalPL >= 0 ? colors.positive : colors.negative }]}
+            accessibilityLabel={`Rendimento totale ${formatSignedCurrency(globalPL)}, ${signedPercent(globalPLPercent)}`}
+          >
             {formatSignedCurrency(globalPL)} ({signedPercent(globalPLPercent)})
             <Text style={styles.heroReturnLabel}> in totale</Text>
           </Text>
@@ -374,20 +510,25 @@ export const PortfolioScreen = () => {
             daily: globalDailyChange,
             dailyPercent: globalDailyChangePercent,
             coverage: globalDailyCoverage,
+            estimated: globalDailyEstimated,
             large: true,
           })}
-          {statusParts.length > 0 && (
-            <Text style={styles.footnote}>
-              {statusParts.map((part, i) => (
-                <Text key={part.text} style={part.warn ? { color: colors.warning } : undefined}>
-                  {i > 0 ? ' · ' : ''}{part.text}
-                </Text>
-              ))}
-            </Text>
+          {statusParts.length > 0 && <Text style={styles.footnote}>{statusParts.join(' · ')}</Text>}
+          {incompleteItems.length > 0 && (
+            <TouchableOpacity
+              style={styles.incompleteRow}
+              onPress={() => setIncompleteVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Dati incompleti: ${plural(incompleteItems.length, 'titolo', 'titoli')}. Apri l'elenco`}
+            >
+              <AlertCircle size={14} color={colors.warning} style={{ marginRight: 6 }} />
+              <Text style={styles.incompleteText}>
+                Dati incompleti: {plural(incompleteItems.length, 'titolo', 'titoli')}
+              </Text>
+              <ChevronRight size={14} color={colors.warning} />
+            </TouchableOpacity>
           )}
-          {noDailyForScalable && globalDailyCoverage.withData === 0 && (
-            <Text style={styles.footnote}>Variazione di oggi non disponibile per questi prezzi.</Text>
-          )}
+          <PortfolioTrendChart points={historyPoints} includeCash={includeCashInTotal} />
         </View>
       )}
 
@@ -396,7 +537,11 @@ export const PortfolioScreen = () => {
           <AlertCircle size={16} color={colors.warning} style={{ marginRight: 8 }} />
           <Text style={styles.inlineAlertText}>
             {quotesError}
-            {quotesStatusLabel ? ` Ultimi prezzi: ${quotesStatusLabel.replace(/^Prezzi /, '')}.` : ' Mostro gli ultimi prezzi sincronizzati.'}
+            {quotesStatusLabel
+              ? ` ${quotesStatusLabel}.`
+              : lastSyncLabel
+                ? ` Mostro i prezzi dell'ultima sincronizzazione (${lastSyncLabel.replace(/^Scalable sincronizzato /, '')}).`
+                : ' Mostro gli ultimi prezzi disponibili.'}
           </Text>
           <TouchableOpacity
             style={styles.inlineAlertAction}
@@ -421,7 +566,7 @@ export const PortfolioScreen = () => {
           <Coins size={18} color={colors.scalable} style={{ marginRight: 10 }} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.cashRowTitle}>Liquidità Scalable</Text>
-            <Text style={styles.cashRowDetail} numberOfLines={1}>
+            <Text style={styles.cashRowDetail} numberOfLines={2}>
               {configuredInterestRate !== undefined
                 ? `${formatNumber(configuredInterestRate)}% annuo${scalableYield.annualNet > 0 ? ` · +€${formatNumber(scalableYield.annualNet)}/anno netti` : ''}`
                 : 'Imposta il tasso del tuo piano'}
@@ -478,6 +623,7 @@ export const PortfolioScreen = () => {
           </Text>
         </TouchableOpacity>
       )}
+      {transactions.length > 0 && metricSelector}
     </View>
   );
 
@@ -588,7 +734,172 @@ export const PortfolioScreen = () => {
         </View>
       </View>
 
-      {/* Stato della sincronizzazione Scalable */}
+      <View style={{ flex: 1 }}>
+      {transactions.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyText}>Il tuo portafoglio è vuoto</Text>
+          <Text style={styles.emptySubText}>Aggiungi il primo titolo o collega il tuo conto Scalable per importare le transazioni.</Text>
+          <TouchableOpacity style={styles.emptyPrimaryButton} onPress={() => router.push('/search')} accessibilityRole="button">
+            <Plus size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
+            <Text style={styles.emptyPrimaryButtonText}>Cerca un titolo</Text>
+          </TouchableOpacity>
+          {!isScalableConnected && (
+            <TouchableOpacity style={styles.emptySecondaryButton} onPress={() => router.push('/integrations/scalable')} accessibilityRole="button">
+              <Link2 size={18} color={colors.text} style={{ marginRight: 8 }} />
+              <Text style={styles.emptySecondaryButtonText}>Collega Scalable</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : (
+        <FlatList
+          data={sections}
+          keyExtractor={(item) => item.groupName}
+          ListHeaderComponent={listHeader}
+          ListFooterComponent={listFooter}
+          renderItem={({ item: group }) => {
+            const isDuplicate = !!duplicateOf[group.groupName];
+            const isCollapsed = isDuplicate
+              ? !expandedDuplicates.has(group.groupName)
+              : collapsedGroups.has(group.groupName);
+            const groupValueUnknown = group.fxMissingCount > 0 && group.fxMissingCount === group.dailyCoverage.total;
+            const onToggle = () => toggleGroup(group.groupName, isDuplicate);
+            // Una torta al 100% "Altro" non dice nulla: la mostriamo solo se le categorie sono impostate
+            const hasComposition = group.currentTotalValue > 0 && group.assets.some(a => a.category && a.category !== 'Altro');
+            // Nessun prezzo nel gruppo: il rendimento sarebbe 0% per costruzione, quindi non lo mostriamo
+            const allUnpriced = group.dailyCoverage.total > 0 && (
+              group.missingPriceCount === group.dailyCoverage.total || group.fxMissingCount === group.dailyCoverage.total
+            );
+
+            return (
+              <View style={styles.groupOuterContainer}>
+                {/* Intestazione: un solo controllo "apri/chiudi" accessibile; torta e valore sono controlli fratelli, non annidati */}
+                <View style={styles.sectionHeaderContainer}>
+                  <View style={styles.sectionHeaderTop}>
+                    <TouchableOpacity
+                      style={styles.sectionToggle}
+                      onPress={onToggle}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Gruppo ${group.groupName}, ${groupValueUnknown ? 'valore non disponibile' : `€${formatNumber(group.currentTotalValue)}`}, ${plural(group.assets.length, 'titolo', 'titoli')}${isDuplicate ? `, stessi titoli di ${duplicateOf[group.groupName]}` : ''}`}
+                      accessibilityState={{ expanded: !isCollapsed }}
+                    >
+                      {isCollapsed ? (
+                        <ChevronRight size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                      ) : (
+                        <ChevronDown size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                      )}
+                      <View style={{ flexShrink: 1 }}>
+                        <Text style={styles.sectionTitle} numberOfLines={1}>{group.groupName}</Text>
+                        {duplicateOf[group.groupName] && (
+                          <Text style={styles.groupNote} numberOfLines={1}>Stessi titoli di {duplicateOf[group.groupName]}</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+
+                    {hasComposition && (
+                      <TouchableOpacity
+                        onPress={() => setCompositionGroup(group)}
+                        style={styles.iconButtonSmall}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Composizione del gruppo ${group.groupName}`}
+                      >
+                        <PieChartIcon size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    )}
+                    <CopyableText
+                      style={styles.sectionValue}
+                      valueToCopy={groupValueUnknown ? '' : group.currentTotalValue.toString()}
+                      onPress={onToggle}
+                      accessibilityLabel={`Valore del gruppo ${group.groupName}: ${groupValueUnknown ? 'non disponibile' : `€${formatNumber(group.currentTotalValue)}`}`}
+                    >
+                      {groupValueUnknown ? 'n/d' : `€${formatNumber(group.currentTotalValue)}`}
+                    </CopyableText>
+                  </View>
+
+                  <Pressable
+                    style={styles.sectionMetrics}
+                    onPress={onToggle}
+                    accessible={false}
+                  >
+                    {allUnpriced ? (
+                      <Text style={styles.footnote}>
+                        {group.fxMissingCount === group.dailyCoverage.total
+                          ? 'Escluso dal totale: cambio non disponibile'
+                          : 'Prezzi non disponibili: valutato al costo'}
+                      </Text>
+                    ) : (
+                      <>
+                        {renderGroupMetric(group)}
+                        {group.missingPriceCount > 0 && (
+                          <Text style={styles.footnote}>
+                            {plural(group.missingPriceCount, 'titolo valutato', 'titoli valutati')} al costo
+                          </Text>
+                        )}
+                        {group.fxMissingCount > 0 && (
+                          <Text style={styles.footnote}>
+                            {plural(group.fxMissingCount, 'titolo escluso', 'titoli esclusi')} dal totale: cambio non disponibile
+                          </Text>
+                        )}
+                      </>
+                    )}
+                  </Pressable>
+                </View>
+
+                {!isCollapsed && group.assets.map((asset, index) => (
+                  <AssetCard
+                    key={asset.symbol + index}
+                    symbol={asset.symbol}
+                    name={asset.name}
+                    price={asset.currentPrice}
+                    changePercent={asset.profitOrLossPercent}
+                    changeAbsolute={asset.profitOrLoss}
+                    dailyChange={asset.dailyChange}
+                    dailyChangePercent={asset.dailyChangePercent}
+                    quantity={asset.totalQuantity}
+                    averagePrice={asset.averagePrice}
+                    currency={asset.currency}
+                    annualizedReturn={asset.annualizedReturn}
+                    isAnnualizedExtrapolated={asset.isAnnualizedExtrapolated}
+                    metric={rowMetric}
+                    dailyLabel={dailyLabel}
+                    dailyEstimated={asset.dailyChangeEstimated}
+                    hasPrice={asset.hasPrice}
+                    hasDailyChange={asset.hasDailyChange}
+                    valueInBase={asset.valueInBase}
+                    weightPercent={asset.valueInBase && displayTotalValue > 0 ? (asset.valueInBase / displayTotalValue) * 100 : null}
+                    isFirst={index === 0}
+                    isLast={index === group.assets.length - 1}
+                    onPress={() => router.push({ pathname: '/asset/[id]', params: { id: asset.symbol, symbol: asset.symbol, name: asset.name, currentPrice: asset.currentPrice, currency: asset.currency, groupName: group.groupName, dailyChange: asset.dailyChange, dailyChangePercent: asset.dailyChangePercent, hasPrice: asset.hasPrice ? '1' : '0' } })}
+                  />
+                ))}
+              </View>
+            );
+          }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.textSecondary}
+            />
+          }
+          onScroll={(e) => {
+            const y = e.nativeEvent.contentOffset.y;
+            const compact = y > COMPACT_HEADER_OFFSET;
+            if (compact !== showCompactTitle) setShowCompactTitle(compact);
+            // Pull-to-refresh nella PWA iOS: una sola volta per trascinamento, non a ogni evento di scroll
+            if (y < PWA_PULL_THRESHOLD && !refreshing && !pullTriggeredRef.current) {
+              pullTriggeredRef.current = true;
+              onRefresh();
+            } else if (y >= 0) {
+              pullTriggeredRef.current = false;
+            }
+          }}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.listContent}
+        />
+      )}
+
+      {/* Stato della sincronizzazione: galleggia sopra la lista, così non sposta quello che stai leggendo */}
       {syncBanner && (
         <View
           style={[
@@ -609,6 +920,8 @@ export const PortfolioScreen = () => {
             }}
             disabled={!syncBanner.sessionExpired}
             activeOpacity={0.7}
+            accessibilityRole={syncBanner.sessionExpired ? 'button' : 'text'}
+            accessibilityHint={syncBanner.sessionExpired ? 'Apre la schermata per ricollegare Scalable' : undefined}
           >
             {syncBanner.type === 'syncing' ? (
               <ActivityIndicator size="small" color={colors.scalable} style={{ marginRight: 10 }} />
@@ -647,171 +960,30 @@ export const PortfolioScreen = () => {
         </View>
       )}
 
-      {transactions.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Text style={styles.emptyText}>Il tuo portafoglio è vuoto</Text>
-          <Text style={styles.emptySubText}>Aggiungi il primo titolo o collega il tuo conto Scalable per importare le transazioni.</Text>
-          <TouchableOpacity style={styles.emptyPrimaryButton} onPress={() => router.push('/search')} accessibilityRole="button">
-            <Plus size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
-            <Text style={styles.emptyPrimaryButtonText}>Cerca un titolo</Text>
-          </TouchableOpacity>
-          {!isScalableConnected && (
-            <TouchableOpacity style={styles.emptySecondaryButton} onPress={() => router.push('/integrations/scalable')} accessibilityRole="button">
-              <Link2 size={18} color={colors.text} style={{ marginRight: 8 }} />
-              <Text style={styles.emptySecondaryButtonText}>Collega Scalable</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      ) : (
-        <FlatList
-          data={sections}
-          keyExtractor={(item) => item.groupName}
-          ListHeaderComponent={listHeader}
-          ListFooterComponent={listFooter}
-          renderItem={({ item: group }) => {
-            const isCollapsed = collapsedGroups.has(group.groupName);
-            const hasComposition = group.assets.length > 0 && group.currentTotalValue > 0;
-            // Nessun prezzo nel gruppo: il rendimento sarebbe 0% per costruzione, quindi non lo mostriamo
-            const allUnpriced = group.dailyCoverage.total > 0 && (
-              group.missingPriceCount === group.dailyCoverage.total || group.fxMissingCount === group.dailyCoverage.total
-            );
+      </View>
 
-            return (
-              <View style={styles.groupOuterContainer}>
-                {/* Intestazione: un solo controllo "apri/chiudi" accessibile; torta e valore sono controlli fratelli, non annidati */}
-                <View style={styles.sectionHeaderContainer}>
-                  <View style={styles.sectionHeaderTop}>
-                    <TouchableOpacity
-                      style={styles.sectionToggle}
-                      onPress={() => toggleGroup(group.groupName)}
-                      activeOpacity={0.7}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Gruppo ${group.groupName}, €${formatNumber(group.currentTotalValue)}, ${plural(group.assets.length, 'titolo', 'titoli')}`}
-                      accessibilityState={{ expanded: !isCollapsed }}
-                    >
-                      {isCollapsed ? (
-                        <ChevronRight size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                      ) : (
-                        <ChevronDown size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                      )}
-                      <View style={{ flexShrink: 1 }}>
-                        <Text style={styles.sectionTitle} numberOfLines={1}>{group.groupName}</Text>
-                        {duplicateOf[group.groupName] && (
-                          <Text style={styles.groupNote} numberOfLines={1}>Stessi titoli di {duplicateOf[group.groupName]}</Text>
-                        )}
-                      </View>
-                    </TouchableOpacity>
-
-                    {hasComposition && (
-                      <TouchableOpacity
-                        onPress={() => setCompositionGroup(group)}
-                        style={styles.iconButtonSmall}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Composizione del gruppo ${group.groupName}`}
-                      >
-                        <PieChartIcon size={20} color={colors.textSecondary} />
-                      </TouchableOpacity>
-                    )}
-                    <CopyableText
-                      style={styles.sectionValue}
-                      valueToCopy={group.currentTotalValue.toString()}
-                      onPress={() => toggleGroup(group.groupName)}
-                      accessibilityLabel={`Valore del gruppo ${group.groupName}: €${formatNumber(group.currentTotalValue)}`}
-                    >
-                      {group.fxMissingCount > 0 && group.fxMissingCount === group.dailyCoverage.total
-                        ? 'n/d'
-                        : `€${formatNumber(group.currentTotalValue)}`}
-                    </CopyableText>
-                  </View>
-
-                  <Pressable
-                    style={styles.sectionMetrics}
-                    onPress={() => toggleGroup(group.groupName)}
-                    accessible={false}
-                  >
-                    {allUnpriced ? (
-                      <Text style={styles.footnote}>
-                        {group.fxMissingCount === group.dailyCoverage.total
-                          ? 'Escluso dal totale: cambio non disponibile'
-                          : 'Prezzi non disponibili: valutato al costo'}
-                      </Text>
-                    ) : (
-                      <>
-                        <MetricChip value={group.profitOrLoss} style={{ alignSelf: 'flex-start' }}>
-                          Totale {formatSignedCurrency(group.profitOrLoss)} ({signedPercent(group.profitOrLossPercent)})
-                        </MetricChip>
-                        {renderSecondaryMetrics({
-                          annualized: group.annualizedReturn,
-                          extrapolated: group.isAnnualizedExtrapolated,
-                          daily: group.dailyChange,
-                          dailyPercent: group.dailyChangePercent,
-                          coverage: group.dailyCoverage,
-                        })}
-                        {group.missingPriceCount > 0 && (
-                          <Text style={styles.footnote}>
-                            {plural(group.missingPriceCount, 'titolo valutato', 'titoli valutati')} al costo
-                          </Text>
-                        )}
-                        {group.fxMissingCount > 0 && (
-                          <Text style={styles.footnote}>
-                            {plural(group.fxMissingCount, 'titolo escluso', 'titoli esclusi')} dal totale: cambio non disponibile
-                          </Text>
-                        )}
-                      </>
-                    )}
-                  </Pressable>
-                </View>
-
-                {!isCollapsed && group.assets.map((asset, index) => (
-                  <AssetCard
-                    key={asset.symbol + index}
-                    symbol={asset.symbol}
-                    name={asset.name}
-                    price={asset.currentPrice}
-                    changePercent={asset.profitOrLossPercent}
-                    changeAbsolute={asset.profitOrLoss}
-                    dailyChange={asset.dailyChange}
-                    dailyChangePercent={asset.dailyChangePercent}
-                    quantity={asset.totalQuantity}
-                    averagePrice={asset.averagePrice}
-                    currency={asset.currency}
-                    annualizedReturn={asset.annualizedReturn}
-                    isAnnualizedExtrapolated={asset.isAnnualizedExtrapolated}
-                    hasPrice={asset.hasPrice}
-                    hasDailyChange={asset.hasDailyChange}
-                    valueInBase={asset.valueInBase}
-                    weightPercent={asset.valueInBase && globalTotalValue > 0 ? (asset.valueInBase / globalTotalValue) * 100 : null}
-                    isFirst={index === 0}
-                    isLast={index === group.assets.length - 1}
-                    onPress={() => router.push({ pathname: '/asset/[id]', params: { id: asset.symbol, symbol: asset.symbol, name: asset.name, currentPrice: asset.currentPrice, currency: asset.currency, groupName: group.groupName, dailyChange: asset.dailyChange, dailyChangePercent: asset.dailyChangePercent, hasPrice: asset.hasPrice ? '1' : '0' } })}
-                  />
-                ))}
+      {/* Elenco dei titoli fuori dai calcoli, con il motivo */}
+      <Modal
+        visible={incompleteVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIncompleteVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setIncompleteVisible(false)} accessibilityLabel="Chiudi">
+          <View style={[styles.modalContent, { alignItems: 'stretch' }]} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle} accessibilityRole="header">Dati incompleti</Text>
+            {incompleteItems.map(item => (
+              <View key={item.symbol} style={styles.incompleteItem}>
+                <Text style={styles.incompleteItemName}>{item.name}</Text>
+                <Text style={styles.incompleteItemReason}>{item.reason}</Text>
               </View>
-            );
-          }}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.positive}
-            />
-          }
-          onScroll={(e) => {
-            const y = e.nativeEvent.contentOffset.y;
-            const compact = y > COMPACT_HEADER_OFFSET;
-            if (compact !== showCompactTitle) setShowCompactTitle(compact);
-            // Pull-to-refresh nella PWA iOS: una sola volta per trascinamento, non a ogni evento di scroll
-            if (y < PWA_PULL_THRESHOLD && !refreshing && !pullTriggeredRef.current) {
-              pullTriggeredRef.current = true;
-              onRefresh();
-            } else if (y >= 0) {
-              pullTriggeredRef.current = false;
-            }
-          }}
-          scrollEventThrottle={16}
-          contentContainerStyle={styles.listContent}
-        />
-      )}
+            ))}
+            <TouchableOpacity style={[styles.closeButton, { alignSelf: 'center' }]} onPress={() => setIncompleteVisible(false)} accessibilityRole="button">
+              <Text style={styles.closeButtonText}>Chiudi</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
 
       {/* Modal Composizione Gruppo */}
       <Modal
@@ -979,9 +1151,16 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.scalable,
   },
   syncBanner: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 4,
+    position: 'absolute',
+    top: 8,
+    left: 16,
+    right: 16,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
     paddingVertical: 8,
     paddingLeft: 14,
     paddingRight: 4,
@@ -992,11 +1171,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'space-between',
   },
   syncBannerSyncing: {
-    backgroundColor: withAlpha(colors.scalable, 0.1),
+    backgroundColor: colors.scalableSurface,
     borderColor: withAlpha(colors.scalable, 0.35),
   },
   syncBannerSuccess: {
-    backgroundColor: withAlpha(colors.positive, 0.12),
+    backgroundColor: colors.card,
     borderColor: withAlpha(colors.positive, 0.35),
   },
   syncBannerError: {
@@ -1049,7 +1228,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   headerNote: {
     fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 4,
+    marginTop: 0,
     fontVariant: ['tabular-nums'],
   },
   headerMetrics: {
@@ -1065,6 +1244,78 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   secondaryMetricsLarge: {
     fontSize: 14,
     marginTop: 6,
+  },
+  metricSelector: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    marginTop: 20,
+    padding: 3,
+    borderRadius: 10,
+    backgroundColor: colors.inputBackground,
+  },
+  metricOption: {
+    minHeight: 32,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  metricOptionActive: {
+    backgroundColor: colors.card,
+  },
+  metricOptionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  metricOptionTextActive: {
+    color: colors.text,
+  },
+  metricMissing: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  incompleteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    minHeight: 32,
+    marginTop: 6,
+  },
+  incompleteText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.warning,
+    marginRight: 2,
+  },
+  incompleteItem: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  incompleteItemName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  incompleteItemReason: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  cashToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  cashToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+    textDecorationLine: 'underline',
+    marginLeft: 8,
   },
   heroReturn: {
     fontSize: 18,
@@ -1327,7 +1578,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1,
   },
   priceAlertBannerTriggeredBorder: {
-    borderColor: withAlpha(colors.positive, 0.314),
+    borderColor: withAlpha(colors.scalable, 0.314),
   },
   priceAlertBannerApproachingBorder: {
     borderColor: withAlpha(colors.warning, 0.314),
@@ -1347,7 +1598,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginRight: 8,
   },
   priceAlertBannerIconTriggered: {
-    backgroundColor: withAlpha(colors.positive, 0.125),
+    backgroundColor: withAlpha(colors.scalable, 0.125),
   },
   priceAlertBannerIconApproaching: {
     backgroundColor: withAlpha(colors.warning, 0.125),

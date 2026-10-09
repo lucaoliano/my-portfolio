@@ -192,17 +192,7 @@
       "slate-muted": {
         "role": "neutral",
         "displayName": "Slate Muted",
-        "canonical": "#64748B",
-        "tonalRamp": [
-          "#020B1C",
-          "#182639",
-          "#344358",
-          "#536279",
-          "#73849B",
-          "#95A6BF",
-          "#B9CBE4",
-          "#DEF0FF"
-        ]
+        "canonical": "#58677C"
       },
       "gain-green-light": {
         "role": "primary",

@@ -45,6 +45,9 @@ type MarketQuote = {
   currency?: string;
   /** "scalable" = prezzo sincronizzato da Scalable, senza variazione giornaliera reale */
   source?: "scalable" | "yahoo";
+  /** Ora di mercato dell'ultimo prezzo (ISO) */
+  marketTime?: string;
+  regularMarketTime?: Date | string | number;
 };
 
 // Endpoint per la ricerca dei ticker
@@ -160,6 +163,7 @@ export const getQuotes = onCall(async (request: CallableRequest<{ symbols?: stri
               regularMarketChange: q.regularMarketChange,
               currency: q.currency || "EUR",
               source: "yahoo",
+              marketTime: q.regularMarketTime ? new Date(q.regularMarketTime).toISOString() : undefined,
             });
           }
         }

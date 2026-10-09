@@ -25,7 +25,7 @@ colors:
   paper-card: "#FFFFFF"
   paper-line: "#E5E7EB"
   slate-text: "#334155"
-  slate-muted: "#64748B"
+  slate-muted: "#58677C"
   gain-green-light: "#046C4E"
   loss-red-light: "#B91C1C"
   scalable-teal-light: "#0F766E"
@@ -248,7 +248,7 @@ Forme morbide e tattili. Card e gruppi a 16px, card interne e righe di menu a 12
 
 ### Navigation
 - Header di schermata a tre zone con titolo centrato a 18px; icona chiudi (X) per i fogli, freccia indietro per i dettagli.
-- La dashboard ha menu hamburger a sinistra, titolo grande a sinistra, chip Scalable e ricerca a destra.
+- La panoramica ha menu hamburger a sinistra, titolo "Panoramica" (o il bilancio compatto quando scorri), pulsante "Sincronizza" Scalable e ricerca a destra. Il banner di sincronizzazione galleggia sopra la lista con superficie opaca e Floating soft, senza spostare il contenuto.
 
 ### Hero Return
 Sotto il bilancio il rendimento totale è testo a 18px peso 700 colorato per segno ("+€4.124,12 (+13,95%)") con l'etichetta " in totale" in Ash Text: è la risposta più visibile dopo il bilancio, non un chip da 11px.
@@ -259,14 +259,20 @@ Sotto il rendimento (o il chip di gruppo): "Oggi +€12,30 (+0,42%) · Annuo +11
 ### Cash Row
 La liquidità Scalable è una riga da 56px: icona monete teal, "Liquidità Scalable" con tasso e rendimento sotto, saldo a destra e chevron. Nessun pulsante dentro: la sincronizzazione sta solo nella barra in alto e nel trascina-per-aggiornare.
 
+### Trend Chart
+Sotto le metriche del bilancio: linea sottile da 2px alta 64px, colorata solo dal segno della variazione nel periodo, sopra una linea di base smoke-line. Selettore 7G / 1M / 1A / Tutto in pillole tonali. Didascalia: "+€X (+Y%) rispetto a un mese fa · valore, versamenti inclusi". Il valore segue la scelta "Includi liquidità". Con meno di due giorni di storico dice come si riempirà, senza linee finte. Lo storico è un documento al giorno in `portfolios/{uid}/history/{YYYY-MM-DD}`.
+
+### Metric Selector
+Controllo segmentato tonale (Totale / Oggi / Annuo) sopra il primo gruppo: decide l'unico dato mostrato in ogni gruppo e in ogni riga titolo. "Oggi" diventa "Chiusura ven 9 ott" quando l'ultimo prezzo di mercato non è di oggi. Un dato assente si scrive "n/d" in Ash Text, mai come chip a zero.
+
 ### Data Status Notes
-Una sola riga a 12px in Ash Text sotto le metriche, con le parti separate da " · ": orario dei prezzi ("Prezzi delle 17:35"), ultima sincronizzazione Scalable e, in Signal Amber, i titoli senza prezzo ("1 titolo senza prezzo, valutati al costo"). Un errore di aggiornamento diventa un riquadro amber-surface con azione "Riprova" e non sparisce da solo.
+Una sola riga a 12px in Ash Text sotto le metriche, con le parti separate da " · ": ora di mercato dei prezzi ("Prezzi di mercato delle 17:30", altrimenti l'ora di aggiornamento) e ultima sincronizzazione Scalable. I titoli fuori dai calcoli non sono elencati qui ma in un'unica riga in Signal Amber, "Dati incompleti: 1 titolo ›", che apre l'elenco con il motivo di ciascuno (cambio mancante oppure prezzo mancante: mai entrambi per lo stesso titolo). Le stime giornaliere dei titoli Scalable portano "≈". Un errore di aggiornamento diventa un riquadro amber-surface con azione "Riprova" e non sparisce da solo.
 
 ### Health Check Row
-Riga da 48px su graphite-card: icona scudo neutra, "Salute del portafoglio", punteggio colorato per livello (verde, ambra, rosso; mai teal), livello in Ash Text e chevron. Apre `/health-check`.
+Riga da 48px su graphite-card: icona scudo neutra, "Salute del portafoglio", punteggio colorato per livello (verde, ambra, rosso; mai teal), livello in Ash Text e chevron. Apre `/health-check`. Il punteggio conta solo gli indicatori con dati; con meno di 3 su 5 la riga dice "Incompleta · 2 di 5", senza numero. I pesi usano lo stesso denominatore della panoramica (liquidità inclusa o no).
 
 ### Asset Row (signature)
-La riga titolo: avatar circolare con iniziali e, accanto, righe a due colonne. Prima riga: nome (fino a due righe) e valore della posizione, con "≈ €1.990,04" sotto per i titoli in valuta estera. Seconda riga: "41 × €99,14 · 12%" (quantità, prezzo, peso nel portafoglio) e il chip di rendimento totale. Terza riga, allineata a destra: "Oggi +0,64% · Annuo +28,17%*". Il prezzo medio sta nel dettaglio del titolo. Senza quotazione il valore passa in Ash Text, il chip lascia il posto a "al costo" e i dettagli dicono "Prezzo non disponibile".
+La riga titolo: avatar circolare con iniziali e, accanto, righe a due colonne. Prima riga: nome (fino a due righe) e valore della posizione, con "≈ €1.990,04" sotto per i titoli in valuta estera. Seconda riga: "41 × €99,14 · 12%" (quantità, prezzo, peso nel portafoglio) e un solo chip, scelto dal Metric Selector. Il prezzo medio sta nel dettaglio del titolo. Pressione lunga sulla riga (o l'azione VoiceOver "Copia il valore") copia il valore, che per un istante diventa "Copiato": nessun controllo annidato nella riga. Senza quotazione il valore passa in Ash Text, il chip lascia il posto a "al costo" e i dettagli dicono "Prezzo non disponibile".
 
 ## Do's and Don'ts
 

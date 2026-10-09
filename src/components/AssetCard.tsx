@@ -1,9 +1,9 @@
 import { ThemeColors } from '../theme/colors';
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useAppTheme } from '../theme/ThemeContext';
 import { formatNumber, formatSignedCurrency, getCurrencySymbol } from '../utils/formatters';
-import { CopyableText } from './CopyableText';
+import * as Clipboard from 'expo-clipboard';
 import { MetricChip } from './MetricChip';
 
 interface AssetCardProps {
@@ -27,6 +27,12 @@ interface AssetCardProps {
   valueInBase?: number | null;
   /** Peso della posizione sul totale investito, in percentuale */
   weightPercent?: number | null;
+  /** Unico dato di rendimento mostrato nella riga, scelto in alto nella panoramica */
+  metric?: 'total' | 'daily' | 'annual';
+  /** "Oggi" oppure "Chiusura ven 9 ott" se l'ultimo prezzo non è di oggi */
+  dailyLabel?: string;
+  /** Variazione di oggi stimata (percentuale Yahoo sul prezzo Scalable) */
+  dailyEstimated?: boolean;
   isFirst?: boolean;
   isLast?: boolean;
   onPress?: () => void;
@@ -49,17 +55,20 @@ export const AssetCard: React.FC<AssetCardProps> = ({
   hasDailyChange = true,
   valueInBase,
   weightPercent,
+  metric = 'total',
+  dailyLabel = 'Oggi',
+  dailyEstimated = false,
   isFirst = false,
   isLast = false,
   onPress 
 }) => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
+  const [copied, setCopied] = useState(false);
   const isPositive = changeAbsolute >= 0;
   const changeSign = isPositive ? '+' : '';
 
   const isDailyPositive = dailyChange >= 0;
-  const dailyChangeColor = isDailyPositive ? colors.positive : colors.negative;
   const dailyChangeSign = isDailyPositive ? '+' : '';
   
   const currencySymbol = getCurrencySymbol(currency);
@@ -89,7 +98,40 @@ export const AssetCard: React.FC<AssetCardProps> = ({
     hasAnnualized ? `annuo ${formatNumber(annualizedReturn)}%${isAnnualizedExtrapolated ? ' stimato' : ''}` : null,
     hasDailyData ? `oggi ${dailyChangeSign}${formatNumber(dailyChangePercent)}%` : null,
   ];
-  const annualizedColor = hasAnnualized && annualizedReturn >= 0 ? colors.positive : colors.negative;
+
+  // La copia del valore è un'azione della riga (pressione lunga o azione VoiceOver), non un controllo annidato
+  const copyValue = async () => {
+    await Clipboard.setStringAsync(totalValue ? totalValue.toString() : '');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
+
+  const renderMetric = () => {
+    if (!hasPrice) {
+      return <Text style={styles.unknownNote}>{fxMissing ? 'escluso dai totali' : 'al costo'}</Text>;
+    }
+    if (metric === 'daily') {
+      if (!hasDailyData) return <Text style={styles.unknownNote}>{dailyLabel} n/d</Text>;
+      return (
+        <MetricChip value={dailyChange} size="md">
+          {dailyEstimated ? '≈' : ''}{formatSignedCurrency(dailyChange, currencySymbol)} ({dailyChangeSign}{formatNumber(dailyChangePercent)}%)
+        </MetricChip>
+      );
+    }
+    if (metric === 'annual') {
+      if (!hasAnnualized) return <Text style={styles.unknownNote}>Annuo n/d</Text>;
+      return (
+        <MetricChip value={annualizedReturn} size="md">
+          {annualizedReturn >= 0 ? '+' : ''}{formatNumber(annualizedReturn)}%{isAnnualizedExtrapolated ? '*' : ''} annuo
+        </MetricChip>
+      );
+    }
+    return (
+      <MetricChip value={changeAbsolute} size="md">
+        {formatSignedCurrency(changeAbsolute, currencySymbol)} ({changeSign}{formatNumber(changePercent)}%)
+      </MetricChip>
+    );
+  };
 
   return (
     <TouchableOpacity 
@@ -99,8 +141,12 @@ export const AssetCard: React.FC<AssetCardProps> = ({
         isLast && styles.cardLast,
         !isLast && styles.cardBorderBottom
       ]} 
-      onPress={onPress} 
+      onPress={onPress}
+      onLongPress={copyValue}
+      delayLongPress={400}
       activeOpacity={0.7}
+      accessibilityActions={[{ name: 'copy', label: 'Copia il valore' }]}
+      onAccessibilityAction={e => { if (e.nativeEvent.actionName === 'copy') copyValue(); }}
       accessibilityRole="button"
       accessibilityLabel={accessibilityParts.filter(Boolean).join(', ')}
     >
@@ -119,13 +165,9 @@ export const AssetCard: React.FC<AssetCardProps> = ({
         <View style={styles.row}>
           <Text style={styles.name} numberOfLines={2}>{name}</Text>
           <View style={styles.valueColumn}>
-            <CopyableText
-              style={[styles.price, !hasPrice && styles.priceUnknown]}
-              valueToCopy={totalValue ? totalValue.toString() : ''}
-              onPress={onPress}
-            >
-              {currencySymbol}{totalValue ? formatNumber(totalValue) : '---'}
-            </CopyableText>
+            <Text style={[styles.price, !hasPrice && styles.priceUnknown]}>
+              {copied ? 'Copiato' : `${currencySymbol}${totalValue ? formatNumber(totalValue) : '---'}`}
+            </Text>
             {isForeign && valueInBase !== undefined && (
               <Text style={styles.baseValue}>
                 {valueInBase === null ? 'cambio n/d' : `≈ €${formatNumber(valueInBase)}`}
@@ -140,29 +182,8 @@ export const AssetCard: React.FC<AssetCardProps> = ({
               : `${formatNumber(quantity).replace(/,00$/, '')} ${quantity === 1 ? 'quota' : 'quote'} · prezzo n/d`}
             {weightLabel && ` · ${weightLabel}`}
           </Text>
-          {hasPrice ? (
-            <MetricChip value={changeAbsolute} size="md">
-              {formatSignedCurrency(changeAbsolute, currencySymbol)} ({changeSign}{formatNumber(changePercent)}%)
-            </MetricChip>
-          ) : (
-            <Text style={styles.unknownNote}>{fxMissing ? 'escluso dai totali' : 'al costo'}</Text>
-          )}
+          {renderMetric()}
         </View>
-        {(hasAnnualized || hasDailyData) && (
-          <Text style={styles.secondaryMetrics}>
-            {hasDailyData && (
-              <Text style={{ color: dailyChangeColor }}>
-                Oggi {dailyChangeSign}{formatNumber(dailyChangePercent)}%
-              </Text>
-            )}
-            {hasAnnualized && hasDailyData && <Text style={styles.separator}>  ·  </Text>}
-            {hasAnnualized && (
-              <Text style={{ color: annualizedColor }}>
-                Annuo {annualizedReturn >= 0 ? '+' : ''}{formatNumber(annualizedReturn)}%{isAnnualizedExtrapolated ? '*' : ''}
-              </Text>
-            )}
-          </Text>
-        )}
       </View>
     </TouchableOpacity>
   );
@@ -265,23 +286,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontVariant: ['tabular-nums'],
     marginTop: 2,
   },
-  separator: {
-    color: colors.textSecondary,
-    fontWeight: '400',
-  },
   priceUnknown: {
     color: colors.textSecondary,
   },
   unknownNote: {
     fontSize: 12,
-    color: colors.textSecondary,
-  },
-  secondaryMetrics: {
-    marginTop: 6,
-    textAlign: 'right',
-    fontSize: 12,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
     color: colors.textSecondary,
   },
 });

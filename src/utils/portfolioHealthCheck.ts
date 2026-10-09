@@ -2,7 +2,8 @@ import { formatDecimal } from './formatters';
 import { AggregatedAsset, ScalableSavingsPlan } from '../types';
 import { ScalableInterestPlanId, calculateCashYield } from './cashInterest';
 
-export type HealthCheckLevel = 'excellent' | 'good' | 'warning' | 'critical';
+/** 'incomplete' = troppi indicatori senza dati per dare un giudizio complessivo */
+export type HealthCheckLevel = 'excellent' | 'good' | 'warning' | 'critical' | 'incomplete';
 export type RuleStatus = 'PASS' | 'INFO' | 'WARNING' | 'ALERT';
 
 export interface HealthCheckRuleResult {
@@ -18,12 +19,18 @@ export interface HealthCheckRuleResult {
   metricValue: string;
   actionRoute?: string;
   actionLabel?: string;
+  /** false = mancano i dati per valutare l'indicatore: non entra nel punteggio */
+  hasData: boolean;
 }
 
 export interface PortfolioHealthCheckResult {
   overallScore: number; // 0 - 100
   overallLevel: HealthCheckLevel;
   overallSummary: string;
+  /** Indicatori con dati sufficienti, su quanti in totale */
+  coverage: { withData: number; total: number };
+  /** Base su cui sono calcolati i pesi (investito, più la liquidità se inclusa) */
+  weightBase: number;
   rules: HealthCheckRuleResult[];
   hhiIndex: number; // Herfindahl-Hirschman Index (0 - 1)
   topAsset: {
@@ -79,17 +86,29 @@ export function calculatePortfolioHealthCheck(
   interestPlan: ScalableInterestPlanId = 'prime',
   /** null = tasso mai impostato: l'analisi lo dichiara invece di assumerne uno */
   interestRate: number | null = null,
-  savingsPlans: ScalableSavingsPlan[] = []
+  savingsPlans: ScalableSavingsPlan[] = [],
+  options: {
+    /** false = Scalable non collegato: liquidità e PAC non sono noti */
+    scalableConnected?: boolean;
+    /** Stessa scelta della dashboard: la liquidità entra nel denominatore dei pesi? */
+    includeCashInWeights?: boolean;
+  } = {}
 ): PortfolioHealthCheckResult {
+  const scalableConnected = options.scalableConnected ?? true;
+  const includeCashInWeights = options.includeCashInWeights ?? true;
   const validAssets = assets.filter((a) => a.currentTotalValue > 0);
   const totalInvestedValue = validAssets.reduce((sum, a) => sum + a.currentTotalValue, 0);
   const totalNetWorth = totalInvestedValue + Math.max(0, cashBalance);
+  // Stesso denominatore della dashboard: i pesi devono coincidere tra le schermate
+  const weightBase = includeCashInWeights ? totalNetWorth : totalInvestedValue;
 
   if (totalNetWorth <= 0) {
     return {
       overallScore: 100,
       overallLevel: 'excellent',
       overallSummary: 'Il portafoglio non ha posizioni aperte o liquidità.',
+      coverage: { withData: 0, total: 0 },
+      weightBase: 0,
       rules: [],
       hhiIndex: 0,
       topAsset: null,
@@ -110,7 +129,7 @@ export function calculatePortfolioHealthCheck(
   let hhi = 0;
 
   for (const a of validAssets) {
-    const weight = a.currentTotalValue / totalNetWorth;
+    const weight = weightBase > 0 ? a.currentTotalValue / weightBase : 0;
     hhi += weight * weight;
     if (weight > maxWeight) {
       maxWeight = weight;
@@ -124,7 +143,7 @@ export function calculatePortfolioHealthCheck(
   }
 
   // Include cash as an asset in HHI
-  if (cashBalance > 0) {
+  if (cashBalance > 0 && includeCashInWeights) {
     const cashWeight = cashBalance / totalNetWorth;
     hhi += cashWeight * cashWeight;
   }
@@ -156,7 +175,7 @@ export function calculatePortfolioHealthCheck(
     concentrationScore = 50;
     concentrationStatus = 'ALERT';
     concentrationSummary = `Alta concentrazione: ${topAssetObj?.name || topAssetObj?.symbol} pesa il ${formatDecimal(topPercent, 1)}%`;
-    concentrationDetails = `Il titolo principale eccede la soglia prudenziale del 35% del patrimonio totale (€${formatDecimal(topAssetObj?.value ?? 0, 0)} su €${formatDecimal(totalNetWorth, 0)}).`;
+    concentrationDetails = `Il titolo principale eccede la soglia prudenziale del 35% del patrimonio (€${formatDecimal(topAssetObj?.value ?? 0, 0)} su €${formatDecimal(weightBase, 0)}).`;
     concentrationRec = 'Per ridurre il peso, i prossimi versamenti possono andare su strumenti meno presenti in portafoglio.';
   } else if (topPercent > 25) {
     concentrationScore = 75;
@@ -175,6 +194,7 @@ export function calculatePortfolioHealthCheck(
 
   rules.push({
     id: 'rule_concentration',
+    hasData: true,
     title: 'Concentrazione su un titolo',
     category: 'concentration',
     status: concentrationStatus,
@@ -202,7 +222,14 @@ export function calculatePortfolioHealthCheck(
   let cashActionRoute: string | undefined = undefined;
   let cashActionLabel: string | undefined = undefined;
 
-  if (cashBalance > 0 && !rateKnown) {
+  if (!scalableConnected) {
+    cashScore = 0;
+    cashStatus = 'INFO';
+    cashSummary = 'Liquidità non collegata';
+    cashDetails = 'Collega Scalable per includere nell\'analisi la liquidità e il suo rendimento.';
+    cashActionRoute = '/integrations/scalable';
+    cashActionLabel = 'Collega Scalable';
+  } else if (cashBalance > 0 && !rateKnown) {
     cashScore = 80;
     cashStatus = 'INFO';
     cashSummary = `Liquidità di €${formatDecimal(cashBalance, 0)}, tasso non impostato`;
@@ -255,6 +282,7 @@ export function calculatePortfolioHealthCheck(
 
   rules.push({
     id: 'rule_liquidity',
+    hasData: scalableConnected && rateKnown,
     title: 'Liquidità e rendimento',
     category: 'liquidity',
     status: cashStatus,
@@ -321,6 +349,7 @@ export function calculatePortfolioHealthCheck(
 
   rules.push({
     id: 'rule_diversification',
+    hasData: uncategorizedPercent <= 50,
     title: 'Diversificazione per categoria',
     category: 'diversification',
     status: divStatus,
@@ -344,7 +373,12 @@ export function calculatePortfolioHealthCheck(
   let pacDetails = '';
   let pacRec: string | undefined = undefined;
 
-  if (activePlans.length > 0) {
+  if (!scalableConnected && activePlans.length === 0) {
+    pacScore = 0;
+    pacStatus = 'INFO';
+    pacSummary = 'Piani di accumulo non noti';
+    pacDetails = 'I PAC si leggono da Scalable: collegalo per includerli nell\'analisi.';
+  } else if (activePlans.length > 0) {
     pacScore = 100;
     pacStatus = 'PASS';
     pacSummary = `PAC Scalable attivo (€${formatDecimal(monthlyPacTotal, 0)}/mese su ${activePlans.length} ETF)`;
@@ -359,6 +393,7 @@ export function calculatePortfolioHealthCheck(
 
   rules.push({
     id: 'rule_rebalancing',
+    hasData: scalableConnected || activePlans.length > 0,
     title: 'Piani di accumulo (PAC)',
     category: 'rebalancing',
     status: pacStatus,
@@ -414,6 +449,7 @@ export function calculatePortfolioHealthCheck(
 
   rules.push({
     id: 'rule_costs',
+    hasData: totalWeightedTer > 0,
     title: 'Costi dei fondi (TER)',
     category: 'costs',
     status: costStatus,
@@ -429,37 +465,50 @@ export function calculatePortfolioHealthCheck(
   // Composite Score (0 - 100)
   // Weights: Concentration 30%, Liquidity 25%, Diversification 20%, PAC 15%, Costs 10%
   // ==========================================
-  const compositeScore = Math.round(
-    concentrationScore * 0.30 +
-    cashScore * 0.25 +
-    divScore * 0.20 +
-    pacScore * 0.15 +
-    costScore * 0.10
-  );
-
+  const WEIGHTS: Record<HealthCheckRuleResult['category'], number> = {
+    concentration: 0.30,
+    liquidity: 0.25,
+    diversification: 0.20,
+    rebalancing: 0.15,
+    costs: 0.10,
+  };
+  // Solo gli indicatori con dati entrano nel punteggio: un indicatore sconosciuto non è un "quasi promosso"
+  const scoredRules = rules.filter(rule => rule.hasData);
+  const weightSum = scoredRules.reduce((sum, rule) => sum + WEIGHTS[rule.category], 0);
+  const compositeScore = weightSum > 0
+    ? Math.round(scoredRules.reduce((sum, rule) => sum + rule.score * WEIGHTS[rule.category], 0) / weightSum)
+    : 0;
   const clampedScore = Math.max(0, Math.min(100, compositeScore));
+  const coverage = { withData: scoredRules.length, total: rules.length };
 
-  let overallLevel: HealthCheckLevel = 'excellent';
-  let overallSummary = 'Portafoglio solido, efficiente e ben strutturato.';
+  let overallLevel: HealthCheckLevel;
+  if (coverage.withData < 3) overallLevel = 'incomplete';
+  else if (clampedScore >= 85) overallLevel = 'excellent';
+  else if (clampedScore >= 70) overallLevel = 'good';
+  else if (clampedScore >= 50) overallLevel = 'warning';
+  else overallLevel = 'critical';
 
-  if (clampedScore >= 85) {
-    overallLevel = 'excellent';
-    overallSummary = 'Portafoglio eccellente: ottima efficienza dei costi, allocazione equilibrata e gestione dei flussi.';
-  } else if (clampedScore >= 70) {
-    overallLevel = 'good';
-    overallSummary = 'Buona struttura generale: piccoli margini di ottimizzazione su concentrazione o liquidità.';
-  } else if (clampedScore >= 50) {
-    overallLevel = 'warning';
-    overallSummary = 'Alcuni indicatori sono fuori soglia: concentrazione su pochi titoli o liquidità poco remunerata.';
-  } else {
-    overallLevel = 'critical';
-    overallSummary = 'Più indicatori da rivedere: il portafoglio è sbilanciato su pochi titoli o pesa sui costi.';
+  // Il riassunto descrive cosa hanno trovato gli indicatori, non la fascia del punteggio
+  const inSentence = (title: string) => title.charAt(0).toLowerCase() + title.slice(1);
+  const titlesWith = (status: RuleStatus) => scoredRules.filter(rule => rule.status === status).map(rule => inSentence(rule.title));
+  const alerts = titlesWith('ALERT');
+  const warnings = titlesWith('WARNING');
+  const missing = rules.filter(rule => !rule.hasData).map(rule => inSentence(rule.title));
+  const parts: string[] = [];
+  if (alerts.length > 0) parts.push(`Da rivedere: ${alerts.join(', ')}.`);
+  if (warnings.length > 0) parts.push(`Da valutare: ${warnings.join(', ')}.`);
+  if (alerts.length === 0 && warnings.length === 0 && scoredRules.length > 0) {
+    parts.push('Gli indicatori calcolati sono in linea.');
   }
+  if (missing.length > 0) parts.push(`Senza dati sufficienti: ${missing.join(', ')}.`);
+  const overallSummary = parts.join(' ');
 
   return {
     overallScore: clampedScore,
     overallLevel,
     overallSummary,
+    coverage,
+    weightBase,
     rules,
     hhiIndex: Number(hhi.toFixed(3)),
     topAsset: topAssetObj,

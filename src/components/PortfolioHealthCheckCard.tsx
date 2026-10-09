@@ -26,6 +26,7 @@ const LEVEL_LABELS: Record<HealthCheckLevel, string> = {
   good: 'Solido',
   warning: 'Da ottimizzare',
   critical: 'Da rivedere',
+  incomplete: 'Incompleta',
 };
 
 const STATUS_LABELS: Record<HealthCheckRuleResult['status'], string> = {
@@ -44,6 +45,8 @@ const levelColor = (colors: ThemeColors, level: HealthCheckLevel) => {
       return colors.warning;
     case 'critical':
       return colors.negative;
+    case 'incomplete':
+      return colors.textSecondary;
   }
 };
 
@@ -97,6 +100,8 @@ export const HealthCheckSummaryRow: React.FC<{ healthCheck: PortfolioHealthCheck
   const styles = getStyles(colors);
   const color = levelColor(colors, healthCheck.overallLevel);
   const label = LEVEL_LABELS[healthCheck.overallLevel];
+  const incomplete = healthCheck.overallLevel === 'incomplete';
+  const { withData, total } = healthCheck.coverage;
 
   return (
     <TouchableOpacity
@@ -104,13 +109,23 @@ export const HealthCheckSummaryRow: React.FC<{ healthCheck: PortfolioHealthCheck
       onPress={onPress}
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={`Salute del portafoglio: ${healthCheck.overallScore} su 100, ${label}`}
+      accessibilityLabel={incomplete
+        ? `Salute del portafoglio: analisi incompleta, ${withData} indicatori su ${total} con dati`
+        : `Salute del portafoglio: ${healthCheck.overallScore} su 100, ${label}`}
       accessibilityHint="Apre l'analisi dettagliata"
     >
       <ShieldCheck size={18} color={colors.textSecondary} style={{ marginRight: 10 }} />
       <Text style={styles.summaryRowTitle}>Salute del portafoglio</Text>
-      <Text style={[styles.summaryRowScore, { color }]}>{healthCheck.overallScore}</Text>
-      <Text style={styles.summaryRowLevel}> · {label}</Text>
+      {incomplete ? (
+        <Text style={styles.summaryRowLevel}>Incompleta · {withData} di {total}</Text>
+      ) : (
+        <>
+          <Text style={[styles.summaryRowScore, { color }]}>{healthCheck.overallScore}</Text>
+          <Text style={styles.summaryRowLevel}>
+            {' · '}{label}{withData < total ? ` (${withData} di ${total})` : ''}
+          </Text>
+        </>
+      )}
       <ChevronRight size={16} color={colors.textSecondary} style={{ marginLeft: 4 }} />
     </TouchableOpacity>
   );
@@ -131,8 +146,9 @@ export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> =
   const styles = getStyles(colors);
   const router = useRouter();
 
-  const { overallScore, overallLevel, overallSummary, rules } = healthCheck;
+  const { overallScore, overallLevel, overallSummary, rules, coverage } = healthCheck;
   const scoreColor = levelColor(colors, overallLevel);
+  const incomplete = overallLevel === 'incomplete';
 
   return (
     <View>
@@ -140,15 +156,17 @@ export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> =
         <View style={styles.headerRow}>
           <View style={styles.headerTextContainer}>
             <Text style={styles.cardTitle}>Punteggio complessivo</Text>
-            <Text style={styles.cardSubtitle}>Calcolato su concentrazione, liquidità, diversificazione, PAC e costi</Text>
+            <Text style={styles.cardSubtitle}>
+              Calcolato su {coverage.withData} indicatori su {coverage.total}: quelli senza dati non contano
+            </Text>
           </View>
           <View
             style={styles.scoreBadge}
             accessible
-            accessibilityLabel={`${overallScore} su 100, ${LEVEL_LABELS[overallLevel]}`}
+            accessibilityLabel={incomplete ? 'Punteggio non disponibile: analisi incompleta' : `${overallScore} su 100, ${LEVEL_LABELS[overallLevel]}`}
           >
-            <Text style={[styles.scoreValue, { color: scoreColor }]}>{overallScore}</Text>
-            <Text style={styles.scoreScale}>su 100</Text>
+            <Text style={[styles.scoreValue, { color: scoreColor }]}>{incomplete ? '—' : overallScore}</Text>
+            <Text style={styles.scoreScale}>{incomplete ? 'troppi dati mancanti' : 'su 100'}</Text>
             <Text style={[styles.scoreLevelText, { color: scoreColor }]}>{LEVEL_LABELS[overallLevel]}</Text>
           </View>
         </View>
@@ -177,7 +195,7 @@ export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> =
 
       <Text style={styles.sectionLabel}>Indicatori</Text>
       {rules.map((rule) => {
-        const color = statusColor(colors, rule.status);
+        const color = rule.hasData ? statusColor(colors, rule.status) : colors.textSecondary;
         return (
           <View key={rule.id} style={styles.ruleItem}>
             <View style={styles.ruleHeader}>
@@ -188,8 +206,8 @@ export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> =
                 <Text style={styles.ruleTitle}>{rule.title}</Text>
               </View>
               <View style={[styles.statusBadge, { backgroundColor: withAlpha(color, 0.125) }]}>
-                <StatusIcon status={rule.status} color={color} />
-                <Text style={[styles.statusBadgeText, { color }]}>{STATUS_LABELS[rule.status]}</Text>
+                <StatusIcon status={rule.hasData ? rule.status : 'INFO'} color={color} />
+                <Text style={[styles.statusBadgeText, { color }]}>{rule.hasData ? STATUS_LABELS[rule.status] : 'Senza dati'}</Text>
               </View>
             </View>
 

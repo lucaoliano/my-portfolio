@@ -44,7 +44,7 @@ export const lightColors: ThemeColors = {
   background: "#F9FAFB", // Sfondo molto chiaro e moderno
   card: "#FFFFFF", // Carte bianche per risaltare sullo sfondo
   text: "#334155", // Slate-700, palesemente non nero puro
-  textSecondary: "#64748B", // Blu-grigio per i testi secondari (slate-500)
+  textSecondary: "#58677C", // Blu-grigio: ≥4.5:1 anche su inputBackground e border
   primary: "#334155",
   positive: "#046C4E", // Verde scuro: ≥4.5:1 anche sulla sua tinta al 12,5%
   negative: "#B91C1C", // Rosso scuro: ≥4.5:1 anche sulla sua tinta al 12,5%
