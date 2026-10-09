@@ -148,6 +148,7 @@ function InnerLayout() {
           <Stack.Screen name="profile" options={{ presentation: 'modal' }} />
           <Stack.Screen name="settings" />
           <Stack.Screen name="pac-calculator" />
+          <Stack.Screen name="health-check" />
           <Stack.Screen name="asset/[id]" />
         </Stack>
         <UpdatePrompt />

@@ -9,6 +9,9 @@ export interface YahooQuote {
   regularMarketChangePercent: number;
   regularMarketChange: number;
   currency: string;
+  /** Da dove arriva il prezzo: le quotazioni Scalable non hanno la variazione giornaliera. */
+  source?: 'scalable' | 'yahoo';
+  hasDailyChange?: boolean;
 }
 
 export interface YahooSearchResult {

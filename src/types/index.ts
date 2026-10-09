@@ -33,6 +33,16 @@ export interface AggregatedAsset {
   category?: string;
   annualizedReturn?: number | null;
   isAnnualizedExtrapolated?: boolean;
+  /** false = nessuna quotazione: il titolo è valutato al prezzo medio di carico */
+  hasPrice: boolean;
+  /** false = la quotazione non riporta la variazione di oggi (es. prezzi Scalable) */
+  hasDailyChange: boolean;
+}
+
+/** Quanti titoli contribuiscono a un dato aggregato (es. variazione di oggi). */
+export interface Coverage {
+  withData: number;
+  total: number;
 }
 
 export interface GroupedPortfolio {
@@ -46,6 +56,9 @@ export interface GroupedPortfolio {
   assets: AggregatedAsset[];
   annualizedReturn?: number | null;
   isAnnualizedExtrapolated?: boolean;
+  dailyCoverage: Coverage;
+  /** Titoli del gruppo senza quotazione (valutati al costo) */
+  missingPriceCount: number;
 }
 
 export type RootStackParamList = {

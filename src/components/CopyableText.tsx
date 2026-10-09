@@ -9,7 +9,7 @@ interface CopyableTextProps extends TextProps {
   valueToCopy: string;
 }
 
-export const CopyableText: React.FC<CopyableTextProps> = ({ valueToCopy, children, style, ...props }) => {
+export const CopyableText: React.FC<CopyableTextProps> = ({ valueToCopy, children, style, onPress, ...props }) => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const { width: screenWidth } = useWindowDimensions();
@@ -43,8 +43,11 @@ export const CopyableText: React.FC<CopyableTextProps> = ({ valueToCopy, childre
       <TouchableOpacity 
         ref={touchableRef}
         onLongPress={handleLongPress} 
+        // Senza onPress il tocco veniva "mangiato": ora passa all'azione del contenitore (es. aprire il gruppo)
+        onPress={onPress}
         activeOpacity={0.6}
         delayLongPress={300}
+        accessibilityHint="Tieni premuto per copiare il valore"
       >
         <Text style={style} selectable={false} {...props}>
           {children}

@@ -81,3 +81,13 @@ export const formatSignedCurrency = (value: number, currencySymbol = '€'): str
   const sign = value < 0 ? '-' : '+';
   return `${sign}${currencySymbol}${formatNumber(Math.abs(value))}`;
 };
+
+/** Numero con un numero fisso di decimali nel formato locale ("70,0", "48.574"): sostituisce toFixed nei testi. */
+export const formatDecimal = (value: number, digits: number): string => {
+  const options = { minimumFractionDigits: digits, maximumFractionDigits: digits };
+  try {
+    return new Intl.NumberFormat(undefined, { ...options, useGrouping: 'always' } as Intl.NumberFormatOptions).format(value);
+  } catch {
+    return new Intl.NumberFormat(undefined, options).format(value);
+  }
+};

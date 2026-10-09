@@ -34,6 +34,7 @@ export const AssetDetailsScreen = () => {
     symbol?: string;
     name?: string;
     currentPrice?: string;
+    hasPrice?: string;
     currency?: string;
     groupName?: string;
     dailyChange?: string;
@@ -217,6 +218,8 @@ export const AssetDetailsScreen = () => {
     'EUR';
   const currencySymbol = getCurrencySymbol(displayCurrency);
 
+  // Prezzo reale da Scalable o Yahoo; altrimenti il titolo è valutato al costo e lo diciamo
+  const hasRealPrice = !!scalableAssetData?.currentPrice || !!liveQuote?.regularMarketPrice || params.hasPrice !== '0';
   const numericCurrentPrice = scalableAssetData?.currentPrice ??
     liveQuote?.regularMarketPrice ??
     (initialCurrentPrice > 0 ? initialCurrentPrice : averagePrice);
@@ -277,23 +280,29 @@ export const AssetDetailsScreen = () => {
       <View style={styles.overview}>
         <CopyableText style={styles.overviewValue} valueToCopy={currentValue.toString()}>{currencySymbol}{formatNumber(currentValue)}</CopyableText>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <MetricChip value={profitOrLoss} size="lg" style={{ marginRight: 8, marginBottom: 8 }}>
-            Tot: {formatSignedCurrency(profitOrLoss, currencySymbol)} ({changeSign}{formatNumber(profitOrLossPercent)}%)
-          </MetricChip>
-          {assetXirr.annualizedPercent !== null && (
-            <MetricChip value={assetXirr.annualizedPercent} size="lg" style={{ marginRight: 8, marginBottom: 8 }}>
-              Ann: {assetXirr.annualizedPercent >= 0 ? '+' : ''}{formatNumber(assetXirr.annualizedPercent)}%{assetXirr.isExtrapolated ? '*' : ''}
-            </MetricChip>
-          )}
-          {(numericDailyChange !== 0 || numericDailyChangePercent !== 0) && (
-            <MetricChip value={numericDailyChange} size="lg" style={{ marginBottom: 8 }}>
-              Oggi: {formatSignedCurrency(numericDailyChange, currencySymbol)} ({dailyChangeSign}{formatNumber(numericDailyChangePercent)}%)
-            </MetricChip>
+          {hasRealPrice ? (
+            <>
+              <MetricChip value={profitOrLoss} size="lg" style={{ marginRight: 8, marginBottom: 8 }}>
+                Totale {formatSignedCurrency(profitOrLoss, currencySymbol)} ({changeSign}{formatNumber(profitOrLossPercent)}%)
+              </MetricChip>
+              {assetXirr.annualizedPercent !== null && (
+                <MetricChip value={assetXirr.annualizedPercent} size="lg" style={{ marginRight: 8, marginBottom: 8 }}>
+                  Annuo {assetXirr.annualizedPercent >= 0 ? '+' : ''}{formatNumber(assetXirr.annualizedPercent)}%{assetXirr.isExtrapolated ? '*' : ''}
+                </MetricChip>
+              )}
+              {(numericDailyChange !== 0 || numericDailyChangePercent !== 0) && (
+                <MetricChip value={numericDailyChange} size="lg" style={{ marginBottom: 8 }}>
+                  Oggi {formatSignedCurrency(numericDailyChange, currencySymbol)} ({dailyChangeSign}{formatNumber(numericDailyChangePercent)}%)
+                </MetricChip>
+              )}
+            </>
+          ) : (
+            <Text style={styles.unpricedNote}>Prezzo non disponibile: valore calcolato al prezzo medio di carico</Text>
           )}
         </View>
-        {assetXirr.isExtrapolated && assetXirr.annualizedPercent !== null && (
-          <Text style={{ fontSize: 11, color: colors.textSecondary, textAlign: 'center', marginTop: 2, marginBottom: 8 }}>
-            *Tasso annuo (XIRR) estrapolato su storico di {assetXirr.holdingDays} {assetXirr.holdingDays === 1 ? 'giorno' : 'giorni'} (&lt; 1 anno)
+        {hasRealPrice && assetXirr.isExtrapolated && assetXirr.annualizedPercent !== null && (
+          <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: 'center', marginTop: 2, marginBottom: 8 }}>
+            *Stima annua (XIRR) su {assetXirr.holdingDays} {assetXirr.holdingDays === 1 ? 'giorno' : 'giorni'} di storico, meno di un anno
           </Text>
         )}
       </View>
@@ -403,7 +412,7 @@ export const AssetDetailsScreen = () => {
                     <Text style={styles.transactionDate}>{formatDate(item.date)}</Text>
                     {item.source === 'scalable_mcp' && (
                       <View style={{ backgroundColor: withAlpha(colors.scalable, 0.125), borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 6 }}>
-                        <Text style={{ color: colors.scalable, fontSize: 10, fontWeight: '700' }}>SCALABLE</Text>
+                        <Text style={{ color: colors.scalable, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>SCALABLE</Text>
                       </View>
                     )}
                   </View>
@@ -510,6 +519,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: 32,
     paddingHorizontal: 20,
     fontSize: 16,
+  },
+  unpricedNote: {
+    fontSize: 13,
+    color: colors.warning,
+    textAlign: 'center',
+    marginBottom: 8,
   },
   overviewValue: {
     color: colors.text,

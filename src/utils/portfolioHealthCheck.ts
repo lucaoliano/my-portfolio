@@ -1,3 +1,4 @@
+import { formatDecimal } from './formatters';
 import { AggregatedAsset, ScalableSavingsPlan } from '../types';
 import { ScalableInterestPlanId, calculateCashYield } from './cashInterest';
 
@@ -137,33 +138,33 @@ export function calculatePortfolioHealthCheck(
   if (validAssets.length === 1 && cashBalance <= 0) {
     concentrationScore = 55;
     concentrationStatus = 'WARNING';
-    concentrationSummary = `Portafoglio mono-asset: ${topAssetObj?.symbol} rappresenta il 100%`;
+    concentrationSummary = `Portafoglio mono-asset: ${topAssetObj?.name || topAssetObj?.symbol} rappresenta il 100%`;
     concentrationDetails = 'Tutto il capitale è investito in un unico strumento finanziario.';
     concentrationRec = 'Valuta di aggiungere altre asset class o strumenti complementari per ridurre il rischio specifico.';
   } else if (topPercent > 35) {
     concentrationScore = 50;
     concentrationStatus = 'ALERT';
-    concentrationSummary = `Alta concentrazione: ${topAssetObj?.symbol} pesa il ${topPercent.toFixed(1)}%`;
-    concentrationDetails = `Il titolo principale eccede la soglia prudenziale del 35% del patrimonio totale (€${topAssetObj?.value.toFixed(0)} su €${totalNetWorth.toFixed(0)}).`;
+    concentrationSummary = `Alta concentrazione: ${topAssetObj?.name || topAssetObj?.symbol} pesa il ${formatDecimal(topPercent, 1)}%`;
+    concentrationDetails = `Il titolo principale eccede la soglia prudenziale del 35% del patrimonio totale (€${formatDecimal(topAssetObj?.value ?? 0, 0)} su €${formatDecimal(totalNetWorth, 0)}).`;
     concentrationRec = 'Indirizza i prossimi versamenti o rate del PAC verso asset sottopesati per diluire la concentrazione.';
   } else if (topPercent > 25) {
     concentrationScore = 75;
     concentrationStatus = 'WARNING';
-    concentrationSummary = `Concentrazione moderata: ${topAssetObj?.symbol} pesa il ${topPercent.toFixed(1)}%`;
+    concentrationSummary = `Concentrazione moderata: ${topAssetObj?.name || topAssetObj?.symbol} pesa il ${formatDecimal(topPercent, 1)}%`;
     concentrationDetails = `Il titolo principale supera il 25% del totale, livello di attenzione moderato.`;
     concentrationRec = 'Mantieni monitorato il peso relativo del titolo durante le fasi di crescita del mercato.';
   } else {
     concentrationScore = 95;
     concentrationStatus = 'PASS';
     concentrationSummary = topAssetObj
-      ? `Buona ripartizione: asset top (${topAssetObj.symbol}) limitato al ${topPercent.toFixed(1)}%`
+      ? `Buona ripartizione: primo titolo (${topAssetObj.name || topAssetObj.symbol}) limitato al ${formatDecimal(topPercent, 1)}%`
       : 'Ripartizione equilibrata dei titoli';
-    concentrationDetails = `Nessun singolo asset supera la soglia di rischio del 25%. HHI: ${hhi.toFixed(2)}.`;
+    concentrationDetails = `Nessun singolo titolo supera la soglia di rischio del 25%. HHI: ${formatDecimal(hhi, 2)}.`;
   }
 
   rules.push({
     id: 'rule_concentration',
-    title: 'Concentrazione Singolo Titolo',
+    title: 'Concentrazione su un titolo',
     category: 'concentration',
     status: concentrationStatus,
     score: concentrationScore,
@@ -171,7 +172,7 @@ export function calculatePortfolioHealthCheck(
     details: concentrationDetails,
     recommendation: concentrationRec,
     metricLabel: 'Asset Principale',
-    metricValue: topAssetObj ? `${topAssetObj.symbol} (${topPercent.toFixed(1)}%)` : 'N/D',
+    metricValue: topAssetObj ? `${topAssetObj.name || topAssetObj.symbol} (${formatDecimal(topPercent, 1)}%)` : 'N/D',
   });
 
   // ==========================================
@@ -193,29 +194,29 @@ export function calculatePortfolioHealthCheck(
     if (cashPercent > 15) {
       cashScore = 40;
       cashStatus = 'ALERT';
-      cashSummary = `Drag da liquidità inoperosa: €${cashBalance.toFixed(0)} a rendimento 0%`;
-      cashDetails = `Il ${cashPercent.toFixed(1)}% del tuo patrimonio è in contanti non remunerati, subendo l'erosione dell'inflazione.`;
+      cashSummary = `Liquidità ferma: €${formatDecimal(cashBalance, 0)} a rendimento 0%`;
+      cashDetails = `Il ${formatDecimal(cashPercent, 1)}% del tuo patrimonio è in contanti non remunerati, subendo l'erosione dell'inflazione.`;
       cashRec = 'Attiva un piano remunerato (Prime) o alloca la liquidità su strumenti monetari (es. XEON).';
       cashActionRoute = '/integrations/scalable';
       cashActionLabel = 'Ottimizza Liquidità';
     } else {
       cashScore = 70;
       cashStatus = 'INFO';
-      cashSummary = `Liquidità libera non remunerata (€${cashBalance.toFixed(0)})`;
-      cashDetails = `La liquidità corrisponde al ${cashPercent.toFixed(1)}% del patrimonio ed è attualmente priva di interessi.`;
+      cashSummary = `Liquidità libera non remunerata (€${formatDecimal(cashBalance, 0)})`;
+      cashDetails = `La liquidità corrisponde al ${formatDecimal(cashPercent, 1)}% del patrimonio ed è attualmente priva di interessi.`;
     }
   } else if (cashBalance > 0 && interestRate > 0) {
     if (cashPercent > 40) {
       cashScore = 75;
       cashStatus = 'INFO';
-      cashSummary = `Elevata quota di liquidità remunerata (${cashPercent.toFixed(1)}%)`;
-      cashDetails = `Rendimento attivo al ${interestRate.toFixed(2)}% annuo (+€${yieldEst.annualNet.toFixed(0)} netti/anno), ma quota cash elevata rispetto all'investito.`;
+      cashSummary = `Elevata quota di liquidità remunerata (${formatDecimal(cashPercent, 1)}%)`;
+      cashDetails = `Rendimento attivo al ${formatDecimal(interestRate, 2)}% annuo (+€${formatDecimal(yieldEst.annualNet, 0)} netti/anno), ma quota cash elevata rispetto all'investito.`;
       cashRec = 'Se l\'orizzonte è lungo termine, valuta di programmare un PAC graduale per entrare sul mercato.';
     } else {
       cashScore = 98;
       cashStatus = 'PASS';
-      cashSummary = `Liquidità remunerata ottimizzata (${interestRate.toFixed(2)}% annuo)`;
-      cashDetails = `Genera un rendimento netto stimato di +€${yieldEst.annualNet.toFixed(0)}/anno (€${yieldEst.monthlyNet.toFixed(1)}/mese).`;
+      cashSummary = `Liquidità remunerata ottimizzata (${formatDecimal(interestRate, 2)}% annuo)`;
+      cashDetails = `Genera un rendimento netto stimato di +€${formatDecimal(yieldEst.annualNet, 0)}/anno (€${formatDecimal(yieldEst.monthlyNet, 1)}/mese).`;
     }
   } else {
     // Zero or near zero cash
@@ -235,7 +236,7 @@ export function calculatePortfolioHealthCheck(
 
   rules.push({
     id: 'rule_liquidity',
-    title: 'Efficienza Liquidità & Cash Drag',
+    title: 'Liquidità e rendimento',
     category: 'liquidity',
     status: cashStatus,
     score: cashScore,
@@ -243,7 +244,7 @@ export function calculatePortfolioHealthCheck(
     details: cashDetails,
     recommendation: cashRec,
     metricLabel: 'Rendimento Cash',
-    metricValue: interestRate > 0 ? `${interestRate.toFixed(2)}% (+€${yieldEst.annualNet.toFixed(0)}/a)` : '0%',
+    metricValue: interestRate > 0 ? `${formatDecimal(interestRate, 2)}% (+€${formatDecimal(yieldEst.annualNet, 0)}/a)` : '0%',
     actionRoute: cashActionRoute,
     actionLabel: cashActionLabel,
   });
@@ -280,18 +281,18 @@ export function calculatePortfolioHealthCheck(
   } else if (domPercent > 80 && numCategories > 1) {
     divScore = 80;
     divStatus = 'INFO';
-    divSummary = `Predominanza categoria ${dominantCategory[0]} (${domPercent.toFixed(1)}%)`;
+    divSummary = `Predominanza categoria ${dominantCategory[0]} (${formatDecimal(domPercent, 1)}%)`;
     divDetails = `Ripartito su ${numCategories} categorie, con forte esposizione verso ${dominantCategory[0]}.`;
   } else {
     divScore = 95;
     divStatus = 'PASS';
     divSummary = `Ottima diversificazione multi-asset su ${numCategories} classi`;
-    divDetails = `Asset ben distribuiti: ${categoryEntries.map(([c, v]) => `${c} ${((v / totalNetWorth) * 100).toFixed(0)}%`).join(', ')}.`;
+    divDetails = `Ben distribuito: ${categoryEntries.map(([c, v]) => `${c} ${formatDecimal(((v / totalNetWorth) * 100), 0)}%`).join(', ')}.`;
   }
 
   rules.push({
     id: 'rule_diversification',
-    title: 'Diversificazione Macro Asset Class',
+    title: 'Diversificazione per categoria',
     category: 'diversification',
     status: divStatus,
     score: divScore,
@@ -317,7 +318,7 @@ export function calculatePortfolioHealthCheck(
   if (activePlans.length > 0) {
     pacScore = 100;
     pacStatus = 'PASS';
-    pacSummary = `PAC Scalable attivo (€${monthlyPacTotal.toFixed(0)}/mese su ${activePlans.length} ETF)`;
+    pacSummary = `PAC Scalable attivo (€${formatDecimal(monthlyPacTotal, 0)}/mese su ${activePlans.length} ETF)`;
     pacDetails = `Ribilanciamento automatico dei flussi di cassa: acquisti periodici che contrastano la volatilità senza innescare tasse capital gain.`;
   } else {
     pacScore = 75;
@@ -329,7 +330,7 @@ export function calculatePortfolioHealthCheck(
 
   rules.push({
     id: 'rule_rebalancing',
-    title: 'Disciplina PAC & Ribilanciamento',
+    title: 'Piani di accumulo (PAC)',
     category: 'rebalancing',
     status: pacStatus,
     score: pacScore,
@@ -337,9 +338,9 @@ export function calculatePortfolioHealthCheck(
     details: pacDetails,
     recommendation: pacRec,
     metricLabel: 'Piani di Accumulo',
-    metricValue: activePlans.length > 0 ? `€${monthlyPacTotal.toFixed(0)}/mese` : 'Disattivo',
+    metricValue: activePlans.length > 0 ? `€${formatDecimal(monthlyPacTotal, 0)}/mese` : 'Disattivo',
     actionRoute: '/pac-calculator',
-    actionLabel: 'Apri PAC Calculator',
+    actionLabel: 'Apri il simulatore PAC',
   });
 
   // ==========================================
@@ -361,24 +362,24 @@ export function calculatePortfolioHealthCheck(
   if (totalWeightedTer <= 0.22) {
     costScore = 100;
     costStatus = 'PASS';
-    costSummary = `Strumenti ultra-efficienti (TER medio ${totalWeightedTer.toFixed(2)}%)`;
-    costDetails = `Impatto commissionale stimato molto contenuto: circa €${annualEstimatedCost.toFixed(0)} all'anno su €${totalInvestedValue.toFixed(0)} investiti.`;
+    costSummary = `Costi molto contenuti (TER medio ${formatDecimal(totalWeightedTer, 2)}%)`;
+    costDetails = `Impatto commissionale stimato molto contenuto: circa €${formatDecimal(annualEstimatedCost, 0)} all'anno su €${formatDecimal(totalInvestedValue, 0)} investiti.`;
   } else if (totalWeightedTer <= 0.45) {
     costScore = 85;
     costStatus = 'INFO';
-    costSummary = `Costi medi contenuti (TER medio ${totalWeightedTer.toFixed(2)}%)`;
-    costDetails = `Spesa stimata di gestione: ~€${annualEstimatedCost.toFixed(0)}/anno.`;
+    costSummary = `Costi medi contenuti (TER medio ${formatDecimal(totalWeightedTer, 2)}%)`;
+    costDetails = `Spesa stimata di gestione: ~€${formatDecimal(annualEstimatedCost, 0)}/anno.`;
   } else {
     costScore = 60;
     costStatus = 'WARNING';
-    costSummary = `Fee drag elevato (TER medio ${totalWeightedTer.toFixed(2)}%)`;
-    costDetails = `I costi di gestione incidono per ~€${annualEstimatedCost.toFixed(0)}/anno, riducendo l'effetto dell'interesse composto.`;
+    costSummary = `Costi elevati (TER medio ${formatDecimal(totalWeightedTer, 2)}%)`;
+    costDetails = `I costi di gestione incidono per ~€${formatDecimal(annualEstimatedCost, 0)}/anno, riducendo l'effetto dell'interesse composto.`;
     costRec = 'Confronta i fondi attivi con ETF passivi equivalenti a basso costo per massimizzare il rendimento netto.';
   }
 
   rules.push({
     id: 'rule_costs',
-    title: 'Efficienza Costi & Fee Drag',
+    title: 'Costi dei fondi (TER)',
     category: 'costs',
     status: costStatus,
     score: costScore,
@@ -386,7 +387,7 @@ export function calculatePortfolioHealthCheck(
     details: costDetails,
     recommendation: costRec,
     metricLabel: 'TER Ponderato',
-    metricValue: `${totalWeightedTer.toFixed(2)}% (~€${annualEstimatedCost.toFixed(0)}/a)`,
+    metricValue: `${formatDecimal(totalWeightedTer, 2)}% (~€${formatDecimal(annualEstimatedCost, 0)}/a)`,
   });
 
   // ==========================================
@@ -414,10 +415,10 @@ export function calculatePortfolioHealthCheck(
     overallSummary = 'Buona struttura generale: piccoli margini di ottimizzazione su concentrazione o liquidità.';
   } else if (clampedScore >= 50) {
     overallLevel = 'warning';
-    overallSummary = 'Attenzione richiesta: riscontrate concentrazioni elevate o liquidità inefficace.';
+    overallSummary = 'Alcuni indicatori sono fuori soglia: concentrazione su pochi titoli o liquidità poco remunerata.';
   } else {
     overallLevel = 'critical';
-    overallSummary = 'Rischio elevato: portafoglio sbilanciato con alta esposizione specifica o drag commissionale.';
+    overallSummary = 'Più indicatori da rivedere: il portafoglio è sbilanciato su pochi titoli o pesa sui costi.';
   }
 
   return {

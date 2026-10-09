@@ -202,6 +202,8 @@ Il ritmo usa multipli di 4: 4px tra chip, 8–12px dentro i gruppi, 16px di padd
 
 I form (aggiungi/modifica transazione, gruppi) sono schermate a scheda con header a tre zone (chiudi · titolo centrato · spazio) separato da un bordo sottile, contenuto con padding 20px, azioni principali a tutta larghezza in fondo.
 
+L'intestazione della dashboard (bilancio, rendimento, liquidità, avvisi) scorre insieme alla lista. Quando esce dallo schermo, la barra in alto mostra al posto di "Dashboard" il bilancio compatto con il rendimento in percentuale, e acquista un bordo smoke-line. L'analisi della salute del portafoglio vive in fondo alla lista come una riga sola, che apre la schermata dedicata.
+
 ### Named Rules
 **The Answer-First Rule.** In ogni schermata il numero che risponde alla domanda principale è l'elemento più grande e sta in alto; i chip di rendimento lo seguono subito sotto.
 
@@ -248,8 +250,17 @@ Forme morbide e tattili. Card e gruppi a 16px, card interne e righe di menu a 12
 - Header di schermata a tre zone con titolo centrato a 18px; icona chiudi (X) per i fogli, freccia indietro per i dettagli.
 - La dashboard ha menu hamburger a sinistra, titolo grande a sinistra, chip Scalable e ricerca a destra.
 
+### Secondary Metrics Line
+Sotto l'unico chip di rendimento: "Annuo +11,22%* · Oggi +€12,30 (+0,42%)", testo a 13px peso 600, colorato per segno, separatori in Ash Text. Se la variazione di oggi copre solo una parte dei titoli si aggiunge "su 3 di 7 titoli"; se non ne copre nessuno, "Oggi" non compare.
+
+### Data Status Notes
+Note a 12px in Ash Text sotto le metriche: orario delle quotazioni ("Quotazioni delle 17:35") e, in Signal Amber, i titoli senza prezzo ("1 titolo senza prezzo, valutati al costo"). Un errore di aggiornamento diventa un riquadro amber-surface con azione "Riprova" e non sparisce da solo.
+
+### Health Check Row
+Riga da 48px su graphite-card: icona scudo neutra, "Salute del portafoglio", punteggio colorato per livello (verde, ambra, rosso; mai teal), livello in Ash Text e chevron. Apre `/health-check`.
+
 ### Asset Row (signature)
-La riga titolo: avatar circolare con iniziali, nome su due righe, dettagli in Ash Text ("41 quote · PM €84,88", "Attuale €99,14"); a destra il valore della posizione, un solo chip di rendimento totale e una riga secondaria "Ann. +28,15%* · Oggi +0,42%" colorata per segno.
+La riga titolo: avatar circolare con iniziali, nome su due righe, dettagli in Ash Text su tre righe ("41 quote", "Medio €84,88", "Attuale €99,14"); a destra il valore della posizione, un solo chip di rendimento totale e una riga secondaria "Annuo +28,15%* · Oggi +0,42%" colorata per segno. Senza quotazione il valore passa in Ash Text, il chip lascia il posto a "al costo" e i dettagli dicono "Prezzo non disponibile".
 
 ## Do's and Don'ts
 
@@ -267,3 +278,5 @@ La riga titolo: avatar circolare con iniziali, nome su due righe, dettagli in As
 - **Don't** usare bianco o nero puro per testo o sfondi del tema (eccezione: il testo nero sui pulsanti Gain Green).
 - **Don't** impilare più di un chip colorato per riga titolo: il rendimento totale ha il chip, le altre metriche vanno in testo secondario.
 - **Don't** troncare un ISIN o un ticker in un avatar ("IE0…"): usare le iniziali del nome.
+- **Don't** annidare un pulsante dentro un altro (sul web diventa `<button>` dentro `<button>`): controlli affiancati, mai uno dentro l'altro.
+- **Don't** usare un'area di tocco sotto 44×44pt; per controlli visivamente più piccoli aggiungere `hitSlop`.
