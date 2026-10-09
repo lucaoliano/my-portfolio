@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, PanResponder, useWindowDimensions, GestureResponderEvent } from 'react-native';
 import Svg, { Rect, Line, Text as SvgText, G } from 'react-native-svg';
-import { ThemeColors } from '../theme/colors';
+import { ThemeColors, withAlpha } from '../theme/colors';
 import { useAppTheme } from '../theme/ThemeContext';
 import { formatNumber } from '../utils/formatters';
 import { PacYearData } from '../utils/pacCalculator';
@@ -202,10 +202,10 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
       ? chartLayout.bars[selectedIndex]
       : chartLayout.bars[chartLayout.bars.length - 1];
 
-  const colorInvested = '#E58E26';
-  const colorInterest = '#7BC676';
-  const colorWithdrawalBalance = '#3B82F6';
-  const colorWithdrawn = '#A855F7';
+  const colorInvested = colors.chartInvested;
+  const colorInterest = colors.chartGrowth;
+  const colorWithdrawalBalance = colors.info;
+  const colorWithdrawn = colors.chartWithdrawal;
 
   return (
     <View style={styles.container}>
@@ -220,7 +220,7 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
                 styles.phaseBadge,
                 {
                   backgroundColor:
-                    selectedPoint.phase === 'accumulation' ? 'rgba(0,209,102,0.2)' : 'rgba(168,85,247,0.2)',
+                    selectedPoint.phase === 'accumulation' ? withAlpha(colors.positive, 0.2) : withAlpha(colors.chartWithdrawal, 0.2),
                 },
               ]}
             >
@@ -228,7 +228,7 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
                 style={[
                   styles.phaseBadgeText,
                   {
-                    color: selectedPoint.phase === 'accumulation' ? '#00D166' : '#A855F7',
+                    color: selectedPoint.phase === 'accumulation' ? colors.positive : colors.chartWithdrawal,
                   },
                 ]}
               >
@@ -265,7 +265,7 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
               </View>
               {selectedPoint.monthlyWithdrawalNominal !== undefined && selectedPoint.monthlyWithdrawalNominal > 0 && (
                 <View style={styles.tooltipRow}>
-                  <Text style={[styles.tooltipLabel, { fontSize: 10, color: '#A855F7' }]}>
+                  <Text style={[styles.tooltipLabel, { fontSize: 10, color: colors.chartWithdrawal }]}>
                     Rata: €{formatNumber(selectedPoint.monthlyWithdrawalNominal)}/m (Oggi: €{formatNumber(selectedPoint.monthlyWithdrawalReal ?? 0)}/m)
                   </Text>
                 </View>
@@ -296,7 +296,7 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
                 marginTop: 4,
                 paddingTop: 4,
                 borderTopWidth: 1,
-                borderTopColor: 'rgba(255,255,255,0.2)',
+                borderTopColor: colors.tooltipBorder,
               },
             ]}
           >
@@ -347,14 +347,14 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
                 y1={chartLayout.pTop}
                 x2={chartLayout.splitX}
                 y2={chartLayout.pTop + chartLayout.innerHeight}
-                stroke="#A855F7"
+                stroke={colors.chartWithdrawal}
                 strokeWidth="1.5"
                 strokeDasharray="4 3"
               />
               <SvgText
                 x={chartLayout.splitX}
                 y={chartLayout.pTop - 8}
-                fill="#A855F7"
+                fill={colors.chartWithdrawal}
                 fontSize="10"
                 fontWeight="bold"
                 textAnchor="middle"
@@ -398,7 +398,7 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
                       width={bar.barWidth + 4}
                       height={bar.investedHeight + bar.interestHeight + 4}
                       fill="none"
-                      stroke="#FFFFFF"
+                      stroke={colors.text}
                       strokeWidth="1.5"
                       rx={4}
                     />
@@ -424,7 +424,7 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
                       width={bar.barWidth + 4}
                       height={bar.balanceHeight + 4}
                       fill="none"
-                      stroke="#FFFFFF"
+                      stroke={colors.text}
                       strokeWidth="1.5"
                       rx={4}
                     />
@@ -493,13 +493,13 @@ const getStyles = (colors: ThemeColors) =>
       position: 'absolute',
       top: 8,
       right: 12,
-      backgroundColor: 'rgba(18, 18, 18, 0.95)',
+      backgroundColor: colors.tooltipBackground,
       borderRadius: 10,
       padding: 10,
       zIndex: 20,
       minWidth: 200,
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.15)',
+      borderColor: colors.tooltipBorder,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.3,
@@ -513,7 +513,7 @@ const getStyles = (colors: ThemeColors) =>
       marginBottom: 6,
     },
     tooltipYear: {
-      color: '#FFF',
+      color: colors.tooltipText,
       fontSize: 12,
       fontWeight: 'bold',
     },
@@ -538,12 +538,12 @@ const getStyles = (colors: ThemeColors) =>
       marginRight: 6,
     },
     tooltipLabel: {
-      color: '#AAA',
+      color: colors.tooltipTextSecondary,
       fontSize: 11,
       flex: 1,
     },
     tooltipValue: {
-      color: '#FFF',
+      color: colors.tooltipText,
       fontSize: 12,
       fontWeight: '600',
     },

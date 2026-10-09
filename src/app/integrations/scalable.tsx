@@ -45,7 +45,7 @@ import {
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useAppTheme } from '../../theme/ThemeContext';
-import { ThemeColors } from '../../theme/colors';
+import { ThemeColors, withAlpha } from '../../theme/colors';
 import { auth } from '../../config/firebase';
 import { 
   DEFAULT_SCALABLE_MCP_URL, 
@@ -492,7 +492,7 @@ export default function ScalableMcpSetupScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#28EBCF" />
+          <ActivityIndicator size="large" color={colors.scalable} />
         </View>
       </SafeAreaView>
     );
@@ -518,7 +518,7 @@ export default function ScalableMcpSetupScreen() {
           isConnected 
             ? styles.statusCardConnected 
             : isSessionExpired 
-              ? { borderColor: '#F59E0B60', backgroundColor: '#F59E0B10' } 
+              ? { borderColor: withAlpha(colors.warning, 0.376), backgroundColor: withAlpha(colors.warning, 0.063) } 
               : styles.statusCardDisconnected
         ]}>
           <View style={styles.statusHeaderRow}>
@@ -526,16 +526,16 @@ export default function ScalableMcpSetupScreen() {
               styles.iconBadge, 
               { 
                 backgroundColor: isConnected 
-                  ? '#28EBCF20' 
+                  ? withAlpha(colors.scalable, 0.125) 
                   : isSessionExpired 
-                    ? '#F59E0B20' 
+                    ? withAlpha(colors.warning, 0.125) 
                     : colors.inputBackground 
               }
             ]}>
               {isSessionExpired ? (
-                <AlertCircle size={22} color="#F59E0B" />
+                <AlertCircle size={22} color={colors.warning} />
               ) : (
-                <Cpu size={22} color={isConnected ? '#28EBCF' : colors.textSecondary} />
+                <Cpu size={22} color={isConnected ? colors.scalable : colors.textSecondary} />
               )}
             </View>
             <View style={{ marginLeft: 12, flex: 1 }}>
@@ -563,23 +563,23 @@ export default function ScalableMcpSetupScreen() {
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
-                      backgroundColor: '#28EBCF15',
+                      backgroundColor: withAlpha(colors.scalable, 0.082),
                       paddingHorizontal: 10,
                       paddingVertical: 6,
                       borderRadius: 8,
                       borderWidth: 1,
-                      borderColor: '#28EBCF40',
+                      borderColor: withAlpha(colors.scalable, 0.251),
                     }}
                     onPress={handleRenewSession}
                     disabled={refreshingSession}
                     activeOpacity={0.7}
                   >
                     {refreshingSession ? (
-                      <ActivityIndicator size="small" color="#28EBCF" style={{ marginRight: 4 }} />
+                      <ActivityIndicator size="small" color={colors.scalable} style={{ marginRight: 4 }} />
                     ) : (
-                      <RefreshCw size={13} color="#28EBCF" style={{ marginRight: 4 }} />
+                      <RefreshCw size={13} color={colors.scalable} style={{ marginRight: 4 }} />
                     )}
-                    <Text style={{ color: '#28EBCF', fontSize: 12, fontWeight: '600' }}>
+                    <Text style={{ color: colors.scalable, fontSize: 12, fontWeight: '600' }}>
                       {refreshingSession ? 'Rinnovo...' : 'Rinnova'}
                     </Text>
                   </TouchableOpacity>
@@ -588,21 +588,21 @@ export default function ScalableMcpSetupScreen() {
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    backgroundColor: '#EF444415',
+                    backgroundColor: withAlpha(colors.negative, 0.082),
                     paddingHorizontal: 10,
                     paddingVertical: 6,
                     borderRadius: 8,
                     borderWidth: 1,
-                    borderColor: '#EF444430',
+                    borderColor: withAlpha(colors.negative, 0.188),
                   }}
                   onPress={() => setShowDisconnectModal(true)}
                   activeOpacity={0.7}
                 >
-                  <Trash2 size={13} color="#EF4444" style={{ marginRight: 4 }} />
-                  <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '600' }}>Disconnetti</Text>
+                  <Trash2 size={13} color={colors.negative} style={{ marginRight: 4 }} />
+                  <Text style={{ color: colors.negative, fontSize: 12, fontWeight: '600' }}>Disconnetti</Text>
                 </TouchableOpacity>
-                {isConnected && <CheckCircle2 size={24} color="#28EBCF" />}
-                {isSessionExpired && <AlertCircle size={24} color="#F59E0B" />}
+                {isConnected && <CheckCircle2 size={24} color={colors.scalable} />}
+                {isSessionExpired && <AlertCircle size={24} color={colors.warning} />}
               </View>
             )}
           </View>
@@ -614,7 +614,7 @@ export default function ScalableMcpSetupScreen() {
             <View style={styles.syncCardHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                 <View style={styles.syncIconContainer}>
-                  <RefreshCw size={18} color="#28EBCF" />
+                  <RefreshCw size={18} color={colors.scalable} />
                 </View>
                 <View style={{ marginLeft: 10, flex: 1 }}>
                   <Text style={styles.syncCardTitle}>Riconciliazione Portafoglio</Text>
@@ -666,12 +666,12 @@ export default function ScalableMcpSetupScreen() {
             >
               {syncing ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <ActivityIndicator size="small" color="#000" style={{ marginRight: 8 }} />
+                  <ActivityIndicator size="small" color={colors.onAccent} style={{ marginRight: 8 }} />
                   <Text style={styles.syncActionButtonText}>Sincronizzazione in corso...</Text>
                 </View>
               ) : (
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Download size={18} color="#000" style={{ marginRight: 8 }} />
+                  <Download size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
                   <Text style={styles.syncActionButtonText}>Sincronizza Ora dal Broker</Text>
                 </View>
               )}
@@ -685,7 +685,7 @@ export default function ScalableMcpSetupScreen() {
             <View style={styles.yieldCardHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                 <View style={styles.yieldIconContainer}>
-                  <Coins size={20} color="#28EBCF" />
+                  <Coins size={20} color={colors.scalable} />
                 </View>
                 <View style={{ marginLeft: 10, flex: 1 }}>
                   <Text style={styles.yieldCardTitle}>Liquidità Remunerata & Rendimento</Text>
@@ -802,7 +802,7 @@ export default function ScalableMcpSetupScreen() {
                 value={includeCashInTotal}
                 onValueChange={setIncludeCashInTotal}
                 trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={'#fff'}
+                thumbColor={colors.onStrong}
               />
             </View>
 
@@ -821,7 +821,7 @@ export default function ScalableMcpSetupScreen() {
               disabled={savingCashConfig}
             >
               {savingCashConfig ? (
-                <ActivityIndicator size="small" color="#000" />
+                <ActivityIndicator size="small" color={colors.onAccent} />
               ) : (
                 <Text style={styles.saveCashButtonText}>Salva Impostazioni Liquidità</Text>
               )}
@@ -835,7 +835,7 @@ export default function ScalableMcpSetupScreen() {
             <View style={styles.savingsPlansHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                 <View style={styles.savingsIconContainer}>
-                  <Calculator size={20} color="#28EBCF" />
+                  <Calculator size={20} color={colors.scalable} />
                 </View>
                 <View style={{ marginLeft: 10, flex: 1 }}>
                   <Text style={styles.savingsPlansTitle}>Piani di Accumulo (PAC Attivi)</Text>
@@ -872,7 +872,7 @@ export default function ScalableMcpSetupScreen() {
               style={styles.openPacButton}
               onPress={() => router.push('/pac-calculator')}
             >
-              <Sliders size={16} color="#000" style={{ marginRight: 6 }} />
+              <Sliders size={16} color={colors.onAccent} style={{ marginRight: 6 }} />
               <Text style={styles.openPacButtonText}>Apri nel PAC Calculator e Ribilancia</Text>
             </TouchableOpacity>
           </View>
@@ -884,7 +884,7 @@ export default function ScalableMcpSetupScreen() {
             <View style={styles.priceAlertsHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                 <View style={styles.priceAlertsIconContainer}>
-                  <Bell size={20} color="#28EBCF" />
+                  <Bell size={20} color={colors.scalable} />
                 </View>
                 <View style={{ marginLeft: 10, flex: 1 }}>
                   <Text style={styles.priceAlertsTitle}>Price Alert Sincronizzati</Text>
@@ -899,9 +899,9 @@ export default function ScalableMcpSetupScreen() {
                 disabled={refreshingAlerts}
               >
                 {refreshingAlerts ? (
-                  <ActivityIndicator size="small" color="#28EBCF" />
+                  <ActivityIndicator size="small" color={colors.scalable} />
                 ) : (
-                  <RefreshCw size={15} color="#28EBCF" />
+                  <RefreshCw size={15} color={colors.scalable} />
                 )}
               </TouchableOpacity>
             </View>
@@ -934,7 +934,7 @@ export default function ScalableMcpSetupScreen() {
                           <Text style={[
                             styles.priceAlertStatusText,
                             calc.statusBadge === 'triggered' && { color: colors.positive },
-                            calc.statusBadge === 'approaching' && { color: '#F59E0B' },
+                            calc.statusBadge === 'approaching' && { color: colors.warning },
                             calc.statusBadge === 'active' && { color: colors.textSecondary },
                           ]}>
                             {calc.statusLabel}
@@ -1006,7 +1006,7 @@ export default function ScalableMcpSetupScreen() {
 
               <View style={styles.taxReportMetricCol}>
                 <Text style={styles.taxReportMetricLabel}>Risparmio Fiscale (26%)</Text>
-                <Text style={[styles.taxReportMetricValue, { color: '#10B981' }]}>
+                <Text style={[styles.taxReportMetricValue, { color: colors.positive }]}>
                   €{formatNumber(taxReport?.potentialTaxSavings || 0)}
                 </Text>
               </View>
@@ -1016,7 +1016,7 @@ export default function ScalableMcpSetupScreen() {
                 <Text
                   style={[
                     styles.taxReportMetricValue,
-                    (taxReport?.lossesExpiringThisYear || 0) > 0 && { color: '#F59E0B' },
+                    (taxReport?.lossesExpiringThisYear || 0) > 0 && { color: colors.warning },
                   ]}
                 >
                   €{formatNumber(taxReport?.lossesExpiringThisYear || 0)}
@@ -1030,7 +1030,7 @@ export default function ScalableMcpSetupScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.taxReportButtonText}>Apri Zainetto Fiscale Completo</Text>
-              <ChevronRight size={16} color="#000" />
+              <ChevronRight size={16} color={colors.onAccent} />
             </TouchableOpacity>
           </View>
         )}
@@ -1040,7 +1040,7 @@ export default function ScalableMcpSetupScreen() {
           <View style={styles.guideCard}>
             <View style={styles.guideHeader}>
               <View style={styles.guideIconBadge}>
-                <Info size={18} color="#28EBCF" />
+                <Info size={18} color={colors.scalable} />
               </View>
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={styles.guideTitle}>Prima di iniziare: Abilita l&apos;accesso in Scalable</Text>
@@ -1070,11 +1070,11 @@ export default function ScalableMcpSetupScreen() {
               </View>
 
               <View style={styles.guideStepRow}>
-                <View style={[styles.guideStepNumber, { backgroundColor: '#28EBCF25', borderColor: '#28EBCF' }]}>
-                  <Text style={[styles.guideStepNumberText, { color: '#28EBCF' }]}>3</Text>
+                <View style={[styles.guideStepNumber, { backgroundColor: withAlpha(colors.scalable, 0.145), borderColor: colors.scalable }]}>
+                  <Text style={[styles.guideStepNumberText, { color: colors.scalable }]}>3</Text>
                 </View>
                 <Text style={styles.guideStepText}>
-                  Attiva l&apos;interruttore <Text style={{ fontWeight: '800', color: '#28EBCF' }}>Scalable CLI</Text> (Accesso esterno).
+                  Attiva l&apos;interruttore <Text style={{ fontWeight: '800', color: colors.scalable }}>Scalable CLI</Text> (Accesso esterno).
                 </Text>
               </View>
 
@@ -1094,8 +1094,8 @@ export default function ScalableMcpSetupScreen() {
         {!isConnected && deviceSession && (
           <View style={styles.deviceAuthCard}>
             <View style={styles.deviceAuthHeader}>
-              <View style={[styles.oauthBadge, { backgroundColor: '#28EBCF' }]}>
-                <ShieldCheck size={22} color="#000" />
+              <View style={[styles.oauthBadge, { backgroundColor: colors.scalable }]}>
+                <ShieldCheck size={22} color={colors.onAccent} />
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.oauthTitle}>Conferma Accesso su Scalable</Text>
@@ -1107,7 +1107,7 @@ export default function ScalableMcpSetupScreen() {
 
             {/* CLI Activation Reminder Box */}
             <View style={styles.cliReminderBox}>
-              <AlertCircle size={16} color="#F59E0B" style={{ marginRight: 8, marginTop: 1 }} />
+              <AlertCircle size={16} color={colors.warning} style={{ marginRight: 8, marginTop: 1 }} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.cliReminderTitle}>Ricevi l&apos;errore &quot;Attivazione negata&quot;?</Text>
                 <Text style={styles.cliReminderText}>
@@ -1127,8 +1127,8 @@ export default function ScalableMcpSetupScreen() {
               >
                 {copiedCode ? (
                   <>
-                    <Check size={16} color="#10B981" style={{ marginRight: 6 }} />
-                    <Text style={[styles.copyCodeText, { color: '#10B981' }]}>Codice Copiato!</Text>
+                    <Check size={16} color={colors.positive} style={{ marginRight: 6 }} />
+                    <Text style={[styles.copyCodeText, { color: colors.positive }]}>Codice Copiato!</Text>
                   </>
                 ) : (
                   <>
@@ -1151,7 +1151,7 @@ export default function ScalableMcpSetupScreen() {
               }}
               activeOpacity={0.8}
             >
-              <ExternalLink size={18} color="#000" style={{ marginRight: 8 }} />
+              <ExternalLink size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
               <Text style={styles.openScalableButtonText}>Apri Scalable Capital per Approvare</Text>
             </TouchableOpacity>
 
@@ -1159,15 +1159,15 @@ export default function ScalableMcpSetupScreen() {
             {isWaiting2fa && (
               <View style={{
                 marginTop: 16,
-                backgroundColor: '#3B82F618',
-                borderColor: '#3B82F650',
+                backgroundColor: withAlpha(colors.info, 0.094),
+                borderColor: withAlpha(colors.info, 0.314),
                 borderWidth: 1.5,
                 borderRadius: 12,
                 padding: 16,
                 flexDirection: 'row',
                 alignItems: 'center',
               }}>
-                <Smartphone size={32} color="#3B82F6" style={{ marginRight: 12 }} />
+                <Smartphone size={32} color={colors.info} style={{ marginRight: 12 }} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
                     Passo 2: Notifica 2FA sul tuo Smartphone
@@ -1181,7 +1181,7 @@ export default function ScalableMcpSetupScreen() {
 
             {/* Polling Indicator */}
             <View style={styles.pollingRow}>
-              <ActivityIndicator size="small" color="#28EBCF" style={{ marginRight: 10 }} />
+              <ActivityIndicator size="small" color={colors.scalable} style={{ marginRight: 10 }} />
               <Text style={styles.pollingText}>
                 {isWaiting2fa
                   ? 'In attesa di approvazione 2FA sul tuo smartphone...'
@@ -1205,7 +1205,7 @@ export default function ScalableMcpSetupScreen() {
           <View style={styles.oauthCard}>
             <View style={styles.oauthHeader}>
               <View style={styles.oauthBadge}>
-                <ShieldCheck size={22} color="#000" />
+                <ShieldCheck size={22} color={colors.onAccent} />
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.oauthTitle}>Connetti Scalable Capital in 1 Clic</Text>
@@ -1222,10 +1222,10 @@ export default function ScalableMcpSetupScreen() {
               activeOpacity={0.8}
             >
               {testing || syncing ? (
-                <ActivityIndicator size="small" color="#000" />
+                <ActivityIndicator size="small" color={colors.onAccent} />
               ) : (
                 <>
-                  <ShieldCheck size={20} color="#000" />
+                  <ShieldCheck size={20} color={colors.onAccent} />
                   <Text style={styles.oauthMainBtnText}>Accedi con Scalable Capital</Text>
                 </>
               )}
@@ -1233,19 +1233,19 @@ export default function ScalableMcpSetupScreen() {
 
             <View style={styles.oauthBulletList}>
               <View style={styles.oauthBulletRow}>
-                <Check size={14} color="#10B981" />
+                <Check size={14} color={colors.positive} />
                 <Text style={styles.oauthBulletText}>Login ufficiale e sicuro sui server Scalable Capital</Text>
               </View>
               <View style={styles.oauthBulletRow}>
-                <Check size={14} color="#10B981" />
+                <Check size={14} color={colors.positive} />
                 <Text style={styles.oauthBulletText}>Autorizzazione protetta da notifica 2FA sul tuo smartphone</Text>
               </View>
               <View style={styles.oauthBulletRow}>
-                <Check size={14} color="#10B981" />
+                <Check size={14} color={colors.positive} />
                 <Text style={styles.oauthBulletText}>Accesso in sola lettura (impossibile effettuare ordini)</Text>
               </View>
               <View style={styles.oauthBulletRow}>
-                <Check size={14} color="#10B981" />
+                <Check size={14} color={colors.positive} />
                 <Text style={styles.oauthBulletText}>Sincronizzazione istantanea di titoli, PAC, liquidità e minusvalenze</Text>
               </View>
             </View>
@@ -1337,7 +1337,7 @@ export default function ScalableMcpSetupScreen() {
               value={readOnly}
               onValueChange={setReadOnly}
               trackColor={{ false: colors.border, true: colors.positive }}
-              thumbColor={'#fff'}
+              thumbColor={colors.onStrong}
             />
           </View>
 
@@ -1352,7 +1352,7 @@ export default function ScalableMcpSetupScreen() {
               value={autoSync}
               onValueChange={setAutoSync}
               trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={'#fff'}
+              thumbColor={colors.onStrong}
             />
           </View>
 
@@ -1384,12 +1384,12 @@ export default function ScalableMcpSetupScreen() {
           >
             {testing ? (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <ActivityIndicator size="small" color="#000" style={{ marginRight: 8 }} />
+                <ActivityIndicator size="small" color={colors.onAccent} style={{ marginRight: 8 }} />
                 <Text style={styles.primaryButtonText}>Verifica connessione in corso...</Text>
               </View>
             ) : (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <RefreshCw size={18} color="#000" style={{ marginRight: 8 }} />
+                <RefreshCw size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
                 <Text style={styles.primaryButtonText}>Verifica e Salva Connessione</Text>
               </View>
             )}
@@ -1431,7 +1431,7 @@ export default function ScalableMcpSetupScreen() {
             {/* Glowing Icon */}
             <View style={styles.successIconGlow}>
               <View style={styles.successIconCircle}>
-                <Check size={32} color="#000" strokeWidth={3} />
+                <Check size={32} color={colors.onAccent} strokeWidth={3} />
               </View>
             </View>
 
@@ -1443,19 +1443,19 @@ export default function ScalableMcpSetupScreen() {
             {/* Features Synced Box */}
             <View style={styles.modalFeaturesBox}>
               <View style={styles.modalFeatureRow}>
-                <CheckCircle2 size={16} color="#10B981" />
+                <CheckCircle2 size={16} color={colors.positive} />
                 <Text style={styles.modalFeatureText}>Portafoglio e Transazioni sincronizzati</Text>
               </View>
               <View style={styles.modalFeatureRow}>
-                <CheckCircle2 size={16} color="#10B981" />
+                <CheckCircle2 size={16} color={colors.positive} />
                 <Text style={styles.modalFeatureText}>Piani di Accumulo (PAC) attivi collegati</Text>
               </View>
               <View style={styles.modalFeatureRow}>
-                <CheckCircle2 size={16} color="#10B981" />
+                <CheckCircle2 size={16} color={colors.positive} />
                 <Text style={styles.modalFeatureText}>Liquidità remunerata e tracker rendimento</Text>
               </View>
               <View style={styles.modalFeatureRow}>
-                <CheckCircle2 size={16} color="#10B981" />
+                <CheckCircle2 size={16} color={colors.positive} />
                 <Text style={styles.modalFeatureText}>Zainetto Fiscale e Minusvalenze calcolate</Text>
               </View>
             </View>
@@ -1492,9 +1492,9 @@ export default function ScalableMcpSetupScreen() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <View style={[styles.successIconGlow, { backgroundColor: '#EF444420' }]}>
-              <View style={[styles.successIconCircle, { backgroundColor: '#EF4444' }]}>
-                <Trash2 size={28} color="#FFF" strokeWidth={2.5} />
+            <View style={[styles.successIconGlow, { backgroundColor: withAlpha(colors.negative, 0.125) }]}>
+              <View style={[styles.successIconCircle, { backgroundColor: colors.negative }]}>
+                <Trash2 size={28} color={colors.onStrong} strokeWidth={2.5} />
               </View>
             </View>
 
@@ -1504,15 +1504,15 @@ export default function ScalableMcpSetupScreen() {
             </Text>
 
             <TouchableOpacity
-              style={[styles.modalPrimaryBtn, { backgroundColor: '#EF4444' }]}
+              style={[styles.modalPrimaryBtn, { backgroundColor: colors.negative }]}
               onPress={handleConfirmDisconnect}
               disabled={disconnecting}
               activeOpacity={0.85}
             >
               {disconnecting ? (
-                <ActivityIndicator size="small" color="#FFF" />
+                <ActivityIndicator size="small" color={colors.onStrong} />
               ) : (
-                <Text style={[styles.modalPrimaryBtnText, { color: '#FFF' }]}>Conferma Disconnessione</Text>
+                <Text style={[styles.modalPrimaryBtnText, { color: colors.onStrong }]}>Conferma Disconnessione</Text>
               )}
             </TouchableOpacity>
 
@@ -1572,8 +1572,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1,
   },
   statusCardConnected: {
-    backgroundColor: '#102A27',
-    borderColor: '#28EBCF',
+    backgroundColor: colors.scalableSurface,
+    borderColor: colors.scalable,
   },
   statusCardDisconnected: {
     backgroundColor: colors.card,
@@ -1634,7 +1634,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginLeft: -14,
   },
   stepNumberText: {
-    color: '#000',
+    color: colors.onAccent,
     fontWeight: '700',
     fontSize: 12,
   },
@@ -1725,10 +1725,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 16,
   },
   messageBannerSuccess: {
-    backgroundColor: '#102A27',
+    backgroundColor: colors.scalableSurface,
   },
   messageBannerError: {
-    backgroundColor: '#37181C',
+    backgroundColor: colors.negativeSurface,
   },
   messageText: {
     fontSize: 12,
@@ -1737,7 +1737,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     lineHeight: 16,
   },
   primaryButton: {
-    backgroundColor: '#28EBCF',
+    backgroundColor: colors.scalable,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -1748,7 +1748,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     opacity: 0.65,
   },
   primaryButtonText: {
-    color: '#000',
+    color: colors.onAccent,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1789,7 +1789,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 18,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#28EBCF60',
+    borderColor: withAlpha(colors.scalable, 0.376),
   },
   syncCardHeader: {
     flexDirection: 'row',
@@ -1801,7 +1801,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: '#28EBCF20',
+    backgroundColor: withAlpha(colors.scalable, 0.125),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1842,7 +1842,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   syncFeedbackBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#102A27',
+    backgroundColor: colors.scalableSurface,
     padding: 10,
     borderRadius: 8,
     marginBottom: 12,
@@ -1854,14 +1854,14 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     lineHeight: 16,
   },
   syncActionButton: {
-    backgroundColor: '#28EBCF',
+    backgroundColor: colors.scalable,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   syncActionButtonText: {
-    color: '#000',
+    color: colors.onAccent,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1871,7 +1871,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 18,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#28EBCF50',
+    borderColor: withAlpha(colors.scalable, 0.314),
   },
   yieldCardHeader: {
     flexDirection: 'row',
@@ -1882,7 +1882,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: '#28EBCF20',
+    backgroundColor: withAlpha(colors.scalable, 0.125),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1915,7 +1915,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   cashBalanceCurrency: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#28EBCF',
+    color: colors.scalable,
     marginRight: 4,
   },
   cashBalanceAmount: {
@@ -1950,8 +1950,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.border,
   },
   planChipSelected: {
-    backgroundColor: '#28EBCF20',
-    borderColor: '#28EBCF',
+    backgroundColor: withAlpha(colors.scalable, 0.125),
+    borderColor: colors.scalable,
   },
   planChipText: {
     fontSize: 12,
@@ -1959,7 +1959,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textSecondary,
   },
   planChipTextSelected: {
-    color: '#28EBCF',
+    color: colors.scalable,
     fontWeight: '700',
   },
   customRateContainer: {
@@ -2047,7 +2047,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: 12,
   },
   saveCashButton: {
-    backgroundColor: '#28EBCF',
+    backgroundColor: colors.scalable,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
@@ -2055,7 +2055,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 4,
   },
   saveCashButtonText: {
-    color: '#000',
+    color: colors.onAccent,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -2065,7 +2065,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 18,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#28EBCF40',
+    borderColor: withAlpha(colors.scalable, 0.251),
   },
   savingsPlansHeader: {
     flexDirection: 'row',
@@ -2076,7 +2076,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: '#28EBCF20',
+    backgroundColor: withAlpha(colors.scalable, 0.125),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2128,14 +2128,14 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.text,
   },
   savingsPlanBadge: {
-    backgroundColor: '#28EBCF20',
+    backgroundColor: withAlpha(colors.scalable, 0.125),
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     marginTop: 3,
   },
   savingsPlanBadgeText: {
-    color: '#28EBCF',
+    color: colors.scalable,
     fontSize: 10,
     fontWeight: '700',
   },
@@ -2143,13 +2143,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#28EBCF',
+    backgroundColor: colors.scalable,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
   },
   openPacButtonText: {
-    color: '#000',
+    color: colors.onAccent,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -2171,7 +2171,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#28EBCF15',
+    backgroundColor: withAlpha(colors.scalable, 0.082),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2188,7 +2188,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   refreshAlertsSmallButton: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: '#28EBCF15',
+    backgroundColor: withAlpha(colors.scalable, 0.082),
   },
   priceAlertsList: {
     backgroundColor: colors.inputBackground,
@@ -2218,10 +2218,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginLeft: 6,
   },
   priceAlertStatusTriggered: {
-    backgroundColor: colors.positive + '20',
+    backgroundColor: withAlpha(colors.positive, 0.125),
   },
   priceAlertStatusApproaching: {
-    backgroundColor: '#F59E0B20',
+    backgroundColor: withAlpha(colors.warning, 0.125),
   },
   priceAlertStatusActive: {
     backgroundColor: colors.border,
@@ -2274,7 +2274,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#3B82F615',
+    backgroundColor: withAlpha(colors.info, 0.082),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2323,7 +2323,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: 6,
   },
   taxReportButtonText: {
-    color: '#000',
+    color: colors.onAccent,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -2333,7 +2333,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 18,
     marginBottom: 16,
     borderWidth: 1.5,
-    borderColor: colors.primary + '50',
+    borderColor: withAlpha(colors.primary, 0.314),
   },
   oauthHeader: {
     flexDirection: 'row',
@@ -2373,7 +2373,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   oauthMainBtnText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#000',
+    color: colors.onAccent,
   },
   oauthBulletList: {
     gap: 8,
@@ -2409,9 +2409,9 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     borderWidth: 1.5,
-    borderColor: '#28EBCF',
+    borderColor: colors.scalable,
     marginBottom: 20,
-    shadowColor: '#28EBCF',
+    shadowColor: colors.scalable,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
@@ -2442,7 +2442,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   userCodeValue: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#28EBCF',
+    color: colors.scalable,
     letterSpacing: 4,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     marginBottom: 10,
@@ -2466,7 +2466,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#28EBCF',
+    backgroundColor: colors.scalable,
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 12,
@@ -2475,7 +2475,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   openScalableButtonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#000',
+    color: colors.onAccent,
   },
   pollingRow: {
     flexDirection: 'row',
@@ -2504,7 +2504,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#28EBCF40',
+    borderColor: withAlpha(colors.scalable, 0.251),
     marginBottom: 16,
   },
   guideHeader: {
@@ -2516,7 +2516,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: '#28EBCF20',
+    backgroundColor: withAlpha(colors.scalable, 0.125),
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -2567,17 +2567,17 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   cliReminderBox: {
     flexDirection: 'row',
-    backgroundColor: '#F59E0B15',
+    backgroundColor: withAlpha(colors.warning, 0.082),
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#F59E0B40',
+    borderColor: withAlpha(colors.warning, 0.251),
     marginBottom: 16,
   },
   cliReminderTitle: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#F59E0B',
+    color: colors.warning,
     marginBottom: 3,
   },
   cliReminderText: {
@@ -2587,7 +2587,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -2600,8 +2600,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 28,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#28EBCF',
-    shadowColor: '#28EBCF',
+    borderColor: colors.scalable,
+    shadowColor: colors.scalable,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 24,
@@ -2611,21 +2611,21 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 76,
     height: 76,
     borderRadius: 38,
-    backgroundColor: '#28EBCF25',
+    backgroundColor: withAlpha(colors.scalable, 0.145),
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 18,
     borderWidth: 1,
-    borderColor: '#28EBCF60',
+    borderColor: withAlpha(colors.scalable, 0.376),
   },
   successIconCircle: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#28EBCF',
+    backgroundColor: colors.scalable,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#28EBCF',
+    shadowColor: colors.scalable,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
@@ -2668,13 +2668,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   modalPrimaryBtn: {
     width: '100%',
-    backgroundColor: '#28EBCF',
+    backgroundColor: colors.scalable,
     paddingVertical: 15,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
-    shadowColor: '#28EBCF',
+    shadowColor: colors.scalable,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -2682,7 +2682,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   modalPrimaryBtnText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#000',
+    color: colors.onAccent,
   },
   modalSecondaryBtn: {
     width: '100%',

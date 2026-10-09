@@ -1,4 +1,4 @@
-import { ThemeColors } from '../theme/colors';
+import { ThemeColors, withAlpha } from '../theme/colors';
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -342,7 +342,7 @@ export const AddTransactionScreen = () => {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#000" />
+            <ActivityIndicator color={colors.onAccent} />
           ) : (
             <Text style={styles.saveButtonText}>Aggiungi al Portafoglio</Text>
           )}
@@ -457,7 +457,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   createGroupButtonText: {
-    color: '#000',
+    color: colors.onAccent,
     fontWeight: '600',
     fontSize: 16,
   },
@@ -476,7 +476,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   groupChipActive: {
     borderColor: colors.positive,
-    backgroundColor: colors.positive + '20',
+    backgroundColor: withAlpha(colors.positive, 0.125),
   },
   groupChipText: {
     color: colors.textSecondary,
@@ -499,7 +499,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     opacity: 0.7,
   },
   saveButtonText: {
-    color: '#000',
+    color: colors.onAccent,
     fontSize: 16,
     fontWeight: '600',
   },

@@ -471,7 +471,8 @@ export const calculateGoalSeekerYears = (
 export interface ScenarioItem {
   name: string;
   expectedReturn: number;
-  color: string;
+  /** Token del tema (ThemeColors) con cui rappresentare lo scenario */
+  colorToken: 'info' | 'positive' | 'warning';
   result: PacResult;
 }
 
@@ -485,21 +486,21 @@ export const calculateScenarios = (
   const prudent = {
     name: 'Prudente / Obbligazionario (4%)',
     expectedReturn: prudentReturn,
-    color: '#3B82F6',
+    colorToken: 'info' as const,
     result: calculatePAC({ ...baseParams, expectedAnnualReturn: prudentReturn }),
   };
 
   const balanced = {
     name: 'Bilanciato (7%)',
     expectedReturn: balancedReturn,
-    color: '#10B981',
+    colorToken: 'positive' as const,
     result: calculatePAC({ ...baseParams, expectedAnnualReturn: balancedReturn }),
   };
 
   const dynamic = {
     name: 'Dinamico / Azionario Globale (10%)',
     expectedReturn: dynamicReturn,
-    color: '#F59E0B',
+    colorToken: 'warning' as const,
     result: calculatePAC({ ...baseParams, expectedAnnualReturn: dynamicReturn }),
   };
 

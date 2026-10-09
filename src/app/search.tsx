@@ -191,7 +191,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     minWidth: 90,
   },
   addButtonText: {
-    color: '#000',
+    color: colors.onAccent,
     fontWeight: '600',
     fontSize: 14,
   },

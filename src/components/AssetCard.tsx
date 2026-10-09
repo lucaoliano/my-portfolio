@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useAppTheme } from '../theme/ThemeContext';
 import { formatNumber, formatSignedCurrency, getCurrencySymbol } from '../utils/formatters';
 import { CopyableText } from './CopyableText';
+import { MetricChip } from './MetricChip';
 
 interface AssetCardProps {
   symbol: string;
@@ -43,7 +44,6 @@ export const AssetCard: React.FC<AssetCardProps> = ({
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const isPositive = changeAbsolute >= 0;
-  const changeColor = isPositive ? colors.positive : colors.negative;
   const changeSign = isPositive ? '+' : '';
 
   const isDailyPositive = dailyChange >= 0;
@@ -96,11 +96,9 @@ export const AssetCard: React.FC<AssetCardProps> = ({
       </View>
       <View style={styles.rightContent}>
         <CopyableText style={styles.price} valueToCopy={totalValue ? totalValue.toString() : ''}>{currencySymbol}{totalValue ? formatNumber(totalValue) : '---'}</CopyableText>
-        <View style={[styles.changeContainer, { backgroundColor: changeColor + '20' }]}>
-          <Text style={[styles.change, { color: changeColor }]}>
-            {formatSignedCurrency(changeAbsolute, currencySymbol)} ({changeSign}{formatNumber(changePercent)}%)
-          </Text>
-        </View>
+        <MetricChip value={changeAbsolute} size="md">
+          {formatSignedCurrency(changeAbsolute, currencySymbol)} ({changeSign}{formatNumber(changePercent)}%)
+        </MetricChip>
         {(hasAnnualized || hasDailyData) && (
           <Text style={styles.secondaryMetrics}>
             {hasAnnualized && (
@@ -206,16 +204,6 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
     marginBottom: 6,
-  },
-  changeContainer: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  change: {
-    fontSize: 12,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
   },
   secondaryMetrics: {
     marginTop: 6,

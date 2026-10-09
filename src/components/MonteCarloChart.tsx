@@ -152,23 +152,23 @@ export const MonteCarloChart: React.FC<MonteCarloChartProps> = ({
         <View style={styles.tooltipContainer}>
           <Text style={styles.tooltipYear}>Anno {selectedPoint.year} (Fasce di Probabilità)</Text>
           <View style={styles.tooltipRow}>
-            <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.positive }]} />
             <Text style={styles.tooltipLabel}>90° percentile (Ottimistico):</Text>
-            <Text style={[styles.tooltipValue, { color: '#10B981' }]}>
+            <Text style={[styles.tooltipValue, { color: colors.positive }]}>
               € {formatNumber(selectedPoint.p90)}
             </Text>
           </View>
           <View style={styles.tooltipRow}>
-            <View style={[styles.legendDot, { backgroundColor: '#3B82F6' }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.info }]} />
             <Text style={styles.tooltipLabel}>50° percentile (Mediana):</Text>
-            <Text style={[styles.tooltipValue, { color: '#3B82F6' }]}>
+            <Text style={[styles.tooltipValue, { color: colors.info }]}>
               € {formatNumber(selectedPoint.p50)}
             </Text>
           </View>
           <View style={styles.tooltipRow}>
-            <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.negative }]} />
             <Text style={styles.tooltipLabel}>10° percentile (Pessimistico):</Text>
-            <Text style={[styles.tooltipValue, { color: '#EF4444' }]}>
+            <Text style={[styles.tooltipValue, { color: colors.negative }]}>
               € {formatNumber(selectedPoint.p10)}
             </Text>
           </View>
@@ -204,9 +204,9 @@ export const MonteCarloChart: React.FC<MonteCarloChartProps> = ({
           <Path d={chartLayout.fanAreaPath} fill="rgba(59, 130, 246, 0.12)" />
 
           {/* Lines */}
-          <Path d={chartLayout.pathP90} fill="none" stroke="#10B981" strokeWidth="2.5" />
-          <Path d={chartLayout.pathP50} fill="none" stroke="#3B82F6" strokeWidth="3" />
-          <Path d={chartLayout.pathP10} fill="none" stroke="#EF4444" strokeWidth="2" strokeDasharray="3 3" />
+          <Path d={chartLayout.pathP90} fill="none" stroke={colors.positive} strokeWidth="2.5" />
+          <Path d={chartLayout.pathP50} fill="none" stroke={colors.info} strokeWidth="3" />
+          <Path d={chartLayout.pathP10} fill="none" stroke={colors.negative} strokeWidth="2" strokeDasharray="3 3" />
 
           {/* Selected Indicator */}
           {selectedPoint && (
@@ -220,9 +220,9 @@ export const MonteCarloChart: React.FC<MonteCarloChartProps> = ({
                 strokeWidth="1"
                 strokeDasharray="2 2"
               />
-              <Circle cx={selectedPoint.x} cy={selectedPoint.yP90} r="4" fill="#10B981" />
-              <Circle cx={selectedPoint.x} cy={selectedPoint.yP50} r="5" fill="#3B82F6" stroke="#FFFFFF" strokeWidth="1.5" />
-              <Circle cx={selectedPoint.x} cy={selectedPoint.yP10} r="4" fill="#EF4444" />
+              <Circle cx={selectedPoint.x} cy={selectedPoint.yP90} r="4" fill={colors.positive} />
+              <Circle cx={selectedPoint.x} cy={selectedPoint.yP50} r="5" fill={colors.info} stroke={colors.onStrong} strokeWidth="1.5" />
+              <Circle cx={selectedPoint.x} cy={selectedPoint.yP10} r="4" fill={colors.negative} />
             </G>
           )}
 
@@ -287,13 +287,13 @@ const getStyles = (colors: ThemeColors) =>
       position: 'absolute',
       top: 8,
       right: 12,
-      backgroundColor: 'rgba(18, 18, 18, 0.95)',
+      backgroundColor: colors.tooltipBackground,
       borderRadius: 10,
       padding: 10,
       zIndex: 20,
       minWidth: 200,
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.15)',
+      borderColor: colors.tooltipBorder,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.3,
@@ -301,7 +301,7 @@ const getStyles = (colors: ThemeColors) =>
       elevation: 5,
     },
     tooltipYear: {
-      color: '#FFF',
+      color: colors.tooltipText,
       fontSize: 12,
       fontWeight: 'bold',
       marginBottom: 6,
@@ -318,12 +318,12 @@ const getStyles = (colors: ThemeColors) =>
       marginRight: 6,
     },
     tooltipLabel: {
-      color: '#AAA',
+      color: colors.tooltipTextSecondary,
       fontSize: 11,
       flex: 1,
     },
     tooltipValue: {
-      color: '#FFF',
+      color: colors.tooltipText,
       fontSize: 12,
       fontWeight: '600',
     },

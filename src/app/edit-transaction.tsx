@@ -307,7 +307,7 @@ export const EditTransactionScreen = () => {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#000" />
+            <ActivityIndicator color={colors.onAccent} />
           ) : (
             <Text style={styles.saveButtonText}>Salva Modifiche</Text>
           )}
@@ -457,7 +457,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     opacity: 0.7,
   },
   saveButtonText: {
-    color: '#000',
+    color: colors.onAccent,
     fontSize: 16,
     fontWeight: '600',
   },

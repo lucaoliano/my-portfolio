@@ -1,4 +1,4 @@
-import { ThemeColors } from '../theme/colors';
+import { ThemeColors, withAlpha } from '../theme/colors';
 import React, { useState, useMemo } from 'react';
 import {
   View,
@@ -268,7 +268,7 @@ export default function PacCalculatorScreen() {
           style={[styles.tabItem, activeTab === 'pac' && styles.tabItemActive]}
           onPress={() => setActiveTab('pac')}
         >
-          <BarChart3 size={16} color={activeTab === 'pac' ? '#FFF' : colors.textSecondary} style={{ marginRight: 6 }} />
+          <BarChart3 size={16} color={activeTab === 'pac' ? colors.onStrong : colors.textSecondary} style={{ marginRight: 6 }} />
           <Text style={[styles.tabItemText, activeTab === 'pac' && styles.tabItemTextActive]}>
             PAC & Rendita
           </Text>
@@ -278,7 +278,7 @@ export default function PacCalculatorScreen() {
           style={[styles.tabItem, activeTab === 'goal' && styles.tabItemActive]}
           onPress={() => setActiveTab('goal')}
         >
-          <Target size={16} color={activeTab === 'goal' ? '#FFF' : colors.textSecondary} style={{ marginRight: 6 }} />
+          <Target size={16} color={activeTab === 'goal' ? colors.onStrong : colors.textSecondary} style={{ marginRight: 6 }} />
           <Text style={[styles.tabItemText, activeTab === 'goal' && styles.tabItemTextActive]}>
             Goal Seeker
           </Text>
@@ -288,7 +288,7 @@ export default function PacCalculatorScreen() {
           style={[styles.tabItem, activeTab === 'scenarios' && styles.tabItemActive]}
           onPress={() => setActiveTab('scenarios')}
         >
-          <TrendingUp size={16} color={activeTab === 'scenarios' ? '#FFF' : colors.textSecondary} style={{ marginRight: 6 }} />
+          <TrendingUp size={16} color={activeTab === 'scenarios' ? colors.onStrong : colors.textSecondary} style={{ marginRight: 6 }} />
           <Text style={[styles.tabItemText, activeTab === 'scenarios' && styles.tabItemTextActive]}>
             Scenari
           </Text>
@@ -298,7 +298,7 @@ export default function PacCalculatorScreen() {
           style={[styles.tabItem, activeTab === 'montecarlo' && styles.tabItemActive]}
           onPress={() => setActiveTab('montecarlo')}
         >
-          <Sliders size={16} color={activeTab === 'montecarlo' ? '#FFF' : colors.textSecondary} style={{ marginRight: 6 }} />
+          <Sliders size={16} color={activeTab === 'montecarlo' ? colors.onStrong : colors.textSecondary} style={{ marginRight: 6 }} />
           <Text style={[styles.tabItemText, activeTab === 'montecarlo' && styles.tabItemTextActive]}>
             Monte Carlo
           </Text>
@@ -308,7 +308,7 @@ export default function PacCalculatorScreen() {
           style={[styles.tabItem, activeTab === 'feedrag' && styles.tabItemActive]}
           onPress={() => setActiveTab('feedrag')}
         >
-          <Percent size={16} color={activeTab === 'feedrag' ? '#FFF' : colors.textSecondary} style={{ marginRight: 6 }} />
+          <Percent size={16} color={activeTab === 'feedrag' ? colors.onStrong : colors.textSecondary} style={{ marginRight: 6 }} />
           <Text style={[styles.tabItemText, activeTab === 'feedrag' && styles.tabItemTextActive]}>
             Costi & TER
           </Text>
@@ -318,7 +318,7 @@ export default function PacCalculatorScreen() {
           style={[styles.tabItem, activeTab === 'fire' && styles.tabItemActive]}
           onPress={() => setActiveTab('fire')}
         >
-          <Flame size={16} color={activeTab === 'fire' ? '#FFF' : colors.textSecondary} style={{ marginRight: 6 }} />
+          <Flame size={16} color={activeTab === 'fire' ? colors.onStrong : colors.textSecondary} style={{ marginRight: 6 }} />
           <Text style={[styles.tabItemText, activeTab === 'fire' && styles.tabItemTextActive]}>
             FIRE / Rendita
           </Text>
@@ -328,12 +328,12 @@ export default function PacCalculatorScreen() {
           style={[
             styles.tabItem, 
             activeTab === 'scalable_plans' && styles.tabItemActive,
-            activeTab === 'scalable_plans' && { backgroundColor: '#102A27', borderColor: '#28EBCF' }
+            activeTab === 'scalable_plans' && { backgroundColor: colors.scalableSurface, borderColor: colors.scalable }
           ]}
           onPress={() => setActiveTab('scalable_plans')}
         >
-          <Cpu size={16} color={activeTab === 'scalable_plans' ? '#28EBCF' : colors.textSecondary} style={{ marginRight: 6 }} />
-          <Text style={[styles.tabItemText, activeTab === 'scalable_plans' && { color: '#28EBCF', fontWeight: '700' }]}>
+          <Cpu size={16} color={activeTab === 'scalable_plans' ? colors.scalable : colors.textSecondary} style={{ marginRight: 6 }} />
+          <Text style={[styles.tabItemText, activeTab === 'scalable_plans' && { color: colors.scalable, fontWeight: '700' }]}>
             PAC Scalable {scalablePlans.length > 0 ? `(${scalablePlans.length})` : ''}
           </Text>
         </TouchableOpacity>
@@ -360,7 +360,7 @@ export default function PacCalculatorScreen() {
               <View style={styles.scalablePacSyncBanner}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                   <View style={styles.scalablePacBadgeIcon}>
-                    <Cpu size={16} color="#28EBCF" />
+                    <Cpu size={16} color={colors.scalable} />
                   </View>
                   <View style={{ marginLeft: 10, flex: 1 }}>
                     <Text style={styles.scalablePacBannerTitle}>
@@ -379,14 +379,14 @@ export default function PacCalculatorScreen() {
                       setFrequency('monthly');
                     }}
                   >
-                    <Download size={13} color="#000" style={{ marginRight: 4 }} />
+                    <Download size={13} color={colors.onAccent} style={{ marginRight: 4 }} />
                     <Text style={styles.scalablePacImportBtnText}>Usa €{formatNumber(scalableTotalMonthly)}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.scalablePacRebalanceBtn}
                     onPress={() => setActiveTab('scalable_plans')}
                   >
-                    <Sliders size={13} color="#28EBCF" style={{ marginRight: 4 }} />
+                    <Sliders size={13} color={colors.scalable} style={{ marginRight: 4 }} />
                     <Text style={styles.scalablePacRebalanceBtnText}>Ribilanciamento</Text>
                   </TouchableOpacity>
                 </View>
@@ -582,7 +582,7 @@ export default function PacCalculatorScreen() {
             {/* ==================================================== */}
             <View style={styles.inflationSectionCard}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                <Coins size={20} color="#F59E0B" style={{ marginRight: 8 }} />
+                <Coins size={20} color={colors.warning} style={{ marginRight: 8 }} />
                 <Text style={styles.inflationSectionTitle}>Inflazione & Potere d&apos;Acquisto</Text>
               </View>
               <Text style={styles.inflationDesc}>
@@ -612,8 +612,8 @@ export default function PacCalculatorScreen() {
                 <Switch
                   value={autoAdjustAccumulation}
                   onValueChange={setAutoAdjustAccumulation}
-                  trackColor={{ false: colors.border, true: '#F59E0B' }}
-                  thumbColor={'#fff'}
+                  trackColor={{ false: colors.border, true: colors.warning }}
+                  thumbColor={colors.onStrong}
                 />
               </View>
             </View>
@@ -625,7 +625,7 @@ export default function PacCalculatorScreen() {
               <View style={styles.withdrawalToggleRow}>
                 <View style={{ flex: 1, marginRight: 12 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                    <Wallet size={20} color="#A855F7" style={{ marginRight: 8 }} />
+                    <Wallet size={20} color={colors.chartWithdrawal} style={{ marginRight: 8 }} />
                     <Text style={styles.withdrawalToggleTitle}>Fase di Prelievo (Decumulo)</Text>
                   </View>
                   <Text style={styles.withdrawalToggleSubtitle}>
@@ -635,8 +635,8 @@ export default function PacCalculatorScreen() {
                 <Switch
                   value={enableWithdrawal}
                   onValueChange={setEnableWithdrawal}
-                  trackColor={{ false: colors.border, true: '#A855F7' }}
-                  thumbColor={'#fff'}
+                  trackColor={{ false: colors.border, true: colors.chartWithdrawal }}
+                  thumbColor={colors.onStrong}
                 />
               </View>
             </View>
@@ -644,7 +644,7 @@ export default function PacCalculatorScreen() {
             {enableWithdrawal && (
               <View style={styles.withdrawalSection}>
                 <View style={styles.phaseHeaderBox}>
-                  <Text style={[styles.phaseHeaderTitle, { color: '#A855F7' }]}>
+                  <Text style={[styles.phaseHeaderTitle, { color: colors.chartWithdrawal }]}>
                     2. Configurazione Prelievi (dal {years + 1}° anno)
                   </Text>
                 </View>
@@ -653,7 +653,7 @@ export default function PacCalculatorScreen() {
                 <View style={styles.todayEuroSwitchCard}>
                   <View style={styles.switchRow}>
                     <View style={{ flex: 1, marginRight: 12 }}>
-                      <Text style={[styles.switchLabel, { color: '#A855F7', fontWeight: 'bold' }]}>
+                      <Text style={[styles.switchLabel, { color: colors.chartWithdrawal, fontWeight: 'bold' }]}>
                         Prelievo in &quot;Euro di Oggi&quot; (Potere d&apos;Acquisto Costante)
                       </Text>
                       <Text style={styles.helperText}>
@@ -663,15 +663,15 @@ export default function PacCalculatorScreen() {
                     <Switch
                       value={withdrawalInTodayEuros}
                       onValueChange={setWithdrawalInTodayEuros}
-                      trackColor={{ false: colors.border, true: '#A855F7' }}
-                      thumbColor={'#fff'}
+                      trackColor={{ false: colors.border, true: colors.chartWithdrawal }}
+                      thumbColor={colors.onStrong}
                     />
                   </View>
 
                   {withdrawalInTodayEuros && result.startingNominalWithdrawal && (
                     <View style={styles.startingWithdrawalBadge}>
                       <Text style={styles.startingWithdrawalText}>
-                        💡 Tra {years} anni, l&apos;equivalente di <Text style={{ fontWeight: 'bold', color: '#FFF' }}>€{withdrawalAmount}/m di oggi</Text> sarà una prima rata nominale di <Text style={{ fontWeight: 'bold', color: '#A855F7' }}>€{formatNumber(result.startingNominalWithdrawal)}/mese</Text>, che crescerà del +{inflationRate}% ogni anno.
+                        💡 Tra {years} anni, l&apos;equivalente di <Text style={{ fontWeight: 'bold', color: colors.text }}>€{withdrawalAmount}/m di oggi</Text> sarà una prima rata nominale di <Text style={{ fontWeight: 'bold', color: colors.chartWithdrawal }}>€{formatNumber(result.startingNominalWithdrawal)}/mese</Text>, che crescerà del +{inflationRate}% ogni anno.
                       </Text>
                     </View>
                   )}
@@ -703,14 +703,14 @@ export default function PacCalculatorScreen() {
                         key={val}
                         style={[
                           styles.presetChip,
-                          withdrawalAmount === val && { borderColor: '#A855F7', backgroundColor: 'rgba(168,85,247,0.1)' },
+                          withdrawalAmount === val && { borderColor: colors.chartWithdrawal, backgroundColor: withAlpha(colors.chartWithdrawal, 0.1) },
                         ]}
                         onPress={() => setPresetWithdrawal(val)}
                       >
                         <Text
                           style={[
                             styles.presetChipText,
-                            withdrawalAmount === val && { color: '#A855F7', fontWeight: 'bold' },
+                            withdrawalAmount === val && { color: colors.chartWithdrawal, fontWeight: 'bold' },
                           ]}
                         >
                           {val} €
@@ -791,7 +791,7 @@ export default function PacCalculatorScreen() {
 
                 {result.isDepleted && (
                   <View style={styles.warningCard}>
-                    <AlertTriangle size={24} color="#EF4444" style={{ marginRight: 12 }} />
+                    <AlertTriangle size={24} color={colors.negative} style={{ marginRight: 12 }} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.warningTitle}>Attenzione: Capitale Esaurito</Text>
                       <Text style={styles.warningText}>
@@ -821,7 +821,7 @@ export default function PacCalculatorScreen() {
                   value={applyStampDuty}
                   onValueChange={setApplyStampDuty}
                   trackColor={{ false: colors.border, true: colors.positive }}
-                  thumbColor={'#fff'}
+                  thumbColor={colors.onStrong}
                 />
               </View>
 
@@ -836,7 +836,7 @@ export default function PacCalculatorScreen() {
                   value={applyTaxes}
                   onValueChange={setApplyTaxes}
                   trackColor={{ false: colors.border, true: colors.positive }}
-                  thumbColor={'#fff'}
+                  thumbColor={colors.onStrong}
                 />
               </View>
             </View>
@@ -881,12 +881,12 @@ export default function PacCalculatorScreen() {
                 <>
                   <View style={styles.statCard}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statDot, { backgroundColor: '#7BC676' }]} />
+                      <View style={[styles.statDot, { backgroundColor: colors.chartGrowth }]} />
                       <Text style={styles.statCardLabel}>
                         {displayRealValues ? 'Picco Reale (Euro di Oggi)' : applyTaxes ? 'Picco Netto (Fine Accumulo)' : 'Picco a fine accumulo'}
                       </Text>
                     </View>
-                    <Text style={[styles.statCardValue, { color: '#00D166' }]}>
+                    <Text style={[styles.statCardValue, { color: colors.positive }]}>
                       {formatNumber(
                         displayRealValues
                           ? result.realPeakBalance
@@ -904,12 +904,12 @@ export default function PacCalculatorScreen() {
 
                   <View style={styles.statCard}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statDot, { backgroundColor: '#A855F7' }]} />
+                      <View style={[styles.statDot, { backgroundColor: colors.chartWithdrawal }]} />
                       <Text style={styles.statCardLabel}>
                         {displayRealValues ? 'Rendita Reale Prelevata' : 'Rendita Totale Prelevata'}
                       </Text>
                     </View>
-                    <Text style={[styles.statCardValue, { color: '#A855F7' }]}>
+                    <Text style={[styles.statCardValue, { color: colors.chartWithdrawal }]}>
                       {formatNumber(displayRealValues ? result.realTotalWithdrawn : result.totalWithdrawn)}€
                     </Text>
                     {!displayRealValues && (
@@ -921,7 +921,7 @@ export default function PacCalculatorScreen() {
 
                   <View style={styles.statCard}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statDot, { backgroundColor: '#3B82F6' }]} />
+                      <View style={[styles.statDot, { backgroundColor: colors.info }]} />
                       <Text style={styles.statCardLabel}>
                         {displayRealValues ? 'Capitale Residuo Reale' : applyTaxes ? 'Capitale Residuo Netto' : 'Capitale Residuo Finale'}
                       </Text>
@@ -942,7 +942,7 @@ export default function PacCalculatorScreen() {
 
                   <View style={styles.statCard}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statDot, { backgroundColor: '#E58E26' }]} />
+                      <View style={[styles.statDot, { backgroundColor: colors.chartInvested }]} />
                       <Text style={styles.statCardLabel}>Totale Versamenti</Text>
                     </View>
                     <Text style={styles.statCardValue}>
@@ -954,7 +954,7 @@ export default function PacCalculatorScreen() {
                 <>
                   <View style={styles.statCard}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statDot, { backgroundColor: '#3498DB' }]} />
+                      <View style={[styles.statDot, { backgroundColor: colors.chartContributions }]} />
                       <Text style={styles.statCardLabel}>Versamento Iniziale</Text>
                     </View>
                     <Text style={styles.statCardValue}>
@@ -964,7 +964,7 @@ export default function PacCalculatorScreen() {
 
                   <View style={styles.statCard}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statDot, { backgroundColor: '#E58E26' }]} />
+                      <View style={[styles.statDot, { backgroundColor: colors.chartInvested }]} />
                       <Text style={styles.statCardLabel}>Totale versamenti</Text>
                     </View>
                     <Text style={styles.statCardValue}>
@@ -974,10 +974,10 @@ export default function PacCalculatorScreen() {
 
                   <View style={styles.statCard}>
                     <View style={styles.statCardHeader}>
-                      <View style={[styles.statDot, { backgroundColor: '#7BC676' }]} />
+                      <View style={[styles.statDot, { backgroundColor: colors.chartGrowth }]} />
                       <Text style={styles.statCardLabel}>Rendimento totale</Text>
                     </View>
-                    <Text style={[styles.statCardValue, { color: '#00D166' }]}>
+                    <Text style={[styles.statCardValue, { color: colors.positive }]}>
                       {formatNumber(result.totalInterest)}€
                     </Text>
                   </View>
@@ -985,9 +985,9 @@ export default function PacCalculatorScreen() {
                   <View style={styles.statCard}>
                     <View style={styles.statCardHeader}>
                       <View style={styles.multiDotGroup}>
-                        <View style={[styles.miniDot, { backgroundColor: '#3498DB' }]} />
-                        <View style={[styles.miniDot, { backgroundColor: '#E58E26' }]} />
-                        <View style={[styles.miniDot, { backgroundColor: '#7BC676' }]} />
+                        <View style={[styles.miniDot, { backgroundColor: colors.chartContributions }]} />
+                        <View style={[styles.miniDot, { backgroundColor: colors.chartInvested }]} />
+                        <View style={[styles.miniDot, { backgroundColor: colors.chartGrowth }]} />
                       </View>
                       <Text style={styles.statCardLabel}>
                         {displayRealValues ? 'Valore Reale (Euro di Oggi)' : 'Valore Capitale Nominale'}
@@ -1047,13 +1047,13 @@ export default function PacCalculatorScreen() {
                     ]}
                   >
                     <Text style={[styles.tableCell, { flex: 0.35, textAlign: 'center' }]}>{row.year}</Text>
-                    <Text style={[styles.tableCell, { flex: 0.35, color: '#3B82F6', fontWeight: 'bold', textAlign: 'center' }]}>
+                    <Text style={[styles.tableCell, { flex: 0.35, color: colors.info, fontWeight: 'bold', textAlign: 'center' }]}>
                       {row.age ?? '-'}
                     </Text>
                     <View style={{ flex: 0.85, justifyContent: 'center', alignItems: 'center' }}>
                       <View
                         style={{
-                          backgroundColor: row.phase === 'accumulation' ? 'rgba(0, 209, 102, 0.12)' : 'rgba(168, 85, 247, 0.12)',
+                          backgroundColor: row.phase === 'accumulation' ? withAlpha(colors.positive, 0.12) : withAlpha(colors.chartWithdrawal, 0.12),
                           paddingHorizontal: 4,
                           paddingVertical: 2,
                           borderRadius: 4,
@@ -1064,7 +1064,7 @@ export default function PacCalculatorScreen() {
                           style={{
                             fontSize: 9,
                             fontWeight: 'bold',
-                            color: row.phase === 'accumulation' ? '#00D166' : '#A855F7',
+                            color: row.phase === 'accumulation' ? colors.positive : colors.chartWithdrawal,
                           }}
                         >
                           {row.phase === 'accumulation' ? 'Versamento' : 'Prelievo'}
@@ -1076,7 +1076,7 @@ export default function PacCalculatorScreen() {
                         ? `+€${formatNumber(row.contributionsThisYear)}`
                         : `-€${formatNumber(row.withdrawalsThisYear)}`}
                     </Text>
-                    <Text style={[styles.tableCell, styles.numCell, { flex: 1.1, color: '#F59E0B' }]}>
+                    <Text style={[styles.tableCell, styles.numCell, { flex: 1.1, color: colors.warning }]}>
                       {row.phase === 'accumulation'
                         ? `€${formatNumber(row.realContributionsThisYear)}`
                         : `€${formatNumber(row.realWithdrawalsThisYear)}`}
@@ -1166,7 +1166,7 @@ export default function PacCalculatorScreen() {
                 </View>
                 <View style={styles.heroResultRow}>
                   <Text style={styles.heroResultRowLabel}>Interessi generati dal mercato:</Text>
-                  <Text style={[styles.heroResultRowVal, { color: '#00D166' }]}>+€ {formatNumber(goalPeriodicResult.totalInterest)}</Text>
+                  <Text style={[styles.heroResultRowVal, { color: colors.positive }]}>+€ {formatNumber(goalPeriodicResult.totalInterest)}</Text>
                 </View>
               </View>
             ) : (
@@ -1203,25 +1203,25 @@ export default function PacCalculatorScreen() {
 
             <View style={styles.scenarioCard}>
               <View style={styles.scenarioCardHeader}>
-                <View style={[styles.statDot, { backgroundColor: '#3B82F6' }]} />
+                <View style={[styles.statDot, { backgroundColor: colors.info }]} />
                 <Text style={styles.scenarioTitle}>Prudente / Obbligazionario (4%)</Text>
               </View>
               <Text style={styles.scenarioValue}>€ {formatNumber(scenariosResult.prudent.result.finalBalance)}</Text>
               <Text style={styles.scenarioSub}>Guadagno: +€{formatNumber(scenariosResult.prudent.result.totalInterest)}</Text>
             </View>
 
-            <View style={[styles.scenarioCard, { borderColor: '#10B981', borderWidth: 2 }]}>
+            <View style={[styles.scenarioCard, { borderColor: colors.positive, borderWidth: 2 }]}>
               <View style={styles.scenarioCardHeader}>
-                <View style={[styles.statDot, { backgroundColor: '#10B981' }]} />
-                <Text style={[styles.scenarioTitle, { color: '#10B981' }]}>Bilanciato (7% - Scenario Base)</Text>
+                <View style={[styles.statDot, { backgroundColor: colors.positive }]} />
+                <Text style={[styles.scenarioTitle, { color: colors.positive }]}>Bilanciato (7% - Scenario Base)</Text>
               </View>
-              <Text style={[styles.scenarioValue, { color: '#00D166' }]}>€ {formatNumber(scenariosResult.balanced.result.finalBalance)}</Text>
+              <Text style={[styles.scenarioValue, { color: colors.positive }]}>€ {formatNumber(scenariosResult.balanced.result.finalBalance)}</Text>
               <Text style={styles.scenarioSub}>Guadagno: +€{formatNumber(scenariosResult.balanced.result.totalInterest)}</Text>
             </View>
 
             <View style={styles.scenarioCard}>
               <View style={styles.scenarioCardHeader}>
-                <View style={[styles.statDot, { backgroundColor: '#F59E0B' }]} />
+                <View style={[styles.statDot, { backgroundColor: colors.warning }]} />
                 <Text style={styles.scenarioTitle}>Dinamico / Azionario Globale (10%)</Text>
               </View>
               <Text style={styles.scenarioValue}>€ {formatNumber(scenariosResult.dynamic.result.finalBalance)}</Text>
@@ -1274,15 +1274,15 @@ export default function PacCalculatorScreen() {
             <View style={styles.statsGrid}>
               <View style={styles.statCard}>
                 <Text style={styles.statCardLabel}>90° Percentile (Ottimistico)</Text>
-                <Text style={[styles.statCardValue, { color: '#10B981' }]}>€ {formatNumber(monteCarloResult.finalP90)}</Text>
+                <Text style={[styles.statCardValue, { color: colors.positive }]}>€ {formatNumber(monteCarloResult.finalP90)}</Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statCardLabel}>50° Percentile (Mediana)</Text>
-                <Text style={[styles.statCardValue, { color: '#3B82F6' }]}>€ {formatNumber(monteCarloResult.finalP50)}</Text>
+                <Text style={[styles.statCardValue, { color: colors.info }]}>€ {formatNumber(monteCarloResult.finalP50)}</Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statCardLabel}>10° Percentile (Pessimistico)</Text>
-                <Text style={[styles.statCardValue, { color: '#EF4444' }]}>€ {formatNumber(monteCarloResult.finalP10)}</Text>
+                <Text style={[styles.statCardValue, { color: colors.negative }]}>€ {formatNumber(monteCarloResult.finalP10)}</Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statCardLabel}>Totale Versato</Text>
@@ -1340,7 +1340,7 @@ export default function PacCalculatorScreen() {
             <View style={styles.statsGrid}>
               <View style={styles.statCard}>
                 <Text style={styles.statCardLabel}>Capitale Finale con ETF</Text>
-                <Text style={[styles.statCardValue, { color: '#00D166' }]}>€ {formatNumber(feeDragResult.lowCostBalance)}</Text>
+                <Text style={[styles.statCardValue, { color: colors.positive }]}>€ {formatNumber(feeDragResult.lowCostBalance)}</Text>
               </View>
               <View style={styles.statCard}>
                 <Text style={styles.statCardLabel}>Capitale con Fondo Banca</Text>
@@ -1408,13 +1408,13 @@ export default function PacCalculatorScreen() {
 
             <View style={styles.heroResultCard}>
               <Text style={styles.heroResultSub}>Capitale FIRE necessario per €{formatNumber(fireMonthlyExpenses)}/mese:</Text>
-              <Text style={[styles.heroResultMain, { color: '#F59E0B' }]}>
+              <Text style={[styles.heroResultMain, { color: colors.warning }]}>
                 € {formatNumber(fireResult.targetFireCapital)}
               </Text>
               <View style={styles.heroResultDivider} />
               <View style={styles.heroResultRow}>
                 <Text style={styles.heroResultRowLabel}>Anni di PAC necessari con €{periodicAmount}/mese:</Text>
-                <Text style={[styles.heroResultRowVal, { color: '#00D166' }]}>
+                <Text style={[styles.heroResultRowVal, { color: colors.positive }]}>
                   {fireResult.yearsToFIREWithPac} Anni
                 </Text>
               </View>
@@ -1433,7 +1433,7 @@ export default function PacCalculatorScreen() {
           <View style={styles.moduleSection}>
             <View style={styles.titleSection}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Cpu size={24} color="#28EBCF" style={{ marginRight: 8 }} />
+                <Cpu size={24} color={colors.scalable} style={{ marginRight: 8 }} />
                 <Text style={styles.mainTitle}>Piani di Accumulo Scalable</Text>
               </View>
               <Text style={styles.mainSubtitle}>
@@ -1442,15 +1442,15 @@ export default function PacCalculatorScreen() {
             </View>
 
             {/* Overview Card */}
-            <View style={[styles.heroResultCard, { backgroundColor: '#102A27', borderColor: '#28EBCF' }]}>
+            <View style={[styles.heroResultCard, { backgroundColor: colors.scalableSurface, borderColor: colors.scalable }]}>
               <Text style={styles.heroResultSub}>Totale PAC Mensile Programmato:</Text>
-              <Text style={[styles.heroResultMain, { color: '#28EBCF' }]}>
+              <Text style={[styles.heroResultMain, { color: colors.scalable }]}>
                 € {formatNumber(scalableTotalMonthly)} / mese
               </Text>
               <View style={styles.heroResultDivider} />
               <View style={styles.heroResultRow}>
                 <Text style={styles.heroResultRowLabel}>Piani attivi sul broker:</Text>
-                <Text style={[styles.heroResultRowVal, { color: '#28EBCF' }]}>
+                <Text style={[styles.heroResultRowVal, { color: colors.scalable }]}>
                   {scalablePlans.length} strumenti ETF/Azioni
                 </Text>
               </View>
@@ -1463,7 +1463,7 @@ export default function PacCalculatorScreen() {
             {/* Rebalancing Suggestion Card */}
             <View style={styles.inputCard}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                <Sliders size={18} color={rebalanceAnalysis.rebalancingNeeded ? '#F59E0B' : '#28EBCF'} style={{ marginRight: 8 }} />
+                <Sliders size={18} color={rebalanceAnalysis.rebalancingNeeded ? colors.warning : colors.scalable} style={{ marginRight: 8 }} />
                 <Text style={[styles.fieldHeading, { marginBottom: 0 }]}>
                   Ribilanciamento Intelligente Flussi di Cassa
                 </Text>
@@ -1476,7 +1476,7 @@ export default function PacCalculatorScreen() {
               {rebalanceAnalysis.items.map((item) => {
                 const isUnder = item.status === 'underweight';
                 const isOver = item.status === 'overweight';
-                const statusColor = isUnder ? colors.positive : isOver ? '#F59E0B' : colors.textSecondary;
+                const statusColor = isUnder ? colors.positive : isOver ? colors.warning : colors.textSecondary;
                 const statusBadge = isUnder ? 'Sottopesato' : isOver ? 'Sovrapesato' : 'In Linea';
 
                 return (
@@ -1484,7 +1484,7 @@ export default function PacCalculatorScreen() {
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Text style={styles.rebalancePlanSymbol}>{item.symbol}</Text>
-                        <View style={[styles.statusMiniBadge, { backgroundColor: statusColor + '20' }]}>
+                        <View style={[styles.statusMiniBadge, { backgroundColor: withAlpha(statusColor, 0.125) }]}>
                           <Text style={[styles.statusMiniBadgeText, { color: statusColor }]}>
                             {statusBadge}
                           </Text>
@@ -1528,7 +1528,7 @@ export default function PacCalculatorScreen() {
                   setActiveTab('pac');
                 }}
               >
-                <TrendingUp size={16} color="#000" style={{ marginRight: 6 }} />
+                <TrendingUp size={16} color={colors.onAccent} style={{ marginRight: 6 }} />
                 <Text style={styles.simulatePacButtonText}>
                   Simula questo PAC a lungo termine nel Calcolatore
                 </Text>
@@ -1608,7 +1608,7 @@ export default function PacCalculatorScreen() {
                 }}
               >
                 <Text style={styles.modalOptionText}>{f.label}</Text>
-                {withdrawalFrequency === f.value && <Check size={20} color="#A855F7" />}
+                {withdrawalFrequency === f.value && <Check size={20} color={colors.chartWithdrawal} />}
               </TouchableOpacity>
             ))}
           </View>
@@ -1684,8 +1684,8 @@ const getStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
     },
     tabItemActive: {
-      backgroundColor: '#004481',
-      borderColor: '#004481',
+      backgroundColor: colors.selection,
+      borderColor: colors.selection,
     },
     tabItemText: {
       color: colors.textSecondary,
@@ -1693,7 +1693,7 @@ const getStyles = (colors: ThemeColors) =>
       fontWeight: '600',
     },
     tabItemTextActive: {
-      color: '#FFFFFF',
+      color: colors.onStrong,
       fontWeight: 'bold',
     },
     scrollView: {
@@ -1815,7 +1815,7 @@ const getStyles = (colors: ThemeColors) =>
     },
     presetChipActive: {
       borderColor: colors.positive,
-      backgroundColor: 'rgba(0, 209, 102, 0.1)',
+      backgroundColor: withAlpha(colors.positive, 0.1),
     },
     presetChipText: {
       color: colors.text,
@@ -1832,7 +1832,7 @@ const getStyles = (colors: ThemeColors) =>
       padding: 16,
       marginBottom: 16,
       borderWidth: 1.5,
-      borderColor: '#F59E0B',
+      borderColor: colors.warning,
     },
     inflationSectionTitle: {
       color: colors.text,
@@ -1869,7 +1869,7 @@ const getStyles = (colors: ThemeColors) =>
       padding: 14,
       marginBottom: 16,
       borderWidth: 1.5,
-      borderColor: '#A855F7',
+      borderColor: colors.chartWithdrawal,
     },
     withdrawalToggleRow: {
       flexDirection: 'row',
@@ -1895,15 +1895,15 @@ const getStyles = (colors: ThemeColors) =>
       padding: 14,
       marginBottom: 16,
       borderWidth: 1,
-      borderColor: 'rgba(168,85,247,0.3)',
+      borderColor: withAlpha(colors.chartWithdrawal, 0.3),
     },
     startingWithdrawalBadge: {
-      backgroundColor: 'rgba(168,85,247,0.12)',
+      backgroundColor: withAlpha(colors.chartWithdrawal, 0.12),
       borderRadius: 8,
       padding: 10,
       marginTop: 10,
       borderWidth: 1,
-      borderColor: 'rgba(168,85,247,0.25)',
+      borderColor: withAlpha(colors.chartWithdrawal, 0.25),
     },
     startingWithdrawalText: {
       color: colors.text,
@@ -1913,16 +1913,16 @@ const getStyles = (colors: ThemeColors) =>
     warningCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+      backgroundColor: withAlpha(colors.negative, 0.1),
       borderWidth: 1,
-      borderColor: '#EF4444',
+      borderColor: colors.negative,
       borderRadius: 12,
       padding: 12,
       marginTop: 6,
       marginBottom: 14,
     },
     warningTitle: {
-      color: '#EF4444',
+      color: colors.negative,
       fontSize: 13,
       fontWeight: 'bold',
       marginBottom: 2,
@@ -1996,8 +1996,8 @@ const getStyles = (colors: ThemeColors) =>
       marginLeft: 8,
     },
     viewModeBtnActive: {
-      backgroundColor: '#F59E0B',
-      borderColor: '#F59E0B',
+      backgroundColor: colors.warning,
+      borderColor: colors.warning,
     },
     viewModeBtnText: {
       color: colors.text,
@@ -2005,7 +2005,7 @@ const getStyles = (colors: ThemeColors) =>
       fontWeight: 'bold',
     },
     viewModeBtnTextActive: {
-      color: '#000',
+      color: colors.onAccent,
       fontWeight: 'bold',
     },
     resultsHeaderSection: {
@@ -2145,7 +2145,7 @@ const getStyles = (colors: ThemeColors) =>
       borderRadius: 8,
     },
     modeSwitchBtnActive: {
-      backgroundColor: '#004481',
+      backgroundColor: colors.selection,
     },
     modeSwitchText: {
       color: colors.textSecondary,
@@ -2153,7 +2153,7 @@ const getStyles = (colors: ThemeColors) =>
       fontWeight: '600',
     },
     modeSwitchTextActive: {
-      color: '#FFFFFF',
+      color: colors.onStrong,
       fontWeight: 'bold',
     },
     heroResultCard: {
@@ -2170,7 +2170,7 @@ const getStyles = (colors: ThemeColors) =>
       marginBottom: 6,
     },
     heroResultMain: {
-      color: '#00D166',
+      color: colors.positive,
       fontSize: 28,
       fontWeight: 'bold',
       marginBottom: 12,
@@ -2235,7 +2235,7 @@ const getStyles = (colors: ThemeColors) =>
     },
     modalOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
+      backgroundColor: colors.overlay,
       justifyContent: 'flex-end',
     },
     modalContent: {
@@ -2264,18 +2264,18 @@ const getStyles = (colors: ThemeColors) =>
       fontSize: 16,
     },
     scalablePacSyncBanner: {
-      backgroundColor: '#102A27',
+      backgroundColor: colors.scalableSurface,
       borderRadius: 14,
       padding: 14,
       marginBottom: 16,
       borderWidth: 1,
-      borderColor: '#28EBCF60',
+      borderColor: withAlpha(colors.scalable, 0.376),
     },
     scalablePacBadgeIcon: {
       width: 32,
       height: 32,
       borderRadius: 8,
-      backgroundColor: '#28EBCF20',
+      backgroundColor: withAlpha(colors.scalable, 0.125),
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -2286,19 +2286,19 @@ const getStyles = (colors: ThemeColors) =>
     },
     scalablePacBannerSubtitle: {
       fontSize: 12,
-      color: '#28EBCF',
+      color: colors.scalable,
       marginTop: 2,
     },
     scalablePacImportBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#28EBCF',
+      backgroundColor: colors.scalable,
       borderRadius: 8,
       paddingHorizontal: 12,
       paddingVertical: 7,
     },
     scalablePacImportBtnText: {
-      color: '#000',
+      color: colors.onAccent,
       fontSize: 12,
       fontWeight: '700',
     },
@@ -2310,10 +2310,10 @@ const getStyles = (colors: ThemeColors) =>
       paddingHorizontal: 12,
       paddingVertical: 7,
       borderWidth: 1,
-      borderColor: '#28EBCF',
+      borderColor: colors.scalable,
     },
     scalablePacRebalanceBtnText: {
-      color: '#28EBCF',
+      color: colors.scalable,
       fontSize: 12,
       fontWeight: '600',
     },
@@ -2385,13 +2385,13 @@ const getStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#28EBCF',
+      backgroundColor: colors.scalable,
       borderRadius: 12,
       paddingVertical: 12,
       paddingHorizontal: 16,
     },
     simulatePacButtonText: {
-      color: '#000',
+      color: colors.onAccent,
       fontSize: 13,
       fontWeight: '700',
     },
