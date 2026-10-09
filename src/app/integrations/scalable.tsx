@@ -149,7 +149,6 @@ export default function ScalableMcpSetupScreen() {
       if (cfg) {
         setCurrentConfig(cfg);
         setServerUrl(cfg.serverUrl || DEFAULT_SCALABLE_MCP_URL);
-        setApiToken(cfg.apiToken || '');
         setReadOnly(cfg.readOnly ?? true);
         setAutoSync(cfg.autoSync ?? true);
         setInterestPlan((cfg.interestPlan as ScalableInterestPlanId) || 'prime');
@@ -324,7 +323,7 @@ export default function ScalableMcpSetupScreen() {
       return;
     }
 
-    if (!apiToken.trim()) {
+    if (!apiToken.trim() && !currentConfig?.hasApiToken) {
       setStatusMessage({ text: 'Inserisci il token di autorizzazione generato da Scalable Capital.', isError: true });
       return;
     }
@@ -340,15 +339,16 @@ export default function ScalableMcpSetupScreen() {
         const newConfig: ScalableMcpConfig = {
           enabled: true,
           serverUrl: serverUrl.trim(),
-          apiToken: apiToken.trim(),
           readOnly,
           autoSync,
           status: 'connected',
           lastTestedAt: now,
         };
 
+        // Il token è già stato salvato lato server da testScalableMcp
         await saveScalableConfig(userId, newConfig);
-        setCurrentConfig(newConfig);
+        setCurrentConfig({ ...newConfig, hasApiToken: true });
+        setApiToken('');
         setStatusMessage({
           text: result.message || 'Connessione verificata e salvata con successo!',
           isError: false
@@ -359,7 +359,6 @@ export default function ScalableMcpSetupScreen() {
         const errConfig: Partial<ScalableMcpConfig> = {
           enabled: false,
           serverUrl: serverUrl.trim(),
-          apiToken: apiToken.trim(),
           status: 'error',
           lastTestedAt: now,
           errorMessage: result.message
@@ -487,7 +486,7 @@ export default function ScalableMcpSetupScreen() {
 
   const isConnected = !!currentConfig?.enabled && currentConfig?.status === 'connected';
   const isSessionExpired = currentConfig?.status === 'expired' || (currentConfig?.status === 'error' && !!currentConfig?.errorMessage);
-  const hasConfig = !!currentConfig && (!!currentConfig.apiToken || currentConfig.enabled || currentConfig.status !== 'disconnected');
+  const hasConfig = !!currentConfig && (!!currentConfig.hasApiToken || currentConfig.enabled || currentConfig.status !== 'disconnected');
 
   if (loading) {
     return (
@@ -551,7 +550,7 @@ export default function ScalableMcpSetupScreen() {
                 {isConnected 
                   ? `Ultimo test: ${currentConfig?.lastTestedAt ? new Date(currentConfig.lastTestedAt).toLocaleString('it-IT') : 'N/D'}` 
                   : isSessionExpired
-                    ? (currentConfig?.refreshToken 
+                    ? (currentConfig?.hasRefreshToken 
                         ? 'La sessione di accesso è scaduta. Tocca "Rinnova" per riattivare la connessione senza effettuare il login.' 
                         : 'La sessione con Scalable è scaduta. Tocca "Disconnetti" a destra per ricollegare il conto.')
                     : 'Configura le credenziali MCP per attivare la sincronizzazione'}
@@ -559,7 +558,7 @@ export default function ScalableMcpSetupScreen() {
             </View>
             {(isConnected || hasConfig || isSessionExpired) && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {isSessionExpired && !!currentConfig?.refreshToken && (
+                {isSessionExpired && !!currentConfig?.hasRefreshToken && (
                   <TouchableOpacity
                     style={{
                       flexDirection: 'row',
@@ -1305,7 +1304,7 @@ export default function ScalableMcpSetupScreen() {
               style={[styles.textInput, { paddingRight: 40 }]}
               value={apiToken}
               onChangeText={setApiToken}
-              placeholder="Incolla qui il token o digita 'demo'"
+              placeholder={currentConfig?.hasApiToken ? 'Token salvato · incollane uno nuovo per sostituirlo' : "Incolla qui il token o digita 'demo'"}
               placeholderTextColor={colors.textSecondary}
               secureTextEntry={!showToken}
               autoCapitalize="none"

@@ -39,14 +39,8 @@ export async function testScalableMcpConnection(
   apiToken: string
 ): Promise<McpTestResult> {
   const cleanUrl = (serverUrl || DEFAULT_SCALABLE_MCP_URL).trim();
+  // Token vuoto = la Function riusa quello già salvato lato server
   const cleanToken = (apiToken || '').trim();
-
-  if (!cleanToken) {
-    return {
-      success: false,
-      message: 'Inserisci un token di autorizzazione valido fornito da Scalable Capital.'
-    };
-  }
 
   try {
     const testCallable = httpsCallable<{ serverUrl?: string; apiToken: string }, McpTestResult>(
@@ -135,7 +129,6 @@ export async function saveScalableConfig(
   const rawConfig: Record<string, unknown> = {
     enabled: config.enabled ?? true,
     serverUrl: config.serverUrl || DEFAULT_SCALABLE_MCP_URL,
-    apiToken: config.apiToken || '',
     readOnly: config.readOnly ?? true,
     status: config.status || 'disconnected',
     autoSync: config.autoSync ?? true,
@@ -158,14 +151,12 @@ export async function saveScalableConfig(
  */
 export async function disconnectScalable(userId: string): Promise<void> {
   const docRef = doc(db, getUserIntegrationPath(userId, 'scalable'));
-  const pendingRef = doc(db, `portfolios/${userId}/settings/scalable_device_auth_pending`);
   const spDocRef = doc(db, `portfolios/${userId}/settings/scalable_savings_plans`);
   const alertsDocRef = doc(db, `portfolios/${userId}/settings/scalable_price_alerts`);
   const taxDocRef = doc(db, `portfolios/${userId}/settings/scalable_tax_report`);
 
   await Promise.allSettled([
     deleteDoc(docRef),
-    deleteDoc(pendingRef),
     deleteDoc(spDocRef),
     deleteDoc(alertsDocRef),
     deleteDoc(taxDocRef),

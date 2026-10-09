@@ -1,14 +1,39 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function serverOnlyScalableKeys() {
+      return ['apiToken', 'refreshToken', 'idToken', 'sessionId',
+              'dpopPrivateKey', 'dpopPublicKeyJwk', 'hasApiToken', 'hasRefreshToken'];
+    }
+
     match /portfolios/{userId}/transactions/{transactionId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isOwner(userId);
     }
     match /portfolios/{userId}/assets/{assetId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isOwner(userId);
     }
-    match /portfolios/{userId}/settings/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    // Le credenziali Scalable stanno in /portfolios/{userId}/private/*, scritte e lette
+    // solo dalle Cloud Functions (Admin SDK). Nessuna regola le espone al client.
+    match /portfolios/{userId}/settings/integration_scalable {
+      allow read, delete: if isOwner(userId);
+      // Il client può salvare stato e preferenze, ma mai token, chiavi o i flag calcolati dal server.
+      // In update si controllano solo i campi modificati, così i documenti non ancora migrati restano scrivibili.
+      allow create: if isOwner(userId)
+        && !request.resource.data.keys().hasAny(serverOnlyScalableKeys());
+      allow update: if isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverOnlyScalableKeys());
+    }
+    // Le regole si sommano: integration_scalable va escluso esplicitamente da quella generica
+    match /portfolios/{userId}/settings/{docId} {
+      allow read, write: if isOwner(userId) && docId != 'integration_scalable';
+    }
+    match /portfolios/{userId}/settings/{docId}/{subcollection}/{rest=**} {
+      allow read, write: if isOwner(userId);
     }
   }
 }
