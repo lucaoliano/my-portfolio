@@ -17,7 +17,7 @@ export default function HealthCheckScreen() {
   const styles = getStyles(colors);
   const router = useRouter();
   const userId = auth.currentUser?.uid;
-  const { healthCheck, allAssets, isScalableConnected, scalableCash, isInitialLoading } = usePortfolioOverview(userId);
+  const { healthCheck, allAssets, isScalableConnected, scalableCash, includeCashInTotal, isInitialLoading } = usePortfolioOverview(userId);
   const investedValue = allAssets.reduce((sum, a) => sum + a.currentTotalValue, 0);
 
   return (
@@ -43,10 +43,14 @@ export default function HealthCheckScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
-          {/* Il patrimonio analizzato include sempre la liquidità: lo diciamo, perché la dashboard può escluderla */}
+          {/* Stesso denominatore della panoramica, così i pesi coincidono */}
           <Text style={styles.scope}>
-            Patrimonio analizzato: €{formatNumber(investedValue + scalableCash)}
-            {scalableCash > 0 ? ` (investito €${formatNumber(investedValue)} + liquidità €${formatNumber(scalableCash)})` : ''}
+            Pesi calcolati su €{formatNumber(healthCheck.weightBase)}
+            {scalableCash > 0
+              ? includeCashInTotal
+                ? ` (investito €${formatNumber(investedValue)} + liquidità €${formatNumber(scalableCash)}), come nella panoramica`
+                : ' (solo investito, liquidità esclusa come nella panoramica)'
+              : ''}
           </Text>
           <PortfolioHealthCheckCard healthCheck={healthCheck} hasCashData={isScalableConnected} />
         </ScrollView>

@@ -16,6 +16,15 @@ service cloud.firestore {
     match /portfolios/{userId}/assets/{assetId} {
       allow read, write: if isOwner(userId);
     }
+    // Storico giornaliero del valore del portafoglio, un documento per giorno (YYYY-MM-DD)
+    match /portfolios/{userId}/history/{day} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.date == day
+        && request.resource.data.invested is number
+        && request.resource.data.cash is number;
+    }
 
     // Le credenziali Scalable stanno in /portfolios/{userId}/private/*, scritte e lette
     // solo dalle Cloud Functions (Admin SDK). Nessuna regola le espone al client.

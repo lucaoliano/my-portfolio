@@ -39,6 +39,10 @@ export interface AggregatedAsset {
   hasDailyChange: boolean;
   /** Valore della posizione in euro; null se la valuta è estera e manca il cambio */
   valueInBase?: number | null;
+  /** Variazione di oggi stimata (percentuale Yahoo applicata al prezzo Scalable) */
+  dailyChangeEstimated?: boolean;
+  /** Ora di mercato dell'ultimo prezzo, se nota (ISO) */
+  marketTime?: string;
 }
 
 /** Quanti titoli contribuiscono a un dato aggregato (es. variazione di oggi). */
@@ -63,6 +67,8 @@ export interface GroupedPortfolio {
   missingPriceCount: number;
   /** Titoli in valuta estera senza cambio disponibile, esclusi dai totali */
   fxMissingCount: number;
+  /** La variazione di oggi del gruppo include stime */
+  dailyEstimated: boolean;
 }
 
 export type RootStackParamList = {

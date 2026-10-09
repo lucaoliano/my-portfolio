@@ -73,6 +73,7 @@ const emptyGroup = (groupName: string): GroupedPortfolio => ({
   dailyCoverage: { withData: 0, total: 0 },
   missingPriceCount: 0,
   fxMissingCount: 0,
+  dailyEstimated: false,
 });
 
 /** Valuta della posizione: le transazioni Scalable sono sempre in euro. */
@@ -138,6 +139,8 @@ const valuePosition = (
       isAnnualizedExtrapolated: xirr.isExtrapolated,
       hasPrice,
       hasDailyChange,
+      dailyChangeEstimated: hasDailyChange && quote?.source === 'scalable',
+      marketTime: quote?.marketTime,
       valueInBase: rate !== null ? currentTotalValue * rate : null,
     },
   };
@@ -168,6 +171,10 @@ export const calculatePortfolioAggregation = (
   globalAssets: AggregatedAsset[];
   /** Almeno un rendimento annuo mostrato (globale, gruppo o titolo) è una stima su meno di un anno */
   hasExtrapolatedAnnualized: boolean;
+  /** La variazione di oggi include stime (percentuale Yahoo applicata al prezzo Scalable) */
+  globalDailyEstimated: boolean;
+  /** Ora di mercato più recente tra le quotazioni con variazione giornaliera */
+  latestMarketTime: string | null;
 } => {
   const groupsMap: Record<string, GroupedPortfolio> = {};
   settings?.groups?.forEach(g => {
@@ -198,16 +205,19 @@ export const calculatePortfolioAggregation = (
 
     Object.entries(groupAssetsMap).forEach(([symbol, txList]) => {
       const { asset, rate } = valuePosition(symbol, txList, quotes, assetCategories, fxRates);
+      // Posizioni chiuse (tutto venduto): non sono più in portafoglio
+      if (asset.totalQuantity <= 0) return;
       g.assets.push(asset);
       if (asset.isAnnualizedExtrapolated && asset.annualizedReturn !== null) hasExtrapolatedAnnualized = true;
-      if (asset.totalQuantity <= 0) return;
 
       g.dailyCoverage.total += 1;
-      if (!asset.hasPrice) g.missingPriceCount += 1;
+      // Escluso per cambio prevale su "valutato al costo": il titolo non è nei totali, quindi non è valutato affatto
       if (rate === null) {
         g.fxMissingCount += 1;
         return;
       }
+      if (!asset.hasPrice) g.missingPriceCount += 1;
+      if (asset.hasDailyChange && asset.dailyChangeEstimated) g.dailyEstimated = true;
       if (asset.hasDailyChange) g.dailyCoverage.withData += 1;
       g.totalInvested += asset.totalInvested * rate;
       g.currentTotalValue += asset.currentTotalValue * rate;
@@ -240,17 +250,19 @@ export const calculatePortfolioAggregation = (
   const globalAssets: AggregatedAsset[] = [];
   const globalDailyCoverage: Coverage = { withData: 0, total: 0 };
   const globalXirrTxs: Transaction[] = [];
+  let globalDailyEstimated = false;
 
   Object.entries(globalTxs).forEach(([symbol, txList]) => {
     const { asset, rate } = valuePosition(symbol, txList, quotes, assetCategories, fxRates);
     if (asset.totalQuantity <= 0) return;
 
     globalDailyCoverage.total += 1;
-    if (!asset.hasPrice) missingPriceSymbols.push(symbol);
     if (rate === null) {
       fxMissingSymbols.push(symbol);
       return;
     }
+    if (!asset.hasPrice) missingPriceSymbols.push(symbol);
+    if (asset.hasDailyChange && asset.dailyChangeEstimated) globalDailyEstimated = true;
     if (asset.hasDailyChange) globalDailyCoverage.withData += 1;
 
     globalInvested += asset.totalInvested * rate;
@@ -295,5 +307,10 @@ export const calculatePortfolioAggregation = (
     globalDailyCoverage,
     globalAssets,
     hasExtrapolatedAnnualized,
+    globalDailyEstimated,
+    latestMarketTime: globalAssets.reduce<string | null>(
+      (latest, a) => (a.hasDailyChange && a.marketTime && (!latest || a.marketTime > latest) ? a.marketTime : latest),
+      null
+    ),
   };
 };

@@ -42,9 +42,10 @@ export const usePortfolioOverview = (userId: string | undefined) => {
       scalableCash,
       (scalableConfig?.interestPlan as ScalableInterestPlanId) || 'prime',
       configuredInterestRate ?? null,
-      scalableSavingsPlans
+      scalableSavingsPlans,
+      { scalableConnected: isScalableConnected, includeCashInWeights: includeCashInTotal }
     ),
-    [allAssets, scalableCash, scalableConfig?.interestPlan, configuredInterestRate, scalableSavingsPlans]
+    [allAssets, scalableCash, scalableConfig?.interestPlan, configuredInterestRate, scalableSavingsPlans, isScalableConnected, includeCashInTotal]
   );
 
   const isInitialLoading =
