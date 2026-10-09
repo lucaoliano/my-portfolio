@@ -67,10 +67,9 @@ export interface UserSettings {
 export interface ScalableMcpConfig {
   enabled: boolean;
   serverUrl: string; // e.g. 'https://mcp.scalable.capital/mcp'
-  apiToken: string;
-  refreshToken?: string;
-  idToken?: string;
-  sessionId?: string;
+  // Le credenziali restano lato server (portfolios/{uid}/private): il client vede solo questi flag
+  hasApiToken?: boolean;
+  hasRefreshToken?: boolean;
   tokenExpiresAt?: string;
   readOnly: boolean;
   status: 'disconnected' | 'connected' | 'error' | 'expired';

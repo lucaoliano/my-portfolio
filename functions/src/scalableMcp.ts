@@ -1,4 +1,4 @@
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, Firestore } from "firebase-admin/firestore";
 import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -48,6 +48,121 @@ interface ScalableKeyPair {
 interface ScalableRefreshError extends Error {
   isInvalidGrant?: boolean;
   oauthError?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Archiviazione credenziali
+// Le credenziali Scalable (token, refresh token, chiave privata DPoP) vivono in
+// portfolios/{uid}/private/*, che le regole Firestore non espongono al client.
+// Il documento pubblico settings/integration_scalable contiene solo stato e preferenze.
+// ---------------------------------------------------------------------------
+const SCALABLE_SECRET_KEYS = [
+  "apiToken",
+  "refreshToken",
+  "idToken",
+  "sessionId",
+  "dpopPrivateKey",
+  "dpopPublicKeyJwk",
+] as const;
+
+const scalablePublicConfigRef = (db: Firestore, userId: string) =>
+  db.doc(`portfolios/${userId}/settings/integration_scalable`);
+const scalableSecretsRef = (db: Firestore, userId: string) =>
+  db.doc(`portfolios/${userId}/private/integration_scalable`);
+const scalablePendingAuthRef = (db: Firestore, userId: string) =>
+  db.doc(`portfolios/${userId}/private/scalable_device_auth_pending`);
+
+const isSecretValuePresent = (value: unknown): boolean =>
+  value !== null && value !== undefined && value !== "" && !(value instanceof FieldValue);
+
+/**
+ * Divide i campi tra documento pubblico e privato. Nel pubblico restano solo
+ * i flag hasApiToken / hasRefreshToken, utili alla UI.
+ */
+function splitScalableConfig(data: Record<string, unknown>): {
+  publicData: Record<string, unknown>;
+  secretData: Record<string, unknown>;
+} {
+  const publicData: Record<string, unknown> = {};
+  const secretData: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) continue;
+    if ((SCALABLE_SECRET_KEYS as readonly string[]).includes(key)) {
+      secretData[key] = value;
+    } else {
+      publicData[key] = value;
+    }
+  }
+  if ("apiToken" in secretData) publicData.hasApiToken = isSecretValuePresent(secretData.apiToken);
+  if ("refreshToken" in secretData) publicData.hasRefreshToken = isSecretValuePresent(secretData.refreshToken);
+  return { publicData, secretData };
+}
+
+/**
+ * Scrive la configurazione Scalable separando i segreti.
+ * mode "update" fallisce se il documento pubblico non esiste (es. integrazione disconnessa nel frattempo).
+ */
+async function writeScalableConfig(
+  db: Firestore,
+  userId: string,
+  data: Record<string, unknown>,
+  mode: "merge" | "update" = "merge",
+): Promise<void> {
+  const { publicData, secretData } = splitScalableConfig(data);
+  const publicRef = scalablePublicConfigRef(db, userId);
+  if (mode === "update") {
+    if (Object.keys(publicData).length > 0) await publicRef.update(publicData);
+  } else {
+    await publicRef.set(publicData, { merge: true });
+  }
+  if (Object.keys(secretData).length > 0) {
+    await scalableSecretsRef(db, userId).set(secretData, { merge: true });
+  }
+}
+
+/**
+ * Legge configurazione pubblica + segreti, con la stessa forma di un DocumentSnapshot
+ * (exists / data()). Migra in automatico i segreti rimasti nel documento pubblico.
+ */
+async function readScalableConfig(
+  db: Firestore,
+  userId: string,
+): Promise<{ exists: boolean; data: () => Record<string, unknown> | undefined }> {
+  const [publicSnap, secretSnap] = await Promise.all([
+    scalablePublicConfigRef(db, userId).get(),
+    scalableSecretsRef(db, userId).get(),
+  ]);
+  if (!publicSnap.exists) {
+    return { exists: false, data: () => undefined };
+  }
+  const publicData = publicSnap.data() || {};
+  const secretData = secretSnap.data() || {};
+
+  const legacySecrets: Record<string, unknown> = {};
+  for (const key of SCALABLE_SECRET_KEYS) {
+    if (key in publicData) legacySecrets[key] = publicData[key];
+  }
+  if (Object.keys(legacySecrets).length > 0) {
+    // I segreti già nel documento privato sono più recenti di quelli legacy
+    const migrated = { ...legacySecrets, ...secretData };
+    const cleanup: Record<string, unknown> = {
+      hasApiToken: isSecretValuePresent(migrated.apiToken),
+      hasRefreshToken: isSecretValuePresent(migrated.refreshToken),
+    };
+    for (const key of Object.keys(legacySecrets)) cleanup[key] = FieldValue.delete();
+    try {
+      await scalableSecretsRef(db, userId).set(migrated, { merge: true });
+      await scalablePublicConfigRef(db, userId).update(cleanup);
+      console.log("[Scalable Secrets] Migrated credentials to private document.");
+    } catch (migrationErr) {
+      console.error("[Scalable Secrets] Migration failed:", migrationErr);
+    }
+    const merged = { ...publicData, ...migrated };
+    return { exists: true, data: () => merged };
+  }
+
+  const merged = { ...publicData, ...secretData };
+  return { exists: true, data: () => merged };
 }
 
 /**
@@ -292,7 +407,7 @@ async function refreshScalableToken(
       updateData.tokenExpiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
     }
     try {
-      await db.doc(`portfolios/${userId}/settings/integration_scalable`).update(updateData);
+      await writeScalableConfig(db, userId, updateData, "update");
       console.log("[Scalable Token Refresh] Saved new tokens & restored status='connected' in Firestore.");
     } catch (dbErr) {
       console.error("[Scalable Token Refresh] Warning: failed to persist tokens to Firestore:", dbErr);
@@ -1375,6 +1490,15 @@ export const testScalableMcp = onCall(async (request: CallableRequest<TestConnec
 
   // Handle Demo / Sandbox mock token
   if (cleanToken.toLowerCase().startsWith("demo") || cleanToken.toLowerCase().startsWith("mock")) {
+    // Il token viene salvato solo lato server: il client non scrive più credenziali in Firestore
+    await writeScalableConfig(db, userId, {
+      enabled: true,
+      apiToken: cleanToken,
+      serverUrl: DEFAULT_SCALABLE_MCP_URL,
+      status: "connected",
+      lastTestedAt: new Date().toISOString(),
+      errorMessage: FieldValue.delete(),
+    });
     return {
       success: true,
       mode: "sandbox",
@@ -1395,8 +1519,8 @@ export const testScalableMcp = onCall(async (request: CallableRequest<TestConnec
   }
 
   // Check if user has DPoP key configuration stored from device auth
-  const configDocRef = db.doc(`portfolios/${userId}/settings/integration_scalable`);
-  const configSnap = await configDocRef.get();
+  const configDocRef = scalablePublicConfigRef(db, userId);
+  const configSnap = await readScalableConfig(db, userId);
   const config = configSnap.data();
 
   if (config?.dpopPrivateKey && config?.dpopPublicKeyJwk) {
@@ -1459,15 +1583,26 @@ export const testScalableMcp = onCall(async (request: CallableRequest<TestConnec
     }
   }
 
-  if (!cleanToken) {
+  // Nessun token nuovo dal client: riusa quello già salvato lato server
+  const mcpToken = cleanToken || (typeof config?.apiToken === "string" ? config.apiToken : "");
+  if (!mcpToken) {
     throw new HttpsError("invalid-argument", "Il token di autorizzazione è obbligatorio.");
   }
 
   const cleanUrl = (serverUrl || DEFAULT_SCALABLE_MCP_URL).trim();
   let client: Client | null = null;
   try {
-    client = await createMcpClient(cleanUrl, cleanToken);
+    client = await createMcpClient(cleanUrl, mcpToken);
     const toolsResult = await client.listTools();
+
+    await writeScalableConfig(db, userId, {
+      enabled: true,
+      apiToken: mcpToken,
+      serverUrl: cleanUrl,
+      status: "connected",
+      lastTestedAt: new Date().toISOString(),
+      errorMessage: FieldValue.delete(),
+    });
 
     return {
       success: true,
@@ -1807,8 +1942,8 @@ export const syncScalablePortfolio = onCall(async (request: CallableRequest<Sync
   const db = getFirestore();
 
   // 1. Read user's integration settings
-  const configDocRef = db.doc(`portfolios/${userId}/settings/integration_scalable`);
-  const configSnap = await configDocRef.get();
+  const configDocRef = scalablePublicConfigRef(db, userId);
+  const configSnap = await readScalableConfig(db, userId);
 
   if (!configSnap.exists) {
     throw new HttpsError("failed-precondition", "Integrazione Scalable Capital non configurata.");
@@ -2393,8 +2528,7 @@ export const getScalableSavingsPlans = onCall(async (request: CallableRequest) =
   const userId = request.auth.uid;
   const db = getFirestore();
 
-  const configDocRef = db.doc(`portfolios/${userId}/settings/integration_scalable`);
-  const configSnap = await configDocRef.get();
+  const configSnap = await readScalableConfig(db, userId);
   if (!configSnap.exists) {
     throw new HttpsError("failed-precondition", "Integrazione Scalable non configurata.");
   }
@@ -2505,8 +2639,7 @@ export const getScalablePriceAlerts = onCall(async (request: CallableRequest) =>
   const userId = request.auth.uid;
   const db = getFirestore();
 
-  const configDocRef = db.doc(`portfolios/${userId}/settings/integration_scalable`);
-  const configSnap = await configDocRef.get();
+  const configSnap = await readScalableConfig(db, userId);
   if (!configSnap.exists) {
     throw new HttpsError("failed-precondition", "Integrazione Scalable non configurata.");
   }
@@ -2614,8 +2747,7 @@ export const getScalableTaxReport = onCall(async (request: CallableRequest) => {
   const userId = request.auth.uid;
   const db = getFirestore();
 
-  const configDocRef = db.doc(`portfolios/${userId}/settings/integration_scalable`);
-  const configSnap = await configDocRef.get();
+  const configSnap = await readScalableConfig(db, userId);
   if (!configSnap.exists) {
     throw new HttpsError("failed-precondition", "Integrazione Scalable non configurata.");
   }
@@ -2832,7 +2964,7 @@ export const startScalableDeviceAuth = onCall(async (request: CallableRequest<Re
 
   // 3. Store pending device auth state in Firestore
   const db = getFirestore();
-  const pendingDocRef = db.doc(`portfolios/${userId}/settings/scalable_device_auth_pending`);
+  const pendingDocRef = scalablePendingAuthRef(db, userId);
   const expiresIn = deviceData.expires_in || 900;
   await pendingDocRef.set({
     deviceCode: deviceData.device_code,
@@ -2863,7 +2995,7 @@ export const pollScalableDeviceAuth = onCall(async (request: CallableRequest<Rec
   }
   const userId = request.auth.uid;
   const db = getFirestore();
-  const pendingDocRef = db.doc(`portfolios/${userId}/settings/scalable_device_auth_pending`);
+  const pendingDocRef = scalablePendingAuthRef(db, userId);
   const pendingSnap = await pendingDocRef.get();
 
   if (!pendingSnap.exists) {
@@ -2911,8 +3043,9 @@ export const pollScalableDeviceAuth = onCall(async (request: CallableRequest<Rec
           undefined;
 
         const extractedSessionId = extractSessionIdFromToken(pending.accessToken, pending.idToken);
-        const configDocRef = db.doc(`portfolios/${userId}/settings/integration_scalable`);
-        await configDocRef.set(
+        await writeScalableConfig(
+          db,
+          userId,
           {
             enabled: true,
             apiToken: pending.accessToken,
@@ -2929,7 +3062,7 @@ export const pollScalableDeviceAuth = onCall(async (request: CallableRequest<Rec
             lastTestedAt: new Date().toISOString(),
             errorMessage: FieldValue.delete(),
           },
-          { merge: true },
+          "merge",
         );
 
         await pendingDocRef.delete();
@@ -3058,8 +3191,9 @@ export const pollScalableDeviceAuth = onCall(async (request: CallableRequest<Rec
       undefined;
 
     const extractedSessionId = extractSessionIdFromToken(tokenData.access_token, tokenData.id_token);
-    const configDocRef = db.doc(`portfolios/${userId}/settings/integration_scalable`);
-    await configDocRef.set(
+    await writeScalableConfig(
+      db,
+      userId,
       {
         enabled: true,
         apiToken: tokenData.access_token,
@@ -3076,7 +3210,7 @@ export const pollScalableDeviceAuth = onCall(async (request: CallableRequest<Rec
         lastTestedAt: new Date().toISOString(),
         errorMessage: FieldValue.delete(),
       },
-      { merge: true },
+      "merge",
     );
 
     await pendingDocRef.delete();
@@ -3224,13 +3358,14 @@ export const exchangeScalableAuthCode = onCall(
     }
 
     const db = getFirestore();
-    const configDocRef = db.doc(`portfolios/${userId}/settings/integration_scalable`);
     let expiresAt: string | undefined;
     if (tokenData.expires_in) {
       expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
     }
 
-    await configDocRef.set(
+    await writeScalableConfig(
+      db,
+      userId,
       {
         enabled: true,
         apiToken: tokenData.access_token,
@@ -3243,7 +3378,7 @@ export const exchangeScalableAuthCode = onCall(
         lastTestedAt: new Date().toISOString(),
         errorMessage: FieldValue.delete(),
       },
-      { merge: true },
+      "merge",
     );
 
     return {
@@ -3265,8 +3400,8 @@ export const refreshScalableSession = onCall(
     const userId = request.auth.uid;
     const db = getFirestore();
 
-    const configDocRef = db.doc(`portfolios/${userId}/settings/integration_scalable`);
-    const configSnap = await configDocRef.get();
+    const configDocRef = scalablePublicConfigRef(db, userId);
+    const configSnap = await readScalableConfig(db, userId);
     if (!configSnap.exists) {
       throw new HttpsError("failed-precondition", "Integrazione Scalable Capital non configurata.");
     }
@@ -3330,7 +3465,10 @@ export const disconnectScalableAccount = onCall(
     const db = getFirestore();
 
     await Promise.allSettled([
-      db.doc(`portfolios/${userId}/settings/integration_scalable`).delete(),
+      scalablePublicConfigRef(db, userId).delete(),
+      scalableSecretsRef(db, userId).delete(),
+      scalablePendingAuthRef(db, userId).delete(),
+      // Documento pending legacy (prima della migrazione a private/)
       db.doc(`portfolios/${userId}/settings/scalable_device_auth_pending`).delete(),
       db.doc(`portfolios/${userId}/settings/scalable_savings_plans`).delete(),
       db.doc(`portfolios/${userId}/settings/scalable_price_alerts`).delete(),
