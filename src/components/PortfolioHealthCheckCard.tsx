@@ -1,234 +1,265 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter, Href } from 'expo-router';
-import { 
-  ShieldCheck, 
-  ChevronDown, 
-  ChevronUp, 
-  CheckCircle2, 
-  AlertTriangle, 
-  AlertCircle, 
-  Info, 
+import {
+  ShieldCheck,
+  CheckCircle2,
+  AlertTriangle,
+  AlertCircle,
+  Info,
   ArrowRight,
+  ChevronRight,
   TrendingUp,
   PieChart,
   Coins,
-  Scale
+  Scale,
+  Lightbulb,
 } from 'lucide-react-native';
 import { useAppTheme } from '../theme/ThemeContext';
 import { ThemeColors, withAlpha } from '../theme/colors';
-import { PortfolioHealthCheckResult, HealthCheckRuleResult } from '../utils/portfolioHealthCheck';
+import { formatNumber } from '../utils/formatters';
+import { PortfolioHealthCheckResult, HealthCheckRuleResult, HealthCheckLevel } from '../utils/portfolioHealthCheck';
+
+// Il tono è informativo, non da consulente: niente "rischio elevato" o "critico" sotto i tuoi soldi.
+const LEVEL_LABELS: Record<HealthCheckLevel, string> = {
+  excellent: 'Eccellente',
+  good: 'Solido',
+  warning: 'Da ottimizzare',
+  critical: 'Da rivedere',
+};
+
+const STATUS_LABELS: Record<HealthCheckRuleResult['status'], string> = {
+  PASS: 'In linea',
+  INFO: 'Info',
+  WARNING: 'Da valutare',
+  ALERT: 'Fuori soglia',
+};
+
+const levelColor = (colors: ThemeColors, level: HealthCheckLevel) => {
+  switch (level) {
+    case 'excellent':
+    case 'good':
+      return colors.positive;
+    case 'warning':
+      return colors.warning;
+    case 'critical':
+      return colors.negative;
+  }
+};
+
+const statusColor = (colors: ThemeColors, status: HealthCheckRuleResult['status']) => {
+  switch (status) {
+    case 'PASS':
+      return colors.positive;
+    case 'INFO':
+      return colors.info;
+    case 'WARNING':
+      return colors.warning;
+    case 'ALERT':
+      return colors.negative;
+  }
+};
+
+const StatusIcon = ({ status, color }: { status: HealthCheckRuleResult['status']; color: string }) => {
+  switch (status) {
+    case 'PASS':
+      return <CheckCircle2 size={12} color={color} style={{ marginRight: 4 }} />;
+    case 'INFO':
+      return <Info size={12} color={color} style={{ marginRight: 4 }} />;
+    case 'WARNING':
+      return <AlertTriangle size={12} color={color} style={{ marginRight: 4 }} />;
+    case 'ALERT':
+      return <AlertCircle size={12} color={color} style={{ marginRight: 4 }} />;
+  }
+};
+
+const RuleIcon = ({ category, color }: { category: HealthCheckRuleResult['category']; color: string }) => {
+  switch (category) {
+    case 'concentration':
+      return <Scale size={16} color={color} />;
+    case 'liquidity':
+      return <Coins size={16} color={color} />;
+    case 'diversification':
+      return <PieChart size={16} color={color} />;
+    case 'rebalancing':
+      return <TrendingUp size={16} color={color} />;
+    case 'costs':
+      return <ShieldCheck size={16} color={color} />;
+  }
+};
+
+/** Riga compatta per la dashboard: punteggio e livello, il dettaglio si apre in una schermata dedicata. */
+export const HealthCheckSummaryRow: React.FC<{ healthCheck: PortfolioHealthCheckResult; onPress: () => void }> = ({
+  healthCheck,
+  onPress,
+}) => {
+  const { colors } = useAppTheme();
+  const styles = getStyles(colors);
+  const color = levelColor(colors, healthCheck.overallLevel);
+  const label = LEVEL_LABELS[healthCheck.overallLevel];
+
+  return (
+    <TouchableOpacity
+      style={styles.summaryRow}
+      onPress={onPress}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`Salute del portafoglio: ${healthCheck.overallScore} su 100, ${label}`}
+      accessibilityHint="Apre l'analisi dettagliata"
+    >
+      <ShieldCheck size={18} color={colors.textSecondary} style={{ marginRight: 10 }} />
+      <Text style={styles.summaryRowTitle}>Salute del portafoglio</Text>
+      <Text style={[styles.summaryRowScore, { color }]}>{healthCheck.overallScore}</Text>
+      <Text style={styles.summaryRowLevel}> · {label}</Text>
+      <ChevronRight size={16} color={colors.textSecondary} style={{ marginLeft: 4 }} />
+    </TouchableOpacity>
+  );
+};
 
 interface PortfolioHealthCheckCardProps {
   healthCheck: PortfolioHealthCheckResult;
-  title?: string;
-  subtitle?: string;
+  /** false = Scalable non collegato: la quota di liquidità non è nota e non va mostrata come 0% */
+  hasCashData?: boolean;
 }
 
+/** Analisi completa, mostrata nella schermata "Salute del portafoglio". */
 export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> = ({
   healthCheck,
-  title = 'Health Check del Portafoglio',
-  subtitle = 'Analisi deterministica di rischio, costi e allocazione',
+  hasCashData = true,
 }) => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const router = useRouter();
-  const [expanded, setExpanded] = useState<boolean>(false);
 
   const { overallScore, overallLevel, overallSummary, rules } = healthCheck;
-
-  const getScoreColor = () => {
-    switch (overallLevel) {
-      case 'excellent':
-        return colors.positive;
-      case 'good':
-        return colors.scalable;
-      case 'warning':
-        return colors.warning;
-      case 'critical':
-        return colors.negative;
-    }
-  };
-
-  const getLevelLabel = () => {
-    switch (overallLevel) {
-      case 'excellent':
-        return 'Eccellente';
-      case 'good':
-        return 'Solido';
-      case 'warning':
-        return 'Da Ottimizzare';
-      case 'critical':
-        return 'Rischio Elevato';
-    }
-  };
-
-  const renderRuleIcon = (category: HealthCheckRuleResult['category']) => {
-    switch (category) {
-      case 'concentration':
-        return <Scale size={16} color={colors.scalable} />;
-      case 'liquidity':
-        return <Coins size={16} color={colors.scalable} />;
-      case 'diversification':
-        return <PieChart size={16} color={colors.scalable} />;
-      case 'rebalancing':
-        return <TrendingUp size={16} color={colors.scalable} />;
-      case 'costs':
-        return <ShieldCheck size={16} color={colors.scalable} />;
-    }
-  };
-
-  const renderStatusBadge = (status: HealthCheckRuleResult['status']) => {
-    switch (status) {
-      case 'PASS':
-        return (
-          <View style={[styles.statusBadge, { backgroundColor: withAlpha(colors.positive, 0.125) }]}>
-            <CheckCircle2 size={12} color={colors.positive} style={{ marginRight: 4 }} />
-            <Text style={[styles.statusBadgeText, { color: colors.positive }]}>OTTIMALE</Text>
-          </View>
-        );
-      case 'INFO':
-        return (
-          <View style={[styles.statusBadge, { backgroundColor: withAlpha(colors.info, 0.125) }]}>
-            <Info size={12} color={colors.info} style={{ marginRight: 4 }} />
-            <Text style={[styles.statusBadgeText, { color: colors.info }]}>INFO</Text>
-          </View>
-        );
-      case 'WARNING':
-        return (
-          <View style={[styles.statusBadge, { backgroundColor: withAlpha(colors.warning, 0.125) }]}>
-            <AlertTriangle size={12} color={colors.warning} style={{ marginRight: 4 }} />
-            <Text style={[styles.statusBadgeText, { color: colors.warning }]}>ATTENZIONE</Text>
-          </View>
-        );
-      case 'ALERT':
-        return (
-          <View style={[styles.statusBadge, { backgroundColor: withAlpha(colors.negative, 0.125) }]}>
-            <AlertCircle size={12} color={colors.negative} style={{ marginRight: 4 }} />
-            <Text style={[styles.statusBadgeText, { color: colors.negative }]}>CRITICO</Text>
-          </View>
-        );
-    }
-  };
-
-  const scoreColor = getScoreColor();
+  const scoreColor = levelColor(colors, overallLevel);
 
   return (
-    <View style={styles.cardContainer}>
-      {/* Header with Health Score Gauge */}
-      <View style={styles.headerRow}>
-        <View style={styles.headerTextContainer}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={styles.iconCircle}>
-              <ShieldCheck size={18} color={colors.scalable} />
-            </View>
-            <Text style={styles.cardTitle}>{title}</Text>
+    <View>
+      <View style={styles.cardContainer}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.cardTitle}>Punteggio complessivo</Text>
+            <Text style={styles.cardSubtitle}>Calcolato su concentrazione, liquidità, diversificazione, PAC e costi</Text>
           </View>
-          <Text style={styles.cardSubtitle}>{subtitle}</Text>
-        </View>
-
-        {/* Score Ring / Pill */}
-        <View style={[styles.scoreBadge, { borderColor: withAlpha(scoreColor, 0.376) }]}>
-          <Text style={[styles.scoreValue, { color: scoreColor }]}>{overallScore}</Text>
-          <Text style={styles.scoreScale}>/100</Text>
-          <View style={[styles.scoreLevelPill, { backgroundColor: withAlpha(scoreColor, 0.125) }]}>
-            <Text style={[styles.scoreLevelText, { color: scoreColor }]}>{getLevelLabel()}</Text>
+          <View
+            style={styles.scoreBadge}
+            accessible
+            accessibilityLabel={`${overallScore} su 100, ${LEVEL_LABELS[overallLevel]}`}
+          >
+            <Text style={[styles.scoreValue, { color: scoreColor }]}>{overallScore}</Text>
+            <Text style={styles.scoreScale}>su 100</Text>
+            <Text style={[styles.scoreLevelText, { color: scoreColor }]}>{LEVEL_LABELS[overallLevel]}</Text>
           </View>
         </View>
-      </View>
 
-      {/* Summary Narrative */}
-      <View style={styles.summaryBox}>
         <Text style={styles.summaryText}>{overallSummary}</Text>
+
+        <View style={styles.kpiRow}>
+          <View style={styles.kpiItem}>
+            <Text style={styles.kpiLabel}>TER medio (stima)</Text>
+            <Text style={styles.kpiValue}>{healthCheck.weightedTerPercent > 0 ? `${formatNumber(healthCheck.weightedTerPercent)}%` : 'N/D'}</Text>
+          </View>
+          <View style={styles.kpiDivider} />
+          <View style={styles.kpiItem}>
+            <Text style={styles.kpiLabel}>Liquidità</Text>
+            <Text style={styles.kpiValue}>{hasCashData ? `${formatNumber(healthCheck.cashAllocationPercent)}%` : 'N/D'}</Text>
+          </View>
+          <View style={styles.kpiDivider} />
+          <View style={styles.kpiItem}>
+            <Text style={styles.kpiLabel}>Primo titolo</Text>
+            <Text style={styles.kpiValue}>
+              {healthCheck.topAsset ? `${formatNumber(healthCheck.topAsset.percentage)}%` : 'N/D'}
+            </Text>
+          </View>
+        </View>
       </View>
 
-      {/* Quick KPIs Row */}
-      <View style={styles.kpiRow}>
-        <View style={styles.kpiItem}>
-          <Text style={styles.kpiLabel}>TER Medio</Text>
-          <Text style={styles.kpiValue}>{healthCheck.weightedTerPercent}%</Text>
-        </View>
-        <View style={styles.kpiDivider} />
-        <View style={styles.kpiItem}>
-          <Text style={styles.kpiLabel}>Cassa Libera</Text>
-          <Text style={styles.kpiValue}>{healthCheck.cashAllocationPercent}%</Text>
-        </View>
-        <View style={styles.kpiDivider} />
-        <View style={styles.kpiItem}>
-          <Text style={styles.kpiLabel}>Top Asset</Text>
-          <Text style={styles.kpiValue}>
-            {healthCheck.topAsset ? `${healthCheck.topAsset.percentage}%` : 'N/D'}
-          </Text>
-        </View>
-      </View>
-
-      {/* Toggle Detailed Breakdown Button */}
-      <TouchableOpacity
-        style={styles.expandButton}
-        onPress={() => setExpanded(!expanded)}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.expandButtonText}>
-          {expanded ? 'Nascondi analisi dettagliata' : 'Vedi analisi dettagliata (5 indicatori)'}
-        </Text>
-        {expanded ? (
-          <ChevronUp size={16} color={colors.scalable} />
-        ) : (
-          <ChevronDown size={16} color={colors.scalable} />
-        )}
-      </TouchableOpacity>
-
-      {/* Detailed Rules List */}
-      {expanded && (
-        <View style={styles.rulesList}>
-          {rules.map((rule) => (
-            <View key={rule.id} style={styles.ruleItem}>
-              <View style={styles.ruleHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                  <View style={styles.ruleIconContainer}>
-                    {renderRuleIcon(rule.category)}
-                  </View>
-                  <Text style={styles.ruleTitle}>{rule.title}</Text>
+      <Text style={styles.sectionLabel}>Indicatori</Text>
+      {rules.map((rule) => {
+        const color = statusColor(colors, rule.status);
+        return (
+          <View key={rule.id} style={styles.ruleItem}>
+            <View style={styles.ruleHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={styles.ruleIconContainer}>
+                  <RuleIcon category={rule.category} color={colors.textSecondary} />
                 </View>
-                {renderStatusBadge(rule.status)}
+                <Text style={styles.ruleTitle}>{rule.title}</Text>
               </View>
-
-              <Text style={styles.ruleSummary}>{rule.summary}</Text>
-              <Text style={styles.ruleDetails}>{rule.details}</Text>
-
-              {rule.recommendation && (
-                <View style={styles.recommendationBox}>
-                  <Text style={styles.recommendationText}>
-                    💡 <Text style={{ fontWeight: '700' }}>Suggerimento:</Text> {rule.recommendation}
-                  </Text>
-                </View>
-              )}
-
-              {rule.actionRoute && rule.actionLabel && (
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => router.push(rule.actionRoute as Href)}
-                >
-                  <Text style={styles.actionButtonText}>{rule.actionLabel}</Text>
-                  <ArrowRight size={14} color={colors.onAccent} style={{ marginLeft: 4 }} />
-                </TouchableOpacity>
-              )}
+              <View style={[styles.statusBadge, { backgroundColor: withAlpha(color, 0.125) }]}>
+                <StatusIcon status={rule.status} color={color} />
+                <Text style={[styles.statusBadgeText, { color }]}>{STATUS_LABELS[rule.status]}</Text>
+              </View>
             </View>
-          ))}
-        </View>
-      )}
+
+            <Text style={styles.ruleSummary}>{rule.summary}</Text>
+            <Text style={styles.ruleDetails}>{rule.details}</Text>
+
+            {rule.recommendation && (
+              <View style={styles.recommendationBox}>
+                <Lightbulb size={14} color={colors.textSecondary} style={{ marginRight: 8, marginTop: 1 }} />
+                <Text style={styles.recommendationText}>
+                  <Text style={{ fontWeight: '700' }}>Da considerare: </Text>
+                  {rule.recommendation}
+                </Text>
+              </View>
+            )}
+
+            {rule.actionRoute && rule.actionLabel && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => router.push(rule.actionRoute as Href)}
+                accessibilityRole="button"
+              >
+                <Text style={styles.actionButtonText}>{rule.actionLabel}</Text>
+                <ArrowRight size={14} color={colors.text} style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })}
+
+      <Text style={styles.disclaimer}>
+        Analisi automatica a scopo informativo, basata sui dati del portafoglio. Non è una consulenza finanziaria.
+      </Text>
     </View>
   );
 };
 
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 48,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  summaryRowTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  summaryRowScore: {
+    fontSize: 15,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  summaryRowLevel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
   cardContainer: {
     backgroundColor: colors.card,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   headerRow: {
     flexDirection: 'row',
@@ -239,15 +270,6 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
-  iconCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: withAlpha(colors.scalable, 0.125),
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
   cardTitle: {
     fontSize: 16,
     fontWeight: '700',
@@ -255,106 +277,80 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   cardSubtitle: {
     fontSize: 12,
+    lineHeight: 17,
     color: colors.textSecondary,
-    marginTop: 3,
-    marginLeft: 36,
+    marginTop: 4,
   },
   scoreBadge: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: colors.inputBackground,
-    borderWidth: 1.5,
-    minWidth: 78,
+    minWidth: 84,
   },
   scoreValue: {
-    fontSize: 22,
-    fontWeight: '900',
-    lineHeight: 24,
+    fontSize: 28,
+    fontWeight: '700',
+    lineHeight: 32,
+    fontVariant: ['tabular-nums'],
   },
   scoreScale: {
-    fontSize: 10,
+    fontSize: 12,
     color: colors.textSecondary,
-    marginTop: -2,
-    marginBottom: 4,
-  },
-  scoreLevelPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    marginBottom: 2,
   },
   scoreLevelText: {
-    fontSize: 9,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  summaryBox: {
-    backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 10,
-    marginTop: 14,
-    borderLeftWidth: 3,
-    borderLeftColor: colors.scalable,
+    fontSize: 12,
+    fontWeight: '700',
   },
   summaryText: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.text,
-    lineHeight: 17,
+    lineHeight: 20,
+    marginTop: 16,
   },
   kpiRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    paddingVertical: 10,
-    marginTop: 10,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 16,
   },
   kpiItem: {
     alignItems: 'center',
     flex: 1,
   },
   kpiLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: colors.textSecondary,
     marginBottom: 2,
   },
   kpiValue: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.text,
+    fontVariant: ['tabular-nums'],
   },
   kpiDivider: {
     width: 1,
-    height: 22,
+    height: 24,
     backgroundColor: colors.border,
   },
-  expandButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    marginTop: 6,
-  },
-  expandButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.scalable,
-    marginRight: 4,
-  },
-  rulesList: {
-    marginTop: 6,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 8,
   },
   ruleItem: {
-    backgroundColor: colors.inputBackground,
+    backgroundColor: colors.card,
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
+    padding: 14,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -362,19 +358,20 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   ruleIconContainer: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
-    backgroundColor: withAlpha(colors.scalable, 0.082),
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: colors.inputBackground,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: 10,
   },
   ruleTitle: {
-    fontSize: 13,
+    flex: 1,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.text,
   },
@@ -384,50 +381,55 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
+    marginLeft: 8,
   },
   statusBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
   },
   ruleSummary: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.text,
-    marginTop: 2,
+    lineHeight: 18,
   },
   ruleDetails: {
-    fontSize: 11,
+    fontSize: 12,
     color: colors.textSecondary,
     marginTop: 4,
-    lineHeight: 16,
+    lineHeight: 17,
   },
   recommendationBox: {
-    backgroundColor: colors.card,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: colors.inputBackground,
     borderRadius: 8,
-    padding: 8,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: withAlpha(colors.scalable, 0.188),
+    padding: 10,
+    marginTop: 10,
   },
   recommendationText: {
-    fontSize: 11,
+    flex: 1,
+    fontSize: 12,
     color: colors.text,
-    lineHeight: 16,
+    lineHeight: 17,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.scalable,
-    borderRadius: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    marginTop: 8,
+    minHeight: 44,
+    marginTop: 4,
     alignSelf: 'flex-start',
   },
   actionButtonText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
-    color: colors.onAccent,
+    color: colors.text,
+  },
+  disclaimer: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
+    marginTop: 4,
+    marginBottom: 24,
   },
 });
