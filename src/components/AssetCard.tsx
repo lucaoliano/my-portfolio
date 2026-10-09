@@ -2,7 +2,7 @@ import { ThemeColors } from '../theme/colors';
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useAppTheme } from '../theme/ThemeContext';
-import { formatNumber, getCurrencySymbol } from '../utils/formatters';
+import { formatNumber, formatSignedCurrency, getCurrencySymbol } from '../utils/formatters';
 import { CopyableText } from './CopyableText';
 
 interface AssetCardProps {
@@ -53,7 +53,12 @@ export const AssetCard: React.FC<AssetCardProps> = ({
   const currencySymbol = getCurrencySymbol(currency);
 
   const totalValue = price * quantity;
-  const displaySymbol = symbol.split('.')[0];
+  const displaySymbol = getAvatarLabel(symbol, name);
+  // Le quotazioni Scalable non riportano la variazione giornaliera: meglio non mostrare
+  // un "+0,00%" che sembra un dato reale.
+  const hasDailyData = dailyChange !== 0 || dailyChangePercent !== 0;
+  const hasAnnualized = annualizedReturn !== undefined && annualizedReturn !== null;
+  const annualizedColor = hasAnnualized && annualizedReturn >= 0 ? colors.positive : colors.negative;
 
   return (
     <TouchableOpacity 
@@ -65,6 +70,8 @@ export const AssetCard: React.FC<AssetCardProps> = ({
       ]} 
       onPress={onPress} 
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`${name}, valore ${currencySymbol}${formatNumber(totalValue)}, rendimento ${changeSign}${formatNumber(changePercent)}%`}
     >
       <View style={styles.leftContent}>
         <View style={styles.symbolContainer}>
@@ -78,12 +85,9 @@ export const AssetCard: React.FC<AssetCardProps> = ({
           </Text>
         </View>
         <View style={styles.nameContainer}>
-          <Text style={styles.name} numberOfLines={1}>{name}</Text>
+          <Text style={styles.name} numberOfLines={2}>{name}</Text>
           <Text style={styles.details}>
-            {quantity} {quantity === 1 ? 'quota' : 'quote'}
-          </Text>
-          <Text style={styles.details}>
-            P. Medio {currencySymbol}{formatNumber(averagePrice)}
+            {quantity} {quantity === 1 ? 'quota' : 'quote'} · PM {currencySymbol}{formatNumber(averagePrice)}
           </Text>
           <Text style={styles.details}>
             Attuale {currencySymbol}{formatNumber(price)}
@@ -92,28 +96,44 @@ export const AssetCard: React.FC<AssetCardProps> = ({
       </View>
       <View style={styles.rightContent}>
         <CopyableText style={styles.price} valueToCopy={totalValue ? totalValue.toString() : ''}>{currencySymbol}{totalValue ? formatNumber(totalValue) : '---'}</CopyableText>
-        <View style={{ alignItems: 'flex-end', marginTop: 4 }}>
-          <View style={[styles.changeContainer, { backgroundColor: changeColor + '20', marginBottom: 4 }]}>
-            <Text style={[styles.change, { color: changeColor }]}>
-              Tot: {changeSign}{formatNumber(changeAbsolute)} ({changeSign}{formatNumber(changePercent)}%)
-            </Text>
-          </View>
-          {annualizedReturn !== undefined && annualizedReturn !== null && (
-            <View style={[styles.changeContainer, { backgroundColor: (annualizedReturn >= 0 ? colors.positive : colors.negative) + '20', marginBottom: 4 }]}>
-              <Text style={[styles.change, { color: annualizedReturn >= 0 ? colors.positive : colors.negative, fontSize: 11 }]}>
-                Ann: {annualizedReturn >= 0 ? '+' : ''}{formatNumber(annualizedReturn)}%{isAnnualizedExtrapolated ? '*' : ''}
-              </Text>
-            </View>
-          )}
-          <View style={[styles.changeContainer, { backgroundColor: dailyChangeColor + '20' }]}>
-            <Text style={[styles.change, { color: dailyChangeColor, fontSize: 11 }]}>
-              Oggi: {dailyChangeSign}{formatNumber(dailyChange)} ({dailyChangeSign}{formatNumber(dailyChangePercent)}%)
-            </Text>
-          </View>
+        <View style={[styles.changeContainer, { backgroundColor: changeColor + '20' }]}>
+          <Text style={[styles.change, { color: changeColor }]}>
+            {formatSignedCurrency(changeAbsolute, currencySymbol)} ({changeSign}{formatNumber(changePercent)}%)
+          </Text>
         </View>
+        {(hasAnnualized || hasDailyData) && (
+          <Text style={styles.secondaryMetrics}>
+            {hasAnnualized && (
+              <Text style={{ color: annualizedColor }}>
+                Ann. {annualizedReturn >= 0 ? '+' : ''}{formatNumber(annualizedReturn)}%{isAnnualizedExtrapolated ? '*' : ''}
+              </Text>
+            )}
+            {hasAnnualized && hasDailyData && '  ·  '}
+            {hasDailyData && (
+              <Text style={{ color: dailyChangeColor }}>
+                Oggi {dailyChangeSign}{formatNumber(dailyChangePercent)}%
+              </Text>
+            )}
+          </Text>
+        )}
       </View>
     </TouchableOpacity>
   );
+};
+
+const ISIN_PATTERN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+
+/** Un ISIN troncato ("IE0...") non dice nulla: per gli ISIN usiamo le iniziali del nome. */
+const getAvatarLabel = (symbol: string, name: string): string => {
+  const base = symbol.split('.')[0];
+  if (!ISIN_PATTERN.test(base)) return base;
+  const initials = name
+    .split(/\s+/)
+    .filter(word => /^[A-Za-z0-9]/.test(word))
+    .slice(0, 2)
+    .map(word => word[0].toUpperCase())
+    .join('');
+  return initials || base.slice(0, 2);
 };
 
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
@@ -166,13 +186,16 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   name: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
+    lineHeight: 20,
     marginBottom: 4,
   },
   details: {
     color: colors.textSecondary,
-    fontSize: 11,
+    fontSize: 12,
+    lineHeight: 17,
+    fontVariant: ['tabular-nums'],
   },
   rightContent: {
     alignItems: 'flex-end',
@@ -181,14 +204,24 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+    marginBottom: 6,
   },
   changeContainer: {
     paddingHorizontal: 6,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   change: {
     fontSize: 12,
     fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  secondaryMetrics: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+    color: colors.textSecondary,
   },
 });

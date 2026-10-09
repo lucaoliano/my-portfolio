@@ -6,6 +6,9 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import * as crypto from "crypto";
 
 const DEFAULT_SCALABLE_MCP_URL = "https://mcp.scalable.capital/mcp";
+const ALLOWED_MCP_HOSTS = new Set(["mcp.scalable.capital"]);
+// Ordini annullati/rifiutati non devono diventare acquisti nel portafoglio
+const NON_EXECUTED_TX_STATUS = /CANCEL|REJECT|EXPIRE|FAIL/i;
 
 interface TestConnectionData {
   serverUrl?: string;
@@ -1077,6 +1080,7 @@ async function fetchScalablePortfolioViaGraphQL(
     }
     const rawTxs = res.data?.account?.brokerPortfolio?.moreTransactions?.transactions || [];
     for (const tx of rawTxs) {
+      if (tx.status && NON_EXECUTED_TX_STATUS.test(String(tx.status))) continue;
       if (tx.__typename === "BrokerSecurityTransactionSummary" || tx.securityTransactionType) {
         const qty = Math.abs(Number(tx.quantity || 0));
         const amt = Math.abs(Number(tx.amount || 0));
@@ -1314,6 +1318,11 @@ async function fetchScalablePortfolioViaGraphQL(
  */
 async function createMcpClient(serverUrl: string, apiToken: string): Promise<Client> {
   const url = new URL(serverUrl || DEFAULT_SCALABLE_MCP_URL);
+  // serverUrl arriva dal client (o da un documento Firestore scrivibile dal client):
+  // senza allowlist la Function invierebbe il token a qualsiasi host (SSRF / furto token).
+  if (url.protocol !== "https:" || !ALLOWED_MCP_HOSTS.has(url.hostname)) {
+    throw new HttpsError("invalid-argument", "Server MCP non consentito.");
+  }
 
   const client = new Client(
     {

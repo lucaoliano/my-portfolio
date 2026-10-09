@@ -1,11 +1,15 @@
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https";
+import { setGlobalOptions } from "firebase-functions/v2";
 import YahooFinance from "yahoo-finance2";
 
 if (!getApps().length) {
   initializeApp();
 }
+
+// Limita le istanze per contenere i costi in caso di abuso (chiunque con un account Google può autenticarsi)
+setGlobalOptions({ maxInstances: 10 });
 
 export {
   testScalableMcp,

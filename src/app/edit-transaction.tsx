@@ -73,7 +73,10 @@ export const EditTransactionScreen = () => {
   const name = params.name ?? '';
   const initialQty = Number(params.quantity ?? 0);
   const initialPrice = Number(params.purchasePrice ?? 0);
-  const initialDate = params.date ?? '';
+  // Le transazioni sincronizzate da Scalable hanno date ISO complete ("2026-02-23T10:30:00Z"),
+  // ma <input type="date"> accetta solo "YYYY-MM-DD": senza normalizzare il campo appare vuoto.
+  const rawInitialDate = params.date ?? '';
+  const initialDate = rawInitialDate.slice(0, 10);
   const initialType = params.type;
 
   const rawGroups = params.groups;
@@ -149,7 +152,8 @@ export const EditTransactionScreen = () => {
       await updateDoc(txRef, {
         quantity: qty,
         purchasePrice: price,
-        date,
+        // Mantieni la data originale (con orario) se l'utente non l'ha modificata
+        date: date === initialDate ? rawInitialDate : date,
         type,
       });
       router.back();
@@ -243,13 +247,17 @@ export const EditTransactionScreen = () => {
           onPress={() => router.push({ pathname: '/change-group', params: { 
             transactionId: txId,
             symbol,
+            name,
             currentGroups: initialGroups
           }})}
         >
           <Folder size={20} color={colors.text} />
-          <Text style={styles.changeGroupText}>
-            Gruppi: {initialGroups?.join(', ') || ''} (Tocca per gestire)
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.changeGroupLabel}>Gruppi</Text>
+            <Text style={styles.changeGroupText} numberOfLines={2}>
+              {initialGroups.length > 0 ? initialGroups.join(', ') : 'Nessun gruppo'}
+            </Text>
+          </View>
           <ChevronRight size={20} color={colors.textSecondary} />
         </TouchableOpacity>
 
@@ -288,7 +296,7 @@ export const EditTransactionScreen = () => {
             value={purchasePrice}
             onChangeText={setPurchasePrice}
             keyboardType="decimal-pad"
-            placeholder="es. 150.50"
+            placeholder="es. 150,50"
             placeholderTextColor={colors.textSecondary}
           />
         </View>
@@ -377,8 +385,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 12,
     marginBottom: 24,
   },
+  changeGroupLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginLeft: 12,
+    marginBottom: 2,
+  },
   changeGroupText: {
-    flex: 1,
     color: colors.text,
     fontSize: 16,
     fontWeight: '500',
