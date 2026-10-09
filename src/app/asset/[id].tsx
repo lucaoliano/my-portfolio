@@ -9,7 +9,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { db, auth } from '../../config/firebase';
 import { collection, query, where, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { Transaction } from '../../types';
-import { formatNumber, formatDate, getCurrencySymbol } from '../../utils/formatters';
+import { formatNumber, formatDate, formatSignedCurrency, getCurrencySymbol } from '../../utils/formatters';
 import { CopyableText } from '../../components/CopyableText';
 import { calculateFifo } from '../../utils/portfolioAggregator';
 import { calculateTransactionsXIRR } from '../../utils/xirr';
@@ -55,7 +55,7 @@ export const AssetDetailsScreen = () => {
   const { alerts: allScalableAlerts } = useScalablePriceAlerts(userId);
   const assetAlerts = getAlertsForSymbol(allScalableAlerts, effectiveSymbol);
   const [customCategory, setCustomCategory] = useState<string | null>(null);
-  const [scalableAssetData, setScalableAssetData] = useState<{ currentPrice?: number; currency?: string } | null>(null);
+  const [scalableAssetData, setScalableAssetData] = useState<{ currentPrice?: number; currency?: string; fromQuotes?: boolean } | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   useEffect(() => {
@@ -82,7 +82,9 @@ export const AssetDetailsScreen = () => {
         const data = docSnap.data();
         if (data.category) setCustomCategory(data.category);
         if (data.currentPrice || data.regularMarketPrice) {
-          setScalableAssetData({
+          // scalable_quotes è la stessa fonte usata dalla dashboard: se c'è, ha la precedenza,
+          // altrimenti dashboard e dettaglio mostrano valori diversi a seconda di quale snapshot arriva per ultimo.
+          setScalableAssetData(prev => prev?.fromQuotes ? prev : {
             currentPrice: Number(data.currentPrice || data.regularMarketPrice),
             currency: data.currency || 'EUR',
           });
@@ -101,6 +103,7 @@ export const AssetDetailsScreen = () => {
           setScalableAssetData({
             currentPrice: Number(q.regularMarketPrice),
             currency: q.currency || 'EUR',
+            fromQuotes: true,
           });
           setLiveQuote({
             symbol: effectiveSymbol,
@@ -216,7 +219,10 @@ export const AssetDetailsScreen = () => {
   const numericCurrentPrice = scalableAssetData?.currentPrice ??
     liveQuote?.regularMarketPrice ??
     (initialCurrentPrice > 0 ? initialCurrentPrice : averagePrice);
-  const numericDailyChange = liveQuote?.regularMarketChange ?? initialDailyChange;
+  // regularMarketChange è per singola quota, mentre il parametro dalla dashboard è già sul totale della posizione
+  const numericDailyChange = liveQuote?.regularMarketChange !== undefined
+    ? liveQuote.regularMarketChange * totalQuantity
+    : initialDailyChange;
   const numericDailyChangePercent = liveQuote?.regularMarketChangePercent ?? initialDailyChangePercent;
 
   const currentValue = totalQuantity * numericCurrentPrice;
@@ -274,7 +280,7 @@ export const AssetDetailsScreen = () => {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
           <View style={[styles.changeContainer, { backgroundColor: changeColor + '20', marginRight: 8, marginBottom: 8 }]}>
             <Text style={[styles.change, { color: changeColor }]}>
-              Tot: {changeSign}{formatNumber(profitOrLoss)} ({changeSign}{formatNumber(profitOrLossPercent)}%)
+              Tot: {formatSignedCurrency(profitOrLoss, currencySymbol)} ({changeSign}{formatNumber(profitOrLossPercent)}%)
             </Text>
           </View>
           {assetXirr.annualizedPercent !== null && (
@@ -284,11 +290,13 @@ export const AssetDetailsScreen = () => {
               </Text>
             </View>
           )}
-          <View style={[styles.changeContainer, { backgroundColor: dailyChangeColor + '20', marginBottom: 8 }]}>
-            <Text style={[styles.change, { color: dailyChangeColor }]}>
-              Oggi: {dailyChangeSign}{formatNumber(numericDailyChange)} ({dailyChangeSign}{formatNumber(numericDailyChangePercent)}%)
-            </Text>
-          </View>
+          {(numericDailyChange !== 0 || numericDailyChangePercent !== 0) && (
+            <View style={[styles.changeContainer, { backgroundColor: dailyChangeColor + '20', marginBottom: 8 }]}>
+              <Text style={[styles.change, { color: dailyChangeColor }]}>
+                Oggi: {formatSignedCurrency(numericDailyChange, currencySymbol)} ({dailyChangeSign}{formatNumber(numericDailyChangePercent)}%)
+              </Text>
+            </View>
+          )}
         </View>
         {assetXirr.isExtrapolated && assetXirr.annualizedPercent !== null && (
           <Text style={{ fontSize: 11, color: colors.textSecondary, textAlign: 'center', marginTop: 2, marginBottom: 8 }}>

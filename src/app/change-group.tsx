@@ -24,9 +24,10 @@ export const ChangeGroupModal = () => {
   const params = useLocalSearchParams<{
     transactionId?: string;
     symbol?: string;
+    name?: string;
     currentGroups?: string | string[];
   }>();
-  const { transactionId, symbol, currentGroups: rawCurrentGroups } = params;
+  const { transactionId, symbol, name: assetName, currentGroups: rawCurrentGroups } = params;
   
   let currentGroups: string[] = [];
   if (Array.isArray(rawCurrentGroups)) {
@@ -141,7 +142,10 @@ export const ChangeGroupModal = () => {
         <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/')} disabled={saving}>
           <X size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Gruppi per {symbol}</Text>
+        <View style={{ flex: 1, alignItems: 'center', marginHorizontal: 12 }}>
+          <Text style={styles.headerTitle}>Gruppi</Text>
+          <Text style={styles.headerSubtitle} numberOfLines={1}>{assetName || symbol}</Text>
+        </View>
         <View style={{ width: 24 }} />
       </View>
 
@@ -226,6 +230,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.text,
     fontSize: 18,
     fontWeight: '600',
+  },
+  headerSubtitle: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
   },
   content: {
     flex: 1,

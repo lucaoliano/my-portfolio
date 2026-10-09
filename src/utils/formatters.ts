@@ -1,9 +1,16 @@
+// Alcune localizzazioni (es. it-IT su Safari) non raggruppano i numeri a 4 cifre:
+// forziamo il separatore delle migliaia per avere "4.064,54" coerente con "38.392,42".
+const amountFormatter = (() => {
+  const options = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+  try {
+    return new Intl.NumberFormat(undefined, { ...options, useGrouping: 'always' } as Intl.NumberFormatOptions);
+  } catch {
+    return new Intl.NumberFormat(undefined, options);
+  }
+})();
+
 export const formatNumber = (value: number): string => {
-  if (isNaN(value)) return '0.00';
-  return new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return amountFormatter.format(isNaN(value) ? 0 : value);
 };
 
 export const formatDate = (dateString: string): string => {
@@ -61,7 +68,16 @@ export const formatInputNumber = (value: number): string => {
 
 export const parseLocalNumber = (value: string): number => {
   if (!value) return NaN;
-  // Replace comma with dot to allow parseFloat to work regardless of user input format
-  const normalized = value.replace(',', '.');
+  let normalized = value.trim().replace(/\s/g, '');
+  if (normalized.includes(',')) {
+    // Formato italiano "1.234,56": i punti sono separatori delle migliaia
+    normalized = normalized.replace(/\./g, '').replace(',', '.');
+  }
   return parseFloat(normalized);
+};
+
+/** "+€1.234,56" / "-€1.234,56": il segno va prima del simbolo di valuta, non "€-1.234,56". */
+export const formatSignedCurrency = (value: number, currencySymbol = '€'): string => {
+  const sign = value < 0 ? '-' : '+';
+  return `${sign}${currencySymbol}${formatNumber(Math.abs(value))}`;
 };

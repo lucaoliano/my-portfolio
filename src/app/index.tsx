@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { signOut } from 'firebase/auth';
 
 import { useAppTheme } from '../theme/ThemeContext';
-import { formatNumber } from '../utils/formatters';
+import { formatNumber, formatSignedCurrency } from '../utils/formatters';
 import { AssetCard } from '../components/AssetCard';
 import { PieChartComponent } from '../components/PieChartComponent';
 import { PortfolioSkeleton } from '../components/PortfolioSkeleton';
@@ -29,7 +29,7 @@ import { calculateCashYield, ScalableInterestPlanId } from '../utils/cashInteres
 import { getTriggeredAlerts, getApproachingAlerts } from '../utils/priceAlerts';
 import { calculatePortfolioHealthCheck } from '../utils/portfolioHealthCheck';
 import { PortfolioHealthCheckCard } from '../components/PortfolioHealthCheckCard';
-import { getScalableConfig, syncScalablePortfolio } from '../services/scalableMcp';
+import { syncScalablePortfolio } from '../services/scalableMcp';
 
 export const PortfolioScreen = () => {
   const { colors } = useAppTheme();
@@ -518,7 +518,7 @@ export const PortfolioScreen = () => {
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
                 <View style={[styles.pill, { backgroundColor: (globalPL >= 0 ? colors.positive : colors.negative) + '20', marginRight: 8, marginBottom: 8 }]}>
                   <Text style={[styles.pillText, { color: globalPL >= 0 ? colors.positive : colors.negative }]}>
-                    Tot: {globalPL >= 0 ? '+' : ''}€{formatNumber(globalPL)} ({globalPL >= 0 ? '+' : ''}{formatNumber(globalPLPercent)}%)
+                    Tot: {formatSignedCurrency(globalPL)} ({globalPL >= 0 ? '+' : ''}{formatNumber(globalPLPercent)}%)
                   </Text>
                 </View>
                 {globalAnnualizedReturn !== undefined && globalAnnualizedReturn !== null && (
@@ -528,11 +528,14 @@ export const PortfolioScreen = () => {
                     </Text>
                   </View>
                 )}
-                <View style={[styles.pill, { backgroundColor: (globalDailyChange >= 0 ? colors.positive : colors.negative) + '20', marginBottom: 8 }]}>
-                  <Text style={[styles.pillText, { color: globalDailyChange >= 0 ? colors.positive : colors.negative }]}>
-                    Oggi: {globalDailyChange >= 0 ? '+' : ''}€{formatNumber(globalDailyChange)} ({globalDailyChange >= 0 ? '+' : ''}{formatNumber(globalDailyChangePercent)}%)
-                  </Text>
-                </View>
+                {/* Nascosto se nessuna quotazione ha la variazione giornaliera (es. prezzi Scalable) */}
+                {(globalDailyChange !== 0 || globalDailyChangePercent !== 0) && (
+                  <View style={[styles.pill, { backgroundColor: (globalDailyChange >= 0 ? colors.positive : colors.negative) + '20', marginBottom: 8 }]}>
+                    <Text style={[styles.pillText, { color: globalDailyChange >= 0 ? colors.positive : colors.negative }]}>
+                      Oggi: {formatSignedCurrency(globalDailyChange)} ({globalDailyChange >= 0 ? '+' : ''}{formatNumber(globalDailyChangePercent)}%)
+                    </Text>
+                  </View>
+                )}
               </View>
               {globalIsAnnualizedExtrapolated && globalAnnualizedReturn !== null && (
                 <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
@@ -713,7 +716,7 @@ export const PortfolioScreen = () => {
                   <View style={styles.sectionMetricsRow}>
                       <View style={[styles.pill, { backgroundColor: (group.profitOrLoss >= 0 ? colors.positive : colors.negative) + '20', marginRight: 8, marginBottom: 4 }]}>
                         <Text style={[styles.pillText, { color: group.profitOrLoss >= 0 ? colors.positive : colors.negative }]}>
-                          Tot: {group.profitOrLoss >= 0 ? '+' : ''}€{formatNumber(group.profitOrLoss)} ({group.profitOrLoss >= 0 ? '+' : ''}{formatNumber(group.profitOrLossPercent)}%)
+                          Tot: {formatSignedCurrency(group.profitOrLoss)} ({group.profitOrLoss >= 0 ? '+' : ''}{formatNumber(group.profitOrLossPercent)}%)
                         </Text>
                       </View>
                       {group.annualizedReturn !== undefined && group.annualizedReturn !== null && (
@@ -723,11 +726,13 @@ export const PortfolioScreen = () => {
                           </Text>
                         </View>
                       )}
-                      <View style={[styles.pill, { backgroundColor: (group.dailyChange >= 0 ? colors.positive : colors.negative) + '20', marginBottom: 4 }]}>
-                        <Text style={[styles.pillText, { color: group.dailyChange >= 0 ? colors.positive : colors.negative }]}>
-                          Oggi: {group.dailyChange >= 0 ? '+' : ''}€{formatNumber(group.dailyChange)} ({group.dailyChange >= 0 ? '+' : ''}{formatNumber(group.dailyChangePercent)}%)
-                        </Text>
-                      </View>
+                      {(group.dailyChange !== 0 || group.dailyChangePercent !== 0) && (
+                        <View style={[styles.pill, { backgroundColor: (group.dailyChange >= 0 ? colors.positive : colors.negative) + '20', marginBottom: 4 }]}>
+                          <Text style={[styles.pillText, { color: group.dailyChange >= 0 ? colors.positive : colors.negative }]}>
+                            Oggi: {formatSignedCurrency(group.dailyChange)} ({group.dailyChange >= 0 ? '+' : ''}{formatNumber(group.dailyChangePercent)}%)
+                          </Text>
+                        </View>
+                      )}
                   </View>
                 </TouchableOpacity>
 
@@ -1006,6 +1011,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.text,
     fontSize: 32,
     fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
   },
   globalPL: {
     fontSize: 14,
@@ -1071,13 +1077,15 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.text,
     fontSize: 18,
     fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
   sectionMetricsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
     paddingLeft: 28,
-    justifyContent: 'space-around',
+    marginTop: 8,
+    justifyContent: 'flex-start',
   },
   pill: {
     paddingHorizontal: 6,
@@ -1087,6 +1095,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   pillText: {
     fontSize: 11,
     fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
   reorderButton: {
     padding: 8,
