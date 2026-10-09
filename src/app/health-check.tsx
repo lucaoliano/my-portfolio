@@ -9,6 +9,7 @@ import { auth } from '../config/firebase';
 import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
 import { PortfolioHealthCheckCard } from '../components/PortfolioHealthCheckCard';
 import { PortfolioSkeleton } from '../components/PortfolioSkeleton';
+import { formatNumber } from '../utils/formatters';
 
 /** Analisi dettagliata della salute del portafoglio, aperta dalla riga compatta in dashboard. */
 export default function HealthCheckScreen() {
@@ -16,7 +17,8 @@ export default function HealthCheckScreen() {
   const styles = getStyles(colors);
   const router = useRouter();
   const userId = auth.currentUser?.uid;
-  const { healthCheck, allAssets, isScalableConnected, isInitialLoading } = usePortfolioOverview(userId);
+  const { healthCheck, allAssets, isScalableConnected, scalableCash, isInitialLoading } = usePortfolioOverview(userId);
+  const investedValue = allAssets.reduce((sum, a) => sum + a.currentTotalValue, 0);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -41,6 +43,11 @@ export default function HealthCheckScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
+          {/* Il patrimonio analizzato include sempre la liquidità: lo diciamo, perché la dashboard può escluderla */}
+          <Text style={styles.scope}>
+            Patrimonio analizzato: €{formatNumber(investedValue + scalableCash)}
+            {scalableCash > 0 ? ` (investito €${formatNumber(investedValue)} + liquidità €${formatNumber(scalableCash)})` : ''}
+          </Text>
           <PortfolioHealthCheckCard healthCheck={healthCheck} hasCashData={isScalableConnected} />
         </ScrollView>
       )}
@@ -75,6 +82,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   content: {
     padding: 16,
+  },
+  scope: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textSecondary,
+    marginBottom: 12,
+    fontVariant: ['tabular-nums'],
   },
   empty: {
     flex: 1,

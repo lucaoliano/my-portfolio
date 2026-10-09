@@ -43,11 +43,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   text: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
   textMd: {
-    fontSize: 12,
+    fontSize: 13,
   },
 });

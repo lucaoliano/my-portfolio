@@ -12,7 +12,31 @@ export interface YahooQuote {
   /** Da dove arriva il prezzo: le quotazioni Scalable non hanno la variazione giornaliera. */
   source?: 'scalable' | 'yahoo';
   hasDailyChange?: boolean;
+  /** Ora dell'ultimo prezzo di mercato, se nota */
+  marketTime?: string;
 }
+
+export interface DailyChange {
+  changePercent: number;
+  yahooSymbol: string;
+  marketTime?: string;
+}
+
+/**
+ * Variazione percentuale di oggi per ISIN o ticker (Yahoo Finance via Cloud Function).
+ * Serve per i titoli quotati da Scalable, che non la forniscono. In caso di errore restituisce {}.
+ */
+export const getDailyChanges = async (symbols: string[]): Promise<Record<string, DailyChange>> => {
+  if (!symbols || symbols.length === 0) return {};
+  try {
+    const fn = httpsCallable<{ symbols: string[] }, { changes: Record<string, DailyChange> }>(functions, 'getDailyChanges');
+    const result = await fn({ symbols });
+    return result.data.changes || {};
+  } catch (error) {
+    console.warn('Daily changes not available:', error);
+    return {};
+  }
+};
 
 export interface YahooSearchResult {
   symbol: string;

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { getQuotes, YahooQuote } from '../services/yahooFinance';
+import { getQuotes, getDailyChanges, YahooQuote } from '../services/yahooFinance';
+import { FxRates } from '../utils/portfolioAggregator';
 import { Transaction } from '../types';
 
 interface QuotesCache {
   userId: string;
   quotes: Record<string, YahooQuote>;
+  fxRates: FxRates;
   updatedAt: Date;
 }
 
@@ -16,6 +18,8 @@ let lastQuotes: QuotesCache | null = null;
 
 export interface PortfolioQuotesState {
   quotes: Record<string, YahooQuote>;
+  /** Cambi verso l'euro per le valute estere presenti nel portafoglio */
+  fxRates: FxRates;
   /** Primo caricamento senza quotazioni in memoria */
   loading: boolean;
   /** Aggiornamento richiesto dall'utente (pull-to-refresh, sync) */
@@ -79,6 +83,7 @@ export const usePortfolioQuotes = (
 ): PortfolioQuotesState => {
   const cached = lastQuotes && lastQuotes.userId === userId ? lastQuotes : null;
   const [quotes, setQuotes] = useState<Record<string, YahooQuote>>(cached?.quotes ?? {});
+  const [fxRates, setFxRates] = useState<FxRates>(cached?.fxRates ?? {});
   const [updatedAt, setUpdatedAt] = useState<Date | null>(cached?.updatedAt ?? null);
   const [loading, setLoading] = useState(!cached);
   const [refreshing, setRefreshing] = useState(false);
@@ -111,13 +116,55 @@ export const usePortfolioQuotes = (
         }
       }
 
-      const symbolsToFetch = uniqueSymbols.filter(s => !scalableQuotes[s]);
-      const yahooQuotes = symbolsToFetch.length > 0 ? await getQuotes(symbolsToFetch) : [];
+      // Valute estere da convertire in euro (le transazioni Scalable sono già in euro)
+      const foreignCurrencies = Array.from(new Set(
+        txs
+          .filter(t => t.source !== 'scalable_mcp' && t.currency && t.currency.toUpperCase() !== 'EUR')
+          .map(t => t.currency!.toUpperCase())
+      ));
+      const fxSymbols = foreignCurrencies.map(c => `${c}EUR=X`);
 
-      const next: Record<string, YahooQuote> = { ...scalableQuotes };
+      const symbolsToFetch = uniqueSymbols.filter(s => !scalableQuotes[s]);
+      const scalableSymbols = uniqueSymbols.filter(s => scalableQuotes[s]);
+      const [yahooQuotes, dailyChanges] = await Promise.all([
+        symbolsToFetch.length + fxSymbols.length > 0 ? getQuotes([...symbolsToFetch, ...fxSymbols]) : Promise.resolve([]),
+        // Scalable non dà la variazione di oggi: la prendiamo da Yahoo per lo stesso ISIN
+        getDailyChanges(scalableSymbols),
+      ]);
+
+      const next: Record<string, YahooQuote> = {};
+      for (const [sym, q] of Object.entries(scalableQuotes)) {
+        const change = dailyChanges[sym];
+        if (change) {
+          // La percentuale di Yahoo applicata al prezzo Scalable: variazione assoluta per quota
+          const pct = change.changePercent;
+          const absPerShare = q.regularMarketPrice - q.regularMarketPrice / (1 + pct / 100);
+          next[sym] = {
+            ...q,
+            regularMarketChangePercent: pct,
+            regularMarketChange: absPerShare,
+            hasDailyChange: true,
+            marketTime: change.marketTime,
+          };
+        } else {
+          next[sym] = q;
+        }
+      }
+
+      const rates: FxRates = {};
       yahooQuotes.forEach(q => {
+        const fx = /^([A-Z]{3})EUR=X$/.exec(q.symbol);
+        if (fx) {
+          if (q.regularMarketPrice > 0) rates[fx[1]] = q.regularMarketPrice;
+          return;
+        }
         if (!next[q.symbol]) {
-          next[q.symbol] = { ...q, source: 'yahoo', hasDailyChange: typeof q.regularMarketChange === 'number' };
+          const isScalable = q.source === 'scalable';
+          next[q.symbol] = {
+            ...q,
+            source: isScalable ? 'scalable' : 'yahoo',
+            hasDailyChange: !isScalable && typeof q.regularMarketChange === 'number',
+          };
         }
       });
 
@@ -125,13 +172,14 @@ export const usePortfolioQuotes = (
       // l'aggiornamento è fallito e va detto, invece di mostrare i titoli al costo come se nulla fosse.
       const yahooFailed = symbolsToFetch.length > 0 && yahooQuotes.length === 0;
       setQuotes(prev => (yahooFailed ? { ...prev, ...next } : next));
+      setFxRates(prev => (yahooFailed ? prev : rates));
       if (yahooFailed) {
         setError('Quotazioni non aggiornate: il servizio prezzi non risponde.');
       } else {
         const now = new Date();
         setError(null);
         setUpdatedAt(now);
-        if (userId) lastQuotes = { userId, quotes: next, updatedAt: now };
+        if (userId) lastQuotes = { userId, quotes: next, fxRates: rates, updatedAt: now };
       }
     } catch (err) {
       console.error('Errore fetch quotes:', err);
@@ -154,5 +202,5 @@ export const usePortfolioQuotes = (
     return () => clearTimeout(timeoutId);
   }, [transactions, transactionsLoading, refresh]);
 
-  return { quotes, loading, refreshing, error, updatedAt, refresh };
+  return { quotes, fxRates, loading, refreshing, error, updatedAt, refresh };
 };

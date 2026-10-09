@@ -97,17 +97,7 @@
       "loss-red": {
         "role": "secondary",
         "displayName": "Loss Red",
-        "canonical": "#FF453A",
-        "tonalRamp": [
-          "#340000",
-          "#590000",
-          "#7F0707",
-          "#A5352C",
-          "#CD594C",
-          "#F47C6E",
-          "#FFA191",
-          "#FFC6B5"
-        ]
+        "canonical": "#FF6961"
       },
       "scalable-teal": {
         "role": "tertiary",
@@ -217,7 +207,7 @@
       "gain-green-light": {
         "role": "primary",
         "displayName": "Gain Green Light",
-        "canonical": "#047857"
+        "canonical": "#046C4E"
       },
       "loss-red-light": {
         "role": "secondary",
@@ -282,7 +272,7 @@
       "signal-amber-light": {
         "role": "tertiary",
         "displayName": "Signal Amber Light",
-        "canonical": "#B45309"
+        "canonical": "#A14A0B"
       },
       "info-blue-light": {
         "role": "tertiary",

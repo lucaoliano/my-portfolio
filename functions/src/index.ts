@@ -43,6 +43,8 @@ type MarketQuote = {
   regularMarketChangePercent?: number;
   regularMarketChange?: number;
   currency?: string;
+  /** "scalable" = prezzo sincronizzato da Scalable, senza variazione giornaliera reale */
+  source?: "scalable" | "yahoo";
 };
 
 // Endpoint per la ricerca dei ticker
@@ -135,6 +137,7 @@ export const getQuotes = onCall(async (request: CallableRequest<{ symbols?: stri
           regularMarketChangePercent: sq.regularMarketChangePercent || 0,
           regularMarketChange: sq.regularMarketChange || 0,
           currency: sq.currency || "EUR",
+          source: "scalable",
         });
       } else {
         missingSymbols.push(sym);
@@ -156,6 +159,7 @@ export const getQuotes = onCall(async (request: CallableRequest<{ symbols?: stri
               regularMarketChangePercent: q.regularMarketChangePercent,
               regularMarketChange: q.regularMarketChange,
               currency: q.currency || "EUR",
+              source: "yahoo",
             });
           }
         }
@@ -226,5 +230,89 @@ export const getHistoricalPrice = onCall(async (request: CallableRequest<{ symbo
       "internal",
       "Errore durante il recupero del prezzo storico",
     );
+  }
+});
+
+type DailyChange = {
+  changePercent: number;
+  yahooSymbol: string;
+  marketTime?: string;
+};
+
+const ISIN_PATTERN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+// Borse in euro preferite per abbinare l'ISIN a una quotazione Yahoo con la stessa valuta di Scalable
+const EUR_EXCHANGES = ["GER", "FRA", "AMS", "MIL", "PAR", "BRU", "MCE", "LIS", "VIE"];
+
+/**
+ * Risolve un ISIN nel simbolo Yahoo Finance più adatto, con cache server-side in Firestore
+ * (collezione `yahoo_symbols`, non esposta al client dalle regole).
+ */
+async function resolveYahooSymbol(isin: string): Promise<string | null> {
+  const db = getFirestore();
+  const cacheRef = db.doc(`yahoo_symbols/${isin}`);
+  const cached = await cacheRef.get();
+  if (cached.exists) {
+    return (cached.data()?.symbol as string | null) ?? null;
+  }
+  try {
+    const res = await yf.search(isin, { quotesCount: 10, newsCount: 0 });
+    const candidates = ((res.quotes ?? []) as SearchQuote[]).filter(
+      (q) => !!q.symbol && (q.quoteType === "ETF" || q.quoteType === "EQUITY" || q.quoteType === "MUTUALFUND"),
+    );
+    const preferred = candidates.find((q) => EUR_EXCHANGES.includes(q.exchange ?? "")) ?? candidates[0];
+    const symbol = preferred?.symbol ?? null;
+    await cacheRef.set({ symbol, resolvedAt: new Date().toISOString() });
+    return symbol;
+  } catch (err) {
+    console.warn(`Yahoo symbol lookup failed for ${isin}:`, err instanceof Error ? err.message : String(err));
+    return null;
+  }
+}
+
+/**
+ * Variazione percentuale di oggi per i titoli quotati da Scalable, che non la forniscono.
+ * Accetta ISIN o ticker; restituisce solo i titoli per cui Yahoo ha un dato.
+ */
+export const getDailyChanges = onCall(async (request: CallableRequest<{ symbols?: string[] }>) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Devi essere autenticato per recuperare le variazioni giornaliere");
+  }
+  const symbols = (request.data.symbols ?? []).filter((s) => typeof s === "string").slice(0, 50);
+  if (symbols.length === 0) {
+    return { changes: {} };
+  }
+
+  const resolved = await Promise.all(
+    symbols.map(async (s) => [s, ISIN_PATTERN.test(s) ? await resolveYahooSymbol(s) : s] as const),
+  );
+  const yahooSymbols = Array.from(new Set(resolved.map(([, y]) => y).filter((y): y is string => !!y)));
+  if (yahooSymbols.length === 0) {
+    return { changes: {} };
+  }
+
+  try {
+    const results = await yf.quote(yahooSymbols);
+    const list = (Array.isArray(results) ? results : [results]) as Array<{
+      symbol?: string;
+      regularMarketChangePercent?: number;
+      regularMarketTime?: Date | string | number;
+    }>;
+    const bySymbol = new Map(list.filter((q) => q?.symbol).map((q) => [q.symbol as string, q]));
+
+    const changes: Record<string, DailyChange> = {};
+    for (const [original, yahooSymbol] of resolved) {
+      const q = yahooSymbol ? bySymbol.get(yahooSymbol) : undefined;
+      if (q && typeof q.regularMarketChangePercent === "number") {
+        changes[original] = {
+          changePercent: q.regularMarketChangePercent,
+          yahooSymbol: yahooSymbol as string,
+          marketTime: q.regularMarketTime ? new Date(q.regularMarketTime).toISOString() : undefined,
+        };
+      }
+    }
+    return { changes };
+  } catch (error: unknown) {
+    console.error("Error in getDailyChanges:", error instanceof Error ? error.message : String(error));
+    throw new HttpsError("unavailable", "Variazioni giornaliere non disponibili");
   }
 });

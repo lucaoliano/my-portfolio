@@ -77,7 +77,8 @@ export function calculatePortfolioHealthCheck(
   assets: AggregatedAsset[],
   cashBalance: number = 0,
   interestPlan: ScalableInterestPlanId = 'prime',
-  interestRate: number = 2.6,
+  /** null = tasso mai impostato: l'analisi lo dichiara invece di assumerne uno */
+  interestRate: number | null = null,
   savingsPlans: ScalableSavingsPlan[] = []
 ): PortfolioHealthCheckResult {
   const validAssets = assets.filter((a) => a.currentTotalValue > 0);
@@ -129,6 +130,10 @@ export function calculatePortfolioHealthCheck(
   }
 
   const topPercent = maxWeight * 100;
+  const topAssetSource = validAssets.find(a => a.symbol === topAssetObj?.symbol);
+  const topAssetIsFund = !!topAssetSource && (
+    /etf|fond/i.test(topAssetSource.category || '') || /\b(ETF|ETC|UCITS)\b/i.test(topAssetSource.name)
+  );
   let concentrationScore = 100;
   let concentrationStatus: RuleStatus = 'PASS';
   let concentrationSummary = '';
@@ -141,12 +146,18 @@ export function calculatePortfolioHealthCheck(
     concentrationSummary = `Portafoglio mono-asset: ${topAssetObj?.name || topAssetObj?.symbol} rappresenta il 100%`;
     concentrationDetails = 'Tutto il capitale è investito in un unico strumento finanziario.';
     concentrationRec = 'Valuta di aggiungere altre asset class o strumenti complementari per ridurre il rischio specifico.';
+  } else if (topPercent > 35 && topAssetIsFund) {
+    // Un ETF o fondo è già diversificato al suo interno: il peso sul singolo strumento pesa meno
+    concentrationScore = 85;
+    concentrationStatus = 'INFO';
+    concentrationSummary = `${topAssetObj?.name || topAssetObj?.symbol} pesa il ${formatDecimal(topPercent, 1)}%`;
+    concentrationDetails = 'È un ETF o fondo, già diversificato al suo interno: il peso elevato riguarda lo strumento, non un singolo titolo.';
   } else if (topPercent > 35) {
     concentrationScore = 50;
     concentrationStatus = 'ALERT';
     concentrationSummary = `Alta concentrazione: ${topAssetObj?.name || topAssetObj?.symbol} pesa il ${formatDecimal(topPercent, 1)}%`;
     concentrationDetails = `Il titolo principale eccede la soglia prudenziale del 35% del patrimonio totale (€${formatDecimal(topAssetObj?.value ?? 0, 0)} su €${formatDecimal(totalNetWorth, 0)}).`;
-    concentrationRec = 'Indirizza i prossimi versamenti o rate del PAC verso asset sottopesati per diluire la concentrazione.';
+    concentrationRec = 'Per ridurre il peso, i prossimi versamenti possono andare su strumenti meno presenti in portafoglio.';
   } else if (topPercent > 25) {
     concentrationScore = 75;
     concentrationStatus = 'WARNING';
@@ -180,7 +191,8 @@ export function calculatePortfolioHealthCheck(
   // ==========================================
   const cashRatio = cashBalance / totalNetWorth;
   const cashPercent = cashRatio * 100;
-  const yieldEst = calculateCashYield(cashBalance, interestRate);
+  const rateKnown = interestRate !== null;
+  const yieldEst = calculateCashYield(cashBalance, interestRate ?? 0);
 
   let cashScore = 100;
   let cashStatus: RuleStatus = 'PASS';
@@ -190,7 +202,14 @@ export function calculatePortfolioHealthCheck(
   let cashActionRoute: string | undefined = undefined;
   let cashActionLabel: string | undefined = undefined;
 
-  if (cashBalance > 0 && interestRate === 0) {
+  if (cashBalance > 0 && !rateKnown) {
+    cashScore = 80;
+    cashStatus = 'INFO';
+    cashSummary = `Liquidità di €${formatDecimal(cashBalance, 0)}, tasso non impostato`;
+    cashDetails = `La liquidità è il ${formatDecimal(cashPercent, 1)}% del patrimonio. Imposta il tasso del tuo piano Scalable per stimarne il rendimento.`;
+    cashActionRoute = '/integrations/scalable';
+    cashActionLabel = 'Imposta il tasso';
+  } else if (cashBalance > 0 && interestRate === 0) {
     if (cashPercent > 15) {
       cashScore = 40;
       cashStatus = 'ALERT';
@@ -205,17 +224,17 @@ export function calculatePortfolioHealthCheck(
       cashSummary = `Liquidità libera non remunerata (€${formatDecimal(cashBalance, 0)})`;
       cashDetails = `La liquidità corrisponde al ${formatDecimal(cashPercent, 1)}% del patrimonio ed è attualmente priva di interessi.`;
     }
-  } else if (cashBalance > 0 && interestRate > 0) {
+  } else if (cashBalance > 0 && (interestRate ?? 0) > 0) {
     if (cashPercent > 40) {
       cashScore = 75;
       cashStatus = 'INFO';
       cashSummary = `Elevata quota di liquidità remunerata (${formatDecimal(cashPercent, 1)}%)`;
-      cashDetails = `Rendimento attivo al ${formatDecimal(interestRate, 2)}% annuo (+€${formatDecimal(yieldEst.annualNet, 0)} netti/anno), ma quota cash elevata rispetto all'investito.`;
+      cashDetails = `Rendimento attivo al ${formatDecimal(interestRate ?? 0, 2)}% annuo (+€${formatDecimal(yieldEst.annualNet, 0)} netti/anno), ma quota cash elevata rispetto all'investito.`;
       cashRec = 'Se l\'orizzonte è lungo termine, valuta di programmare un PAC graduale per entrare sul mercato.';
     } else {
       cashScore = 98;
       cashStatus = 'PASS';
-      cashSummary = `Liquidità remunerata ottimizzata (${formatDecimal(interestRate, 2)}% annuo)`;
+      cashSummary = `Liquidità remunerata ottimizzata (${formatDecimal(interestRate ?? 0, 2)}% annuo)`;
       cashDetails = `Genera un rendimento netto stimato di +€${formatDecimal(yieldEst.annualNet, 0)}/anno (€${formatDecimal(yieldEst.monthlyNet, 1)}/mese).`;
     }
   } else {
@@ -244,7 +263,7 @@ export function calculatePortfolioHealthCheck(
     details: cashDetails,
     recommendation: cashRec,
     metricLabel: 'Rendimento Cash',
-    metricValue: interestRate > 0 ? `${formatDecimal(interestRate, 2)}% (+€${formatDecimal(yieldEst.annualNet, 0)}/a)` : '0%',
+    metricValue: (interestRate ?? 0) > 0 ? `${formatDecimal(interestRate ?? 0, 2)}% (+€${formatDecimal(yieldEst.annualNet, 0)}/a)` : '0%',
     actionRoute: cashActionRoute,
     actionLabel: cashActionLabel,
   });
@@ -272,12 +291,22 @@ export function calculatePortfolioHealthCheck(
   let divDetails = '';
   let divRec: string | undefined = undefined;
 
-  if (numCategories === 1) {
+  const uncategorizedValue = categoryTotals['Altro'] || 0;
+  const uncategorizedPercent = (uncategorizedValue / totalNetWorth) * 100;
+
+  if (uncategorizedPercent > 50) {
+    // "Altro" vuol dire categoria non impostata: non è un dato sulla diversificazione
+    const uncategorizedCount = validAssets.filter(a => (a.category || 'Altro') === 'Altro').length;
+    divScore = 85;
+    divStatus = 'INFO';
+    divSummary = `Categorie da impostare per ${uncategorizedCount} ${uncategorizedCount === 1 ? 'titolo' : 'titoli'}`;
+    divDetails = `Il ${formatDecimal(uncategorizedPercent, 0)}% del patrimonio non ha una categoria (azioni, obbligazioni, materie prime…): impostala dal dettaglio del titolo per un'analisi affidabile.`;
+  } else if (numCategories === 1) {
     divScore = 70;
     divStatus = 'INFO';
     divSummary = `Portafoglio mono-classe: 100% ${dominantCategory[0]}`;
     divDetails = `Tutti gli strumenti appartengono alla categoria ${dominantCategory[0]}.`;
-    divRec = 'L\'aggiunta di classi decorrelate (es. bond, liquidità monetaria) riduce il drawdown complessivo.';
+    divRec = 'Classi poco correlate tra loro (es. obbligazioni, liquidità) tendono a ridurre le oscillazioni complessive.';
   } else if (domPercent > 80 && numCategories > 1) {
     divScore = 80;
     divStatus = 'INFO';
@@ -359,7 +388,13 @@ export function calculatePortfolioHealthCheck(
   let costDetails = '';
   let costRec: string | undefined = undefined;
 
-  if (totalWeightedTer <= 0.22) {
+  if (totalWeightedTer === 0) {
+    // Nessun costo stimabile (titoli singoli o categorie non impostate): non è un "costo zero"
+    costScore = 90;
+    costStatus = 'INFO';
+    costSummary = 'Costi non stimabili';
+    costDetails = 'Per i titoli in portafoglio non è possibile stimare il TER: imposta le categorie (es. ETF) dal dettaglio del titolo.';
+  } else if (totalWeightedTer <= 0.22) {
     costScore = 100;
     costStatus = 'PASS';
     costSummary = `Costi molto contenuti (TER medio ${formatDecimal(totalWeightedTer, 2)}%)`;
