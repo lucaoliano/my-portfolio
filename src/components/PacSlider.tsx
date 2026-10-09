@@ -175,7 +175,7 @@ const getStyles = (colors: ThemeColors) =>
     },
     trackFill: {
       height: '100%',
-      backgroundColor: '#004481',
+      backgroundColor: colors.selection,
       borderRadius: 3,
     },
     thumb: {
@@ -183,7 +183,7 @@ const getStyles = (colors: ThemeColors) =>
       width: 24,
       height: 24,
       borderRadius: 12,
-      backgroundColor: '#004481',
+      backgroundColor: colors.selection,
       marginLeft: -12,
       justifyContent: 'center',
       alignItems: 'center',
@@ -199,7 +199,7 @@ const getStyles = (colors: ThemeColors) =>
       width: 6,
       height: 6,
       borderRadius: 3,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: colors.onStrong,
     },
     labelsRow: {
       flexDirection: 'row',

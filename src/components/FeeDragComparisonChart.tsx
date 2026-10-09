@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import Svg, { Path, Line, Text as SvgText, G } from 'react-native-svg';
-import { ThemeColors } from '../theme/colors';
+import { ThemeColors, withAlpha } from '../theme/colors';
 import { useAppTheme } from '../theme/ThemeContext';
 import { formatNumber } from '../utils/formatters';
 import { PacParams, calculatePAC } from '../utils/pacCalculator';
@@ -118,7 +118,7 @@ export const FeeDragComparisonChart: React.FC<FeeDragComparisonChartProps> = ({
       <View style={styles.summaryBox}>
         <View style={styles.summaryCol}>
           <Text style={styles.summaryLabel}>Con ETF ({lowCostTER}% TER):</Text>
-          <Text style={[styles.summaryVal, { color: '#00D166' }]}>€ {formatNumber(chartData.finalLow)}</Text>
+          <Text style={[styles.summaryVal, { color: colors.positive }]}>€ {formatNumber(chartData.finalLow)}</Text>
         </View>
         <View style={styles.summaryCol}>
           <Text style={styles.summaryLabel}>Con Fondo Banca ({highCostTER}% TER):</Text>
@@ -157,11 +157,11 @@ export const FeeDragComparisonChart: React.FC<FeeDragComparisonChartProps> = ({
         ))}
 
         {/* Shaded difference area (fee drag) */}
-        <Path d={chartData.diffAreaPath} fill="rgba(239, 68, 68, 0.15)" />
+        <Path d={chartData.diffAreaPath} fill={withAlpha(colors.negative, 0.15)} />
 
         {/* Lines */}
-        <Path d={chartData.lowPath} fill="none" stroke="#00D166" strokeWidth="3" />
-        <Path d={chartData.highPath} fill="none" stroke="#EF4444" strokeWidth="2.5" strokeDasharray="4 4" />
+        <Path d={chartData.lowPath} fill="none" stroke={colors.positive} strokeWidth="3" />
+        <Path d={chartData.highPath} fill="none" stroke={colors.negative} strokeWidth="2.5" strokeDasharray="4 4" />
 
         {/* X Axis bottom line */}
         <Line
@@ -229,17 +229,17 @@ const getStyles = (colors: ThemeColors) =>
       fontWeight: 'bold',
     },
     lossBadge: {
-      backgroundColor: 'rgba(239, 68, 68, 0.12)',
+      backgroundColor: withAlpha(colors.negative, 0.12),
       borderRadius: 8,
       marginHorizontal: 16,
       paddingVertical: 8,
       paddingHorizontal: 12,
       marginBottom: 12,
       borderWidth: 1,
-      borderColor: 'rgba(239, 68, 68, 0.3)',
+      borderColor: withAlpha(colors.negative, 0.3),
     },
     lossText: {
-      color: '#EF4444',
+      color: colors.negative,
       fontSize: 13,
       textAlign: 'center',
     },

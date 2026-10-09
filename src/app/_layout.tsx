@@ -120,7 +120,7 @@ function InnerLayout() {
                 }
               }}
             >
-              <Text style={{ color: '#000', fontSize: 18, fontWeight: 'bold' }}>Sblocca App</Text>
+              <Text style={{ color: colors.onAccent, fontSize: 18, fontWeight: 'bold' }}>Sblocca App</Text>
             </TouchableOpacity>
           </View>
         </ExpoThemeProvider>

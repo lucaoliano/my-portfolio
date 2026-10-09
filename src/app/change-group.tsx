@@ -202,7 +202,7 @@ export const ChangeGroupModal = () => {
           onPress={handleSave}
           disabled={saving}
         >
-          {saving ? <ActivityIndicator color="#000" /> : <Text style={styles.saveButtonText}>Salva Modifiche</Text>}
+          {saving ? <ActivityIndicator color={colors.onAccent} /> : <Text style={styles.saveButtonText}>Salva Modifiche</Text>}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -269,7 +269,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   createButtonText: {
-    color: '#000',
+    color: colors.onAccent,
     fontWeight: '600',
     fontSize: 16,
   },
@@ -307,7 +307,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   saveButtonText: {
-    color: '#000',
+    color: colors.onAccent,
     fontSize: 16,
     fontWeight: '600',
   }

@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, ChevronRight, ShieldCheck, CheckCircle2, AlertCircle, Cpu, Zap, Landmark } from 'lucide-react-native';
 import { useAppTheme } from '../../theme/ThemeContext';
-import { ThemeColors } from '../../theme/colors';
+import { ThemeColors, withAlpha } from '../../theme/colors';
 import { auth } from '../../config/firebase';
 import { subscribeScalableConfig } from '../../services/scalableMcp';
 import { ScalableMcpConfig } from '../../types';
@@ -73,8 +73,8 @@ export default function IntegrationsScreen() {
           >
             <View style={styles.cardHeader}>
               <View style={styles.brandRow}>
-                <View style={[styles.brandIconContainer, { backgroundColor: '#102A27' }]}>
-                  <Cpu size={24} color="#28EBCF" />
+                <View style={[styles.brandIconContainer, { backgroundColor: colors.scalableSurface }]}>
+                  <Cpu size={24} color={colors.scalable} />
                 </View>
                 <View style={{ marginLeft: 12, flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -89,12 +89,12 @@ export default function IntegrationsScreen() {
 
               <View style={styles.statusRow}>
                 {isScalableConnected ? (
-                  <View style={[styles.statusBadge, { backgroundColor: colors.positive + '20' }]}>
+                  <View style={[styles.statusBadge, { backgroundColor: withAlpha(colors.positive, 0.125) }]}>
                     <CheckCircle2 size={13} color={colors.positive} style={{ marginRight: 4 }} />
                     <Text style={[styles.statusText, { color: colors.positive }]}>Connesso</Text>
                   </View>
                 ) : isScalableError ? (
-                  <View style={[styles.statusBadge, { backgroundColor: colors.negative + '20' }]}>
+                  <View style={[styles.statusBadge, { backgroundColor: withAlpha(colors.negative, 0.125) }]}>
                     <AlertCircle size={13} color={colors.negative} style={{ marginRight: 4 }} />
                     <Text style={[styles.statusText, { color: colors.negative }]}>Attenzione</Text>
                   </View>
@@ -130,8 +130,8 @@ export default function IntegrationsScreen() {
         <View style={[styles.integrationCard, styles.cardDisabled]}>
           <View style={styles.cardHeader}>
             <View style={styles.brandRow}>
-              <View style={[styles.brandIconContainer, { backgroundColor: '#3A2E12' }]}>
-                <Landmark size={24} color="#F59E0B" />
+              <View style={[styles.brandIconContainer, { backgroundColor: colors.warningSurface }]}>
+                <Landmark size={24} color={colors.warning} />
               </View>
               <View style={{ marginLeft: 12, flex: 1 }}>
                 <Text style={styles.brandTitle}>Directa</Text>
@@ -151,8 +151,8 @@ export default function IntegrationsScreen() {
         <View style={[styles.integrationCard, styles.cardDisabled]}>
           <View style={styles.cardHeader}>
             <View style={styles.brandRow}>
-              <View style={[styles.brandIconContainer, { backgroundColor: '#1E293B' }]}>
-                <Landmark size={24} color="#60A5FA" />
+              <View style={[styles.brandIconContainer, { backgroundColor: colors.infoSurface }]}>
+                <Landmark size={24} color={colors.info} />
               </View>
               <View style={{ marginLeft: 12, flex: 1 }}>
                 <Text style={styles.brandTitle}>Interactive Brokers</Text>
@@ -257,7 +257,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.border,
   },
   cardActiveBorder: {
-    borderColor: '#28EBCF60',
+    borderColor: withAlpha(colors.scalable, 0.376),
   },
   cardDisabled: {
     opacity: 0.65,
@@ -291,7 +291,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 2,
   },
   mcpBadge: {
-    backgroundColor: '#28EBCF20',
+    backgroundColor: withAlpha(colors.scalable, 0.125),
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
@@ -300,7 +300,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   mcpBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#28EBCF',
+    color: colors.scalable,
   },
   statusRow: {
     flexDirection: 'row',

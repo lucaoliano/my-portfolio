@@ -217,32 +217,77 @@
       "gain-green-light": {
         "role": "primary",
         "displayName": "Gain Green Light",
-        "canonical": "#059669",
-        "tonalRamp": [
-          "#001700",
-          "#003511",
-          "#00552D",
-          "#00774C",
-          "#11996C",
-          "#48BE8E",
-          "#71E3B2",
-          "#98FFD6"
-        ]
+        "canonical": "#047857"
       },
       "loss-red-light": {
         "role": "secondary",
         "displayName": "Loss Red Light",
-        "canonical": "#DC2626",
-        "tonalRamp": [
-          "#340000",
-          "#590000",
-          "#7F060B",
-          "#A5342E",
-          "#CD584E",
-          "#F57C70",
-          "#FFA093",
-          "#FFC6B7"
-        ]
+        "canonical": "#B91C1C"
+      },
+      "scalable-surface": {
+        "role": "tertiary",
+        "displayName": "Scalable Surface",
+        "canonical": "#102A27"
+      },
+      "amber-surface": {
+        "role": "tertiary",
+        "displayName": "Amber Surface",
+        "canonical": "#3A2E12"
+      },
+      "loss-surface": {
+        "role": "secondary",
+        "displayName": "Loss Surface",
+        "canonical": "#37181C"
+      },
+      "info-blue": {
+        "role": "tertiary",
+        "displayName": "Info Blue",
+        "canonical": "#60A5FA"
+      },
+      "info-surface": {
+        "role": "tertiary",
+        "displayName": "Info Surface",
+        "canonical": "#1E293B"
+      },
+      "selection-navy": {
+        "role": "tertiary",
+        "displayName": "Selection Navy",
+        "canonical": "#004481"
+      },
+      "chart-invested": {
+        "role": "tertiary",
+        "displayName": "Chart Invested",
+        "canonical": "#E58E26"
+      },
+      "chart-growth": {
+        "role": "tertiary",
+        "displayName": "Chart Growth",
+        "canonical": "#7BC676"
+      },
+      "chart-withdrawal": {
+        "role": "tertiary",
+        "displayName": "Chart Withdrawal",
+        "canonical": "#A855F7"
+      },
+      "chart-contributions": {
+        "role": "tertiary",
+        "displayName": "Chart Contributions",
+        "canonical": "#3498DB"
+      },
+      "scalable-teal-light": {
+        "role": "tertiary",
+        "displayName": "Scalable Teal Light",
+        "canonical": "#0F766E"
+      },
+      "signal-amber-light": {
+        "role": "tertiary",
+        "displayName": "Signal Amber Light",
+        "canonical": "#B45309"
+      },
+      "info-blue-light": {
+        "role": "tertiary",
+        "displayName": "Info Blue Light",
+        "canonical": "#1D4ED8"
       }
     },
     "typographyMeta": {
@@ -372,6 +417,11 @@
         "section": "colors"
       },
       {
+        "name": "The Token-Only Rule",
+        "body": "Ogni colore arriva da `useAppTheme().colors` (`src/theme/colors.ts`); le trasparenze si ottengono con `withAlpha(colore, opacità)`, mai concatenando `'20'` a un hex. Unica eccezione: `shadowColor: '#000'`.",
+        "section": "colors"
+      },
+      {
         "name": "The No-Fake-Zero Rule",
         "body": "Un dato assente non si colora: se manca (es. variazione giornaliera non disponibile), il chip non viene mostrato, invece di un \"+0,00%\" verde.",
         "section": "colors"
@@ -398,7 +448,8 @@
       }
     ],
     "dos": [
-      "**Do** usare i token di `src/theme/colors.ts` tramite `useAppTheme()`, mai colori neutri scritti a mano.",
+      "**Do** usare i token di `src/theme/colors.ts` tramite `useAppTheme()` e `withAlpha` per le tinte, mai hex scritti a mano.",
+      "**Do** usare `MetricChip` per ogni chip di rendimento invece di ricostruirlo con View e Text.",
       "**Do** mettere `tabular-nums` su ogni importo e percentuale.",
       "**Do** formattare importi con `formatNumber` / `formatSignedCurrency`.",
       "**Do** tenere le azioni principali come pillole Gain Green a tutta larghezza con testo nero.",

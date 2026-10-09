@@ -117,7 +117,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.positive,
   },
   buttonTextPrimary: {
-    color: '#000',
+    color: colors.onAccent,
     fontSize: 14,
     fontWeight: '600',
   },

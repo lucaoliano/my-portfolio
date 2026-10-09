@@ -64,10 +64,10 @@ export const LoginScreen = () => {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#000" />
+            <ActivityIndicator color={colors.onAccent} />
           ) : (
             <>
-              <Mail size={20} color="#000" style={{ marginRight: 12 }} />
+              <Mail size={20} color={colors.onAccent} style={{ marginRight: 12 }} />
               <Text style={styles.loginButtonText}>Accedi con Google</Text>
             </>
           )}
@@ -121,7 +121,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   loginButtonText: {
-    color: '#000',
+    color: colors.onAccent,
     fontSize: 18,
     fontWeight: 'bold',
   },

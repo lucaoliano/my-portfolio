@@ -62,7 +62,7 @@ export default function SettingsScreen() {
                     void toggleBiometric(val);
                   }}
                   trackColor={{ false: colors.border, true: colors.positive }}
-                  thumbColor={'#fff'}
+                  thumbColor={colors.onStrong}
                 />
               </View>
             </View>

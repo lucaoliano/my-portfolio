@@ -294,7 +294,7 @@ export const ManageGroupsScreen = () => {
               onPress={handleAddNewGroup}
               disabled={!newGroup.trim() || saving}
             >
-              <Plus size={20} color="#000" />
+              <Plus size={20} color={colors.onAccent} />
             </TouchableOpacity>
           </View>
 

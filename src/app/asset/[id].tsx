@@ -1,4 +1,4 @@
-import { ThemeColors } from '../../theme/colors';
+import { ThemeColors, withAlpha } from '../../theme/colors';
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Modal, Pressable, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { collection, query, where, onSnapshot, doc, setDoc } from 'firebase/fire
 import { Transaction } from '../../types';
 import { formatNumber, formatDate, formatSignedCurrency, getCurrencySymbol } from '../../utils/formatters';
 import { CopyableText } from '../../components/CopyableText';
+import { MetricChip } from '../../components/MetricChip';
 import { calculateFifo } from '../../utils/portfolioAggregator';
 import { calculateTransactionsXIRR } from '../../utils/xirr';
 import { getQuotes, YahooQuote } from '../../services/yahooFinance';
@@ -234,11 +235,9 @@ export const AssetDetailsScreen = () => {
   }, [transactions, currentValue]);
 
   const isPositive = profitOrLoss >= 0;
-  const changeColor = isPositive ? colors.positive : colors.negative;
   const changeSign = isPositive ? '+' : '';
 
   const isDailyPositive = numericDailyChange >= 0;
-  const dailyChangeColor = isDailyPositive ? colors.positive : colors.negative;
   const dailyChangeSign = isDailyPositive ? '+' : '';
 
   const handleCopy = async () => {
@@ -278,24 +277,18 @@ export const AssetDetailsScreen = () => {
       <View style={styles.overview}>
         <CopyableText style={styles.overviewValue} valueToCopy={currentValue.toString()}>{currencySymbol}{formatNumber(currentValue)}</CopyableText>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <View style={[styles.changeContainer, { backgroundColor: changeColor + '20', marginRight: 8, marginBottom: 8 }]}>
-            <Text style={[styles.change, { color: changeColor }]}>
-              Tot: {formatSignedCurrency(profitOrLoss, currencySymbol)} ({changeSign}{formatNumber(profitOrLossPercent)}%)
-            </Text>
-          </View>
+          <MetricChip value={profitOrLoss} size="lg" style={{ marginRight: 8, marginBottom: 8 }}>
+            Tot: {formatSignedCurrency(profitOrLoss, currencySymbol)} ({changeSign}{formatNumber(profitOrLossPercent)}%)
+          </MetricChip>
           {assetXirr.annualizedPercent !== null && (
-            <View style={[styles.changeContainer, { backgroundColor: (assetXirr.annualizedPercent >= 0 ? colors.positive : colors.negative) + '20', marginRight: 8, marginBottom: 8 }]}>
-              <Text style={[styles.change, { color: assetXirr.annualizedPercent >= 0 ? colors.positive : colors.negative }]}>
-                Ann: {assetXirr.annualizedPercent >= 0 ? '+' : ''}{formatNumber(assetXirr.annualizedPercent)}%{assetXirr.isExtrapolated ? '*' : ''}
-              </Text>
-            </View>
+            <MetricChip value={assetXirr.annualizedPercent} size="lg" style={{ marginRight: 8, marginBottom: 8 }}>
+              Ann: {assetXirr.annualizedPercent >= 0 ? '+' : ''}{formatNumber(assetXirr.annualizedPercent)}%{assetXirr.isExtrapolated ? '*' : ''}
+            </MetricChip>
           )}
           {(numericDailyChange !== 0 || numericDailyChangePercent !== 0) && (
-            <View style={[styles.changeContainer, { backgroundColor: dailyChangeColor + '20', marginBottom: 8 }]}>
-              <Text style={[styles.change, { color: dailyChangeColor }]}>
-                Oggi: {formatSignedCurrency(numericDailyChange, currencySymbol)} ({dailyChangeSign}{formatNumber(numericDailyChangePercent)}%)
-              </Text>
-            </View>
+            <MetricChip value={numericDailyChange} size="lg" style={{ marginBottom: 8 }}>
+              Oggi: {formatSignedCurrency(numericDailyChange, currencySymbol)} ({dailyChangeSign}{formatNumber(numericDailyChangePercent)}%)
+            </MetricChip>
           )}
         </View>
         {assetXirr.isExtrapolated && assetXirr.annualizedPercent !== null && (
@@ -328,7 +321,7 @@ export const AssetDetailsScreen = () => {
             <View style={styles.alertHeaderRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                 <View style={styles.alertIconBadge}>
-                  <Bell size={13} color="#28EBCF" />
+                  <Bell size={13} color={colors.scalable} />
                 </View>
                 <Text style={styles.alertTitle}>Alert Scalable</Text>
                 <View style={[
@@ -340,7 +333,7 @@ export const AssetDetailsScreen = () => {
                   <Text style={[
                     styles.alertStatusText,
                     calc.statusBadge === 'triggered' && { color: colors.positive },
-                    calc.statusBadge === 'approaching' && { color: '#F59E0B' },
+                    calc.statusBadge === 'approaching' && { color: colors.warning },
                     calc.statusBadge === 'active' && { color: colors.textSecondary },
                   ]}>
                     {calc.statusLabel}
@@ -409,8 +402,8 @@ export const AssetDetailsScreen = () => {
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={styles.transactionDate}>{formatDate(item.date)}</Text>
                     {item.source === 'scalable_mcp' && (
-                      <View style={{ backgroundColor: '#28EBCF20', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 6 }}>
-                        <Text style={{ color: '#28EBCF', fontSize: 10, fontWeight: '700' }}>SCALABLE</Text>
+                      <View style={{ backgroundColor: withAlpha(colors.scalable, 0.125), borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 6 }}>
+                        <Text style={{ color: colors.scalable, fontSize: 10, fontWeight: '700' }}>SCALABLE</Text>
                       </View>
                     )}
                   </View>
@@ -524,15 +517,6 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 12,
   },
-  changeContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  change: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
   metricsRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,
@@ -618,7 +602,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -642,7 +626,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.border,
   },
   modalOptionSelected: {
-    backgroundColor: colors.primary + '20',
+    backgroundColor: withAlpha(colors.primary, 0.125),
     borderRadius: 8,
     borderBottomWidth: 0,
     marginBottom: 4,
@@ -665,7 +649,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#28EBCF30',
+    borderColor: withAlpha(colors.scalable, 0.188),
   },
   alertHeaderRow: {
     flexDirection: 'row',
@@ -674,7 +658,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: 6,
   },
   alertIconBadge: {
-    backgroundColor: '#28EBCF20',
+    backgroundColor: withAlpha(colors.scalable, 0.125),
     borderRadius: 6,
     padding: 4,
     marginRight: 6,
@@ -682,7 +666,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   alertTitle: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#28EBCF',
+    color: colors.scalable,
     marginRight: 8,
   },
   alertStatusBadge: {
@@ -691,10 +675,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 6,
   },
   alertStatusTriggered: {
-    backgroundColor: colors.positive + '20',
+    backgroundColor: withAlpha(colors.positive, 0.125),
   },
   alertStatusApproaching: {
-    backgroundColor: '#F59E0B20',
+    backgroundColor: withAlpha(colors.warning, 0.125),
   },
   alertStatusActive: {
     backgroundColor: colors.inputBackground,

@@ -10,14 +10,27 @@ colors:
   gain-green: "#00D166"
   loss-red: "#FF453A"
   scalable-teal: "#28EBCF"
+  scalable-surface: "#102A27"
   signal-amber: "#F59E0B"
+  amber-surface: "#3A2E12"
+  loss-surface: "#37181C"
+  info-blue: "#60A5FA"
+  info-surface: "#1E293B"
+  selection-navy: "#004481"
+  chart-invested: "#E58E26"
+  chart-growth: "#7BC676"
+  chart-withdrawal: "#A855F7"
+  chart-contributions: "#3498DB"
   paper-canvas: "#F9FAFB"
   paper-card: "#FFFFFF"
   paper-line: "#E5E7EB"
   slate-text: "#334155"
   slate-muted: "#64748B"
-  gain-green-light: "#059669"
-  loss-red-light: "#DC2626"
+  gain-green-light: "#047857"
+  loss-red-light: "#B91C1C"
+  scalable-teal-light: "#0F766E"
+  signal-amber-light: "#B45309"
+  info-blue-light: "#1D4ED8"
 typography:
   display:
     fontFamily: "system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif"
@@ -136,8 +149,13 @@ Un canvas neutro e scuro su cui solo i numeri accendono il colore.
 - **Loss Red** (loss-red): rendimento negativo, azioni distruttive (bordo e testo, mai riempimento), errori. Nel tema chiaro **Loss Red Light** (loss-red-light).
 
 ### Tertiary
-- **Scalable Teal** (scalable-teal): esclusivamente l'integrazione Scalable Capital: pulsante "Sincronizza", badge SCALABLE sulle transazioni, card della liquidità, chip "Scalable" nell'header.
-- **Signal Amber** (signal-amber): price alert in avvicinamento e avvisi non bloccanti.
+- **Scalable Teal** (scalable-teal, chiaro: scalable-teal-light): esclusivamente l'integrazione Scalable Capital: pulsante "Sincronizza", badge SCALABLE sulle transazioni, card della liquidità, chip "Scalable" nell'header. Su superficie piena usa scalable-surface.
+- **Signal Amber** (signal-amber, chiaro: signal-amber-light): price alert in avvicinamento e avvisi non bloccanti; superficie amber-surface.
+- **Info Blue** (info-blue, chiaro: info-blue-light): note e suggerimenti neutri; superficie info-surface.
+- **Selection Navy** (selection-navy): segmento selezionato nei controlli del calcolatore PAC, con testo bianco.
+
+### Chart Series
+- **Chart Invested / Growth / Withdrawal / Contributions**: le quattro serie dei grafici PAC (capitale versato, rendimento, prelievi, contributi). Nel tema chiaro hanno varianti più scure in `src/theme/colors.ts`.
 
 ### Neutral
 - **Night Canvas** (night-canvas): sfondo dell'app in tema scuro.
@@ -151,6 +169,8 @@ Un canvas neutro e scuro su cui solo i numeri accendono il colore.
 **The Meaning-Only Color Rule.** Verde e rosso compaiono solo per dire guadagno/perdita o confermare/distruggere. Un elemento colorato che non porta questo significato è un errore.
 
 **The Teal Belongs to Scalable Rule.** Il verde acqua identifica ciò che arriva dal broker. Non si usa come accento generico, link o stato di selezione.
+
+**The Token-Only Rule.** Ogni colore arriva da `useAppTheme().colors` (`src/theme/colors.ts`); le trasparenze si ottengono con `withAlpha(colore, opacità)`, mai concatenando `'20'` a un hex. Unica eccezione: `shadowColor: '#000'`.
 
 **The No-Fake-Zero Rule.** Un dato assente non si colora: se manca (es. variazione giornaliera non disponibile), il chip non viene mostrato, invece di un "+0,00%" verde.
 
@@ -210,7 +230,7 @@ Forme morbide e tattili. Card e gruppi a 16px, card interne e righe di menu a 12
 - **Disabled / Loading:** opacità 0.5–0.7; durante il caricamento lo spinner sostituisce l'etichetta.
 
 ### Chips
-- **Metric chip:** fondo del colore semantico al ~12% (suffisso `20` sull'hex), testo dello stesso colore a 11–12px, peso 700, cifre tabulari, raggio 6px. Formato "Tot: +€4.143,68 (+7,24%)".
+- **Metric chip** (`src/components/MetricChip.tsx`): il segno di `value` sceglie Gain Green o Loss Red; fondo al 12,5% dello stesso colore, testo a 11–12px peso 700, cifre tabulari. Taglie `sm` (header e gruppi, raggio 6px), `md` (righe titolo), `lg` (dettaglio titolo, raggio 8px). Il testo porta sempre il segno: "Tot: +€4.143,68 (+7,24%)".
 - **Source badge:** "SCALABLE" maiuscolo su fondo teal tenue accanto alla data della transazione.
 
 ### Cards / Containers
@@ -234,7 +254,8 @@ La riga titolo: avatar circolare con iniziali, nome su due righe, dettagli in As
 ## Do's and Don'ts
 
 ### Do:
-- **Do** usare i token di `src/theme/colors.ts` tramite `useAppTheme()`, mai colori neutri scritti a mano.
+- **Do** usare i token di `src/theme/colors.ts` tramite `useAppTheme()` e `withAlpha` per le tinte, mai hex scritti a mano.
+- **Do** usare `MetricChip` per ogni chip di rendimento invece di ricostruirlo con View e Text.
 - **Do** mettere `tabular-nums` su ogni importo e percentuale.
 - **Do** formattare importi con `formatNumber` / `formatSignedCurrency`.
 - **Do** tenere le azioni principali come pillole Gain Green a tutta larghezza con testo nero.

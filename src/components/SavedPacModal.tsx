@@ -13,7 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { X, Trash2, Download, Plus, Check, FileText, RefreshCw, AlertCircle } from 'lucide-react-native';
-import { ThemeColors } from '../theme/colors';
+import { ThemeColors, withAlpha } from '../theme/colors';
 import { useAppTheme } from '../theme/ThemeContext';
 import { formatNumber } from '../utils/formatters';
 import { PacParams, PacYearData, generatePacCsv } from '../utils/pacCalculator';
@@ -213,7 +213,7 @@ export const SavedPacModal: React.FC<SavedPacModalProps> = ({
           {/* Toast Notification */}
           {successMsg && (
             <View style={styles.toastCard}>
-              <Check size={16} color="#00D166" style={{ marginRight: 6 }} />
+              <Check size={16} color={colors.positive} style={{ marginRight: 6 }} />
               <Text style={styles.toastText}>{successMsg}</Text>
             </View>
           )}
@@ -224,12 +224,12 @@ export const SavedPacModal: React.FC<SavedPacModalProps> = ({
               style={styles.saveNewBtn}
               onPress={() => setIsSaving(!isSaving)}
             >
-              <Plus size={18} color="#FFF" style={{ marginRight: 6 }} />
+              <Plus size={18} color={colors.onStrong} style={{ marginRight: 6 }} />
               <Text style={styles.saveNewBtnText}>Salva Simulazione Attuale</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.csvBtn} onPress={handleExportCsv}>
-              {copied ? <Check size={18} color="#00D166" style={{ marginRight: 6 }} /> : <Download size={18} color={colors.text} style={{ marginRight: 6 }} />}
+              {copied ? <Check size={18} color={colors.positive} style={{ marginRight: 6 }} /> : <Download size={18} color={colors.text} style={{ marginRight: 6 }} />}
               <Text style={styles.csvBtnText}>{copied ? 'Copiato!' : 'Esporta CSV'}</Text>
             </TouchableOpacity>
           </View>
@@ -248,7 +248,7 @@ export const SavedPacModal: React.FC<SavedPacModalProps> = ({
               />
               {isNameExisting && (
                 <View style={styles.existingNameWarning}>
-                  <AlertCircle size={14} color="#F59E0B" style={{ marginRight: 4 }} />
+                  <AlertCircle size={14} color={colors.warning} style={{ marginRight: 4 }} />
                   <Text style={styles.existingNameWarningText}>
                     Esiste già un piano con questo nome: verrà sovrascritto.
                   </Text>
@@ -304,22 +304,22 @@ export const SavedPacModal: React.FC<SavedPacModalProps> = ({
                         {item.params.startingAge ? ` • Partenza ${item.params.startingAge}a` : ''}
                       </Text>
                       <Text style={styles.savedFinal}>
-                        Capitale stimato: <Text style={{ color: '#00D166', fontWeight: 'bold' }}>€ {formatNumber(item.finalBalance)}</Text>
+                        Capitale stimato: <Text style={{ color: colors.positive, fontWeight: 'bold' }}>€ {formatNumber(item.finalBalance)}</Text>
                       </Text>
                     </TouchableOpacity>
 
                     {/* Action buttons (Overwrite & Delete) */}
                     <View style={styles.itemActionGroup}>
                       <TouchableOpacity
-                        style={[styles.actionIconBtn, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}
+                        style={[styles.actionIconBtn, { backgroundColor: withAlpha(colors.info, 0.12) }]}
                         onPress={() => setOverwritingId(isOverwriting ? null : item.id)}
                         accessibilityLabel="Sovrascrivi"
                       >
-                        <RefreshCw size={17} color="#3B82F6" />
+                        <RefreshCw size={17} color={colors.info} />
                       </TouchableOpacity>
 
                       <TouchableOpacity
-                        style={[styles.actionIconBtn, { backgroundColor: 'rgba(239, 68, 68, 0.12)' }]}
+                        style={[styles.actionIconBtn, { backgroundColor: withAlpha(colors.negative, 0.12) }]}
                         onPress={() => handleDelete(item.id)}
                         accessibilityLabel="Elimina"
                       >
@@ -347,7 +347,7 @@ export const SavedPacModal: React.FC<SavedPacModalProps> = ({
                             style={styles.overwriteConfirmBtn}
                             onPress={() => handleConfirmOverwrite(item)}
                           >
-                            <RefreshCw size={14} color="#FFF" style={{ marginRight: 5 }} />
+                            <RefreshCw size={14} color={colors.onStrong} style={{ marginRight: 5 }} />
                             <Text style={styles.overwriteConfirmText}>Sovrascrivi</Text>
                           </TouchableOpacity>
                         </View>
@@ -368,7 +368,7 @@ const getStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     modalOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.6)',
+      backgroundColor: colors.overlay,
       justifyContent: 'flex-end',
     },
     modalContent: {
@@ -392,9 +392,9 @@ const getStyles = (colors: ThemeColors) =>
     toastCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(0, 209, 102, 0.12)',
+      backgroundColor: withAlpha(colors.positive, 0.12),
       borderWidth: 1,
-      borderColor: '#00D166',
+      borderColor: colors.positive,
       borderRadius: 8,
       paddingHorizontal: 12,
       paddingVertical: 8,
@@ -412,7 +412,7 @@ const getStyles = (colors: ThemeColors) =>
     },
     saveNewBtn: {
       flex: 1.2,
-      backgroundColor: '#004481',
+      backgroundColor: colors.selection,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -420,7 +420,7 @@ const getStyles = (colors: ThemeColors) =>
       borderRadius: 10,
     },
     saveNewBtnText: {
-      color: '#FFF',
+      color: colors.onStrong,
       fontSize: 13,
       fontWeight: 'bold',
     },
@@ -471,7 +471,7 @@ const getStyles = (colors: ThemeColors) =>
       marginBottom: 10,
     },
     existingNameWarningText: {
-      color: '#F59E0B',
+      color: colors.warning,
       fontSize: 11,
     },
     saveActionButtons: {
@@ -494,7 +494,7 @@ const getStyles = (colors: ThemeColors) =>
       borderRadius: 8,
     },
     confirmSaveBtnText: {
-      color: '#000',
+      color: colors.onAccent,
       fontSize: 13,
       fontWeight: 'bold',
     },
@@ -517,8 +517,8 @@ const getStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
     },
     savedCardOverwriting: {
-      borderColor: '#3B82F6',
-      backgroundColor: 'rgba(59, 130, 246, 0.05)',
+      borderColor: colors.info,
+      backgroundColor: withAlpha(colors.info, 0.05),
     },
     nameRow: {
       flexDirection: 'row',
@@ -564,7 +564,7 @@ const getStyles = (colors: ThemeColors) =>
       padding: 10,
       marginTop: 10,
       borderWidth: 1,
-      borderColor: '#3B82F6',
+      borderColor: colors.info,
     },
     overwritePromptTitle: {
       color: colors.text,
@@ -591,7 +591,7 @@ const getStyles = (colors: ThemeColors) =>
       fontSize: 12,
     },
     overwriteConfirmBtn: {
-      backgroundColor: '#3B82F6',
+      backgroundColor: colors.info,
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 6,
@@ -599,7 +599,7 @@ const getStyles = (colors: ThemeColors) =>
       borderRadius: 6,
     },
     overwriteConfirmText: {
-      color: '#FFFFFF',
+      color: colors.onStrong,
       fontSize: 12,
       fontWeight: 'bold',
     },

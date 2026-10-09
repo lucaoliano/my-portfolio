@@ -28,7 +28,7 @@ import {
 } from 'lucide-react-native';
 
 import { useAppTheme } from '../theme/ThemeContext';
-import { ThemeColors } from '../theme/colors';
+import { ThemeColors, withAlpha } from '../theme/colors';
 import { auth } from '../config/firebase';
 import { useTransactions } from '../hooks/useTransactions';
 import { useScalableTaxReport } from '../hooks/useScalableTaxReport';
@@ -121,15 +121,15 @@ export default function TaxReportScreen() {
           {/* Potential Tax Savings Card */}
           <View style={styles.kpiCard}>
             <View style={styles.kpiHeader}>
-              <ShieldCheck size={18} color="#10B981" />
-              <View style={[styles.badgeSource, { backgroundColor: '#10B98120' }]}>
-                <Text style={[styles.badgeSourceText, { color: '#10B981' }]}>
+              <ShieldCheck size={18} color={colors.positive} />
+              <View style={[styles.badgeSource, { backgroundColor: withAlpha(colors.positive, 0.125) }]}>
+                <Text style={[styles.badgeSourceText, { color: colors.positive }]}>
                   ALIQUOTA 26%
                 </Text>
               </View>
             </View>
             <Text style={styles.kpiLabel}>Credito Fiscale Potenziale</Text>
-            <Text style={[styles.kpiValue, { color: '#10B981' }]}>
+            <Text style={[styles.kpiValue, { color: colors.positive }]}>
               €{formatNumber(taxReport?.potentialTaxSavings || 0)}
             </Text>
             <Text style={styles.kpiSubtext}>Risparmio d&apos;imposta su future plusvalenze</Text>
@@ -139,7 +139,7 @@ export default function TaxReportScreen() {
         {/* Expiring Losses Alert Banner (if any) */}
         {hasExpiringLosses && (
           <View style={styles.urgentBanner}>
-            <AlertTriangle size={24} color="#F59E0B" style={{ marginRight: 12 }} />
+            <AlertTriangle size={24} color={colors.warning} style={{ marginRight: 12 }} />
             <View style={{ flex: 1 }}>
               <Text style={styles.urgentBannerTitle}>
                 Attenzione: Minusvalenze in Scadenza il 31/12/{currentYear}
@@ -158,8 +158,8 @@ export default function TaxReportScreen() {
           <View style={styles.currentYearCol}>
             <Text style={styles.stripLabel}>Plusvalenze Realizzate {currentYear}</Text>
             <View style={styles.stripRow}>
-              <ArrowUpRight size={14} color="#10B981" />
-              <Text style={[styles.stripValue, { color: '#10B981' }]}>
+              <ArrowUpRight size={14} color={colors.positive} />
+              <Text style={[styles.stripValue, { color: colors.positive }]}>
                 +€{formatNumber(taxReport?.realizedGainsCurrentYear || 0)}
               </Text>
             </View>
@@ -168,8 +168,8 @@ export default function TaxReportScreen() {
           <View style={styles.currentYearCol}>
             <Text style={styles.stripLabel}>Minusvalenze Realizzate {currentYear}</Text>
             <View style={styles.stripRow}>
-              <ArrowDownRight size={14} color="#EF4444" />
-              <Text style={[styles.stripValue, { color: '#EF4444' }]}>
+              <ArrowDownRight size={14} color={colors.negative} />
+              <Text style={[styles.stripValue, { color: colors.negative }]}>
                 -€{formatNumber(taxReport?.realizedLossesCurrentYear || 0)}
               </Text>
             </View>
@@ -179,16 +179,16 @@ export default function TaxReportScreen() {
             <Text style={styles.stripLabel}>Netto Realizzato</Text>
             <View style={styles.stripRow}>
               {(taxReport?.netRealizedCurrentYear || 0) >= 0 ? (
-                <TrendingUp size={14} color="#10B981" />
+                <TrendingUp size={14} color={colors.positive} />
               ) : (
-                <TrendingDown size={14} color="#EF4444" />
+                <TrendingDown size={14} color={colors.negative} />
               )}
               <Text
                 style={[
                   styles.stripValue,
                   {
                     color:
-                      (taxReport?.netRealizedCurrentYear || 0) >= 0 ? '#10B981' : '#EF4444',
+                      (taxReport?.netRealizedCurrentYear || 0) >= 0 ? colors.positive : colors.negative,
                   },
                 ]}
               >
@@ -270,7 +270,7 @@ export default function TaxReportScreen() {
               <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: 32 }} />
             ) : (taxReport?.buckets || []).length === 0 ? (
               <View style={styles.emptyCard}>
-                <CheckCircle2 size={36} color="#10B981" />
+                <CheckCircle2 size={36} color={colors.positive} />
                 <Text style={styles.emptyTitle}>Nessuna minusvalenza registrata</Text>
                 <Text style={styles.emptySubtitle}>
                   Non hai perdite fiscali pregresse da compensare o il tuo zainetto è vuoto.
@@ -336,8 +336,8 @@ export default function TaxReportScreen() {
               </View>
 
               <View style={styles.guideRow}>
-                <View style={[styles.guidePill, { backgroundColor: '#10B98120' }]}>
-                  <Text style={[styles.guidePillText, { color: '#10B981' }]}>COMPENSA</Text>
+                <View style={[styles.guidePill, { backgroundColor: withAlpha(colors.positive, 0.125) }]}>
+                  <Text style={[styles.guidePillText, { color: colors.positive }]}>COMPENSA</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.guideRowTitle}>Redditi Diversi</Text>
@@ -351,8 +351,8 @@ export default function TaxReportScreen() {
               <View style={styles.guideDivider} />
 
               <View style={styles.guideRow}>
-                <View style={[styles.guidePill, { backgroundColor: '#EF444420' }]}>
-                  <Text style={[styles.guidePillText, { color: '#EF4444' }]}>NON COMPENSA</Text>
+                <View style={[styles.guidePill, { backgroundColor: withAlpha(colors.negative, 0.125) }]}>
+                  <Text style={[styles.guidePillText, { color: colors.negative }]}>NON COMPENSA</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.guideRowTitle}>Redditi di Capitale (ETF UCITS & Cedole)</Text>
@@ -400,24 +400,24 @@ function BucketCard({
           style={[
             styles.statusPill,
             bucket.status === 'COMPENSATED'
-              ? { backgroundColor: '#10B98120' }
+              ? { backgroundColor: withAlpha(colors.positive, 0.125) }
               : bucket.status === 'EXPIRED'
-              ? { backgroundColor: '#6B728020' }
+              ? { backgroundColor: withAlpha(colors.textSecondary, 0.125) }
               : isExpiring
-              ? { backgroundColor: '#F59E0B20' }
-              : { backgroundColor: '#3B82F620' },
+              ? { backgroundColor: withAlpha(colors.warning, 0.125) }
+              : { backgroundColor: withAlpha(colors.info, 0.125) },
           ]}
         >
           <Text
             style={[
               styles.statusPillText,
               bucket.status === 'COMPENSATED'
-                ? { color: '#10B981' }
+                ? { color: colors.positive }
                 : bucket.status === 'EXPIRED'
-                ? { color: '#6B7280' }
+                ? { color: colors.textSecondary }
                 : isExpiring
-                ? { color: '#F59E0B' }
-                : { color: '#3B82F6' },
+                ? { color: colors.warning }
+                : { color: colors.info },
             ]}
           >
             {bucket.status === 'COMPENSATED'
@@ -439,7 +439,7 @@ function BucketCard({
 
         <View style={styles.bucketDetailItem}>
           <Text style={styles.bucketDetailLabel}>Compensato</Text>
-          <Text style={[styles.bucketDetailVal, { color: '#10B981' }]}>
+          <Text style={[styles.bucketDetailVal, { color: colors.positive }]}>
             €{formatNumber(bucket.compensatedAmount)}
           </Text>
         </View>
@@ -502,7 +502,7 @@ function TradeCard({
           <Text
             style={[
               styles.tradePnlValue,
-              { color: trade.realizedGainOrLoss >= 0 ? '#10B981' : '#EF4444' },
+              { color: trade.realizedGainOrLoss >= 0 ? colors.positive : colors.negative },
             ]}
           >
             {trade.realizedGainOrLoss >= 0 ? '+' : ''}€{formatNumber(trade.realizedGainOrLoss)}
@@ -510,7 +510,7 @@ function TradeCard({
           <Text
             style={[
               styles.tradePnlPercent,
-              { color: trade.realizedGainOrLoss >= 0 ? '#10B981' : '#EF4444' },
+              { color: trade.realizedGainOrLoss >= 0 ? colors.positive : colors.negative },
             ]}
           >
             {pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(2)}%
@@ -546,16 +546,16 @@ function TipCard({
     <View
       style={[
         styles.tipCard,
-        isHigh && { borderColor: '#F59E0B', borderWidth: 1.5 },
+        isHigh && { borderColor: colors.warning, borderWidth: 1.5 },
       ]}
     >
       <View style={styles.tipHeader}>
         {tip.type === 'EXPIRING_LOSSES' ? (
-          <AlertTriangle size={18} color="#F59E0B" />
+          <AlertTriangle size={18} color={colors.warning} />
         ) : tip.type === 'HARVESTING_OPPORTUNITY' ? (
           <Sparkles size={18} color={colors.primary} />
         ) : (
-          <Info size={18} color="#3B82F6" />
+          <Info size={18} color={colors.info} />
         )}
         <Text style={styles.tipTitle}>{tip.title}</Text>
       </View>
@@ -628,7 +628,7 @@ const getStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
     },
     kpiCardHighlight: {
-      borderColor: colors.primary + '50',
+      borderColor: withAlpha(colors.primary, 0.314),
     },
     kpiHeader: {
       flexDirection: 'row',
@@ -637,7 +637,7 @@ const getStyles = (colors: ThemeColors) =>
       marginBottom: 8,
     },
     badgeSource: {
-      backgroundColor: colors.primary + '20',
+      backgroundColor: withAlpha(colors.primary, 0.125),
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: 6,
@@ -666,8 +666,8 @@ const getStyles = (colors: ThemeColors) =>
     urgentBanner: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      backgroundColor: '#F59E0B15',
-      borderColor: '#F59E0B',
+      backgroundColor: withAlpha(colors.warning, 0.082),
+      borderColor: colors.warning,
       borderWidth: 1,
       borderRadius: 12,
       padding: 14,
@@ -676,7 +676,7 @@ const getStyles = (colors: ThemeColors) =>
     urgentBannerTitle: {
       fontSize: 14,
       fontWeight: '700',
-      color: '#D97706',
+      color: colors.warning,
       marginBottom: 4,
     },
     urgentBannerText: {
@@ -741,7 +741,7 @@ const getStyles = (colors: ThemeColors) =>
       gap: 6,
     },
     tabButtonActive: {
-      backgroundColor: colors.primary + '15',
+      backgroundColor: withAlpha(colors.primary, 0.082),
     },
     tabButtonText: {
       fontSize: 12,
@@ -775,7 +775,7 @@ const getStyles = (colors: ThemeColors) =>
       borderColor: colors.border,
     },
     bucketCardExpiring: {
-      borderColor: '#F59E0B',
+      borderColor: colors.warning,
       borderWidth: 1.5,
     },
     bucketTopRow: {
@@ -830,7 +830,7 @@ const getStyles = (colors: ThemeColors) =>
     },
     progressBar: {
       height: '100%',
-      backgroundColor: '#10B981',
+      backgroundColor: colors.positive,
       borderRadius: 3,
     },
     bucketFooterRow: {
@@ -944,7 +944,7 @@ const getStyles = (colors: ThemeColors) =>
     tipImpactBadge: {
       marginTop: 8,
       alignSelf: 'flex-start',
-      backgroundColor: '#10B98115',
+      backgroundColor: withAlpha(colors.positive, 0.082),
       paddingHorizontal: 8,
       paddingVertical: 3,
       borderRadius: 6,
@@ -952,7 +952,7 @@ const getStyles = (colors: ThemeColors) =>
     tipImpactText: {
       fontSize: 11,
       fontWeight: '700',
-      color: '#10B981',
+      color: colors.positive,
     },
     guideCard: {
       backgroundColor: colors.card,

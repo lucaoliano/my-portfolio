@@ -1,4 +1,4 @@
-import { ThemeColors } from '../theme/colors';
+import { ThemeColors, withAlpha } from '../theme/colors';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { signOut } from 'firebase/auth';
 import { useAppTheme } from '../theme/ThemeContext';
 import { formatNumber, formatSignedCurrency } from '../utils/formatters';
 import { AssetCard } from '../components/AssetCard';
+import { MetricChip } from '../components/MetricChip';
 import { PieChartComponent } from '../components/PieChartComponent';
 import { PortfolioSkeleton } from '../components/PortfolioSkeleton';
 import { CopyableText } from '../components/CopyableText';
@@ -426,15 +427,15 @@ export const PortfolioScreen = () => {
               activeOpacity={0.7}
             >
               {scalableSyncing ? (
-                <ActivityIndicator size={12} color="#28EBCF" style={{ marginRight: 5 }} />
+                <ActivityIndicator size={12} color={colors.scalable} style={{ marginRight: 5 }} />
               ) : scalableConfig?.status === 'expired' ? (
-                <AlertCircle size={12} color="#EF4444" style={{ marginRight: 5 }} />
+                <AlertCircle size={12} color={colors.negative} style={{ marginRight: 5 }} />
               ) : (
-                <RefreshCw size={12} color="#28EBCF" style={{ marginRight: 5 }} />
+                <RefreshCw size={12} color={colors.scalable} style={{ marginRight: 5 }} />
               )}
               <Text style={[
                 styles.scalableTopBarBtnText,
-                scalableConfig?.status === 'expired' && { color: '#EF4444' }
+                scalableConfig?.status === 'expired' && { color: colors.negative }
               ]}>
                 {scalableSyncing ? 'Sincronizzo...' : scalableConfig?.status === 'expired' ? 'Ricollega' : 'Scalable'}
               </Text>
@@ -468,11 +469,11 @@ export const PortfolioScreen = () => {
             activeOpacity={syncBanner.type === 'error' ? 0.7 : 1}
           >
             {syncBanner.type === 'syncing' ? (
-              <ActivityIndicator size="small" color="#28EBCF" style={{ marginRight: 10 }} />
+              <ActivityIndicator size="small" color={colors.scalable} style={{ marginRight: 10 }} />
             ) : syncBanner.type === 'success' ? (
-              <CheckCircle2 size={18} color="#10B981" style={{ marginRight: 10 }} />
+              <CheckCircle2 size={18} color={colors.positive} style={{ marginRight: 10 }} />
             ) : (
-              <AlertCircle size={18} color="#EF4444" style={{ marginRight: 10 }} />
+              <AlertCircle size={18} color={colors.negative} style={{ marginRight: 10 }} />
             )}
             <View style={{ flex: 1 }}>
               <Text style={styles.syncBannerText}>
@@ -516,25 +517,19 @@ export const PortfolioScreen = () => {
           {transactions.length > 0 && (
             <View style={{ flexDirection: 'column', alignItems: 'flex-start', marginTop: 12 }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
-                <View style={[styles.pill, { backgroundColor: (globalPL >= 0 ? colors.positive : colors.negative) + '20', marginRight: 8, marginBottom: 8 }]}>
-                  <Text style={[styles.pillText, { color: globalPL >= 0 ? colors.positive : colors.negative }]}>
+                <MetricChip value={globalPL} style={{ marginRight: 8, marginBottom: 8 }}>
                     Tot: {formatSignedCurrency(globalPL)} ({globalPL >= 0 ? '+' : ''}{formatNumber(globalPLPercent)}%)
-                  </Text>
-                </View>
+                </MetricChip>
                 {globalAnnualizedReturn !== undefined && globalAnnualizedReturn !== null && (
-                  <View style={[styles.pill, { backgroundColor: (globalAnnualizedReturn >= 0 ? colors.positive : colors.negative) + '20', marginRight: 8, marginBottom: 8 }]}>
-                    <Text style={[styles.pillText, { color: globalAnnualizedReturn >= 0 ? colors.positive : colors.negative }]}>
+                  <MetricChip value={globalAnnualizedReturn} style={{ marginRight: 8, marginBottom: 8 }}>
                       Ann: {globalAnnualizedReturn >= 0 ? '+' : ''}{formatNumber(globalAnnualizedReturn)}%{globalIsAnnualizedExtrapolated ? '*' : ''}
-                    </Text>
-                  </View>
+                  </MetricChip>
                 )}
                 {/* Nascosto se nessuna quotazione ha la variazione giornaliera (es. prezzi Scalable) */}
                 {(globalDailyChange !== 0 || globalDailyChangePercent !== 0) && (
-                  <View style={[styles.pill, { backgroundColor: (globalDailyChange >= 0 ? colors.positive : colors.negative) + '20', marginBottom: 8 }]}>
-                    <Text style={[styles.pillText, { color: globalDailyChange >= 0 ? colors.positive : colors.negative }]}>
+                  <MetricChip value={globalDailyChange} style={{ marginBottom: 8 }}>
                       Oggi: {formatSignedCurrency(globalDailyChange)} ({globalDailyChange >= 0 ? '+' : ''}{formatNumber(globalDailyChangePercent)}%)
-                    </Text>
-                  </View>
+                  </MetricChip>
                 )}
               </View>
               {globalIsAnnualizedExtrapolated && globalAnnualizedReturn !== null && (
@@ -555,7 +550,7 @@ export const PortfolioScreen = () => {
               <View style={styles.cashYieldHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                   <View style={styles.cashYieldIcon}>
-                    <Coins size={14} color="#28EBCF" />
+                    <Coins size={14} color={colors.scalable} />
                   </View>
                   <Text style={styles.cashYieldTitle}>Liquidità Scalable</Text>
                   <View style={styles.rateBadge}>
@@ -589,9 +584,9 @@ export const PortfolioScreen = () => {
                   disabled={scalableSyncing}
                 >
                   {scalableSyncing ? (
-                    <ActivityIndicator size={11} color="#28EBCF" style={{ marginRight: 4 }} />
+                    <ActivityIndicator size={11} color={colors.scalable} style={{ marginRight: 4 }} />
                   ) : (
-                    <RefreshCw size={11} color="#28EBCF" style={{ marginRight: 4 }} />
+                    <RefreshCw size={11} color={colors.scalable} style={{ marginRight: 4 }} />
                   )}
                   <Text style={styles.cashYieldSyncBtnText}>
                     {scalableSyncing ? 'Sincronizzo...' : 'Sincronizza ora'}
@@ -627,7 +622,7 @@ export const PortfolioScreen = () => {
                     styles.priceAlertBannerIcon,
                     triggeredAlerts.length > 0 ? styles.priceAlertBannerIconTriggered : styles.priceAlertBannerIconApproaching
                   ]}>
-                    <Bell size={14} color={triggeredAlerts.length > 0 ? '#10B981' : '#F59E0B'} />
+                    <Bell size={14} color={triggeredAlerts.length > 0 ? colors.positive : colors.warning} />
                   </View>
                   <Text style={styles.priceAlertBannerTitle}>
                     {triggeredAlerts.length > 0
@@ -714,24 +709,18 @@ export const PortfolioScreen = () => {
                   </View>
                   
                   <View style={styles.sectionMetricsRow}>
-                      <View style={[styles.pill, { backgroundColor: (group.profitOrLoss >= 0 ? colors.positive : colors.negative) + '20', marginRight: 8, marginBottom: 4 }]}>
-                        <Text style={[styles.pillText, { color: group.profitOrLoss >= 0 ? colors.positive : colors.negative }]}>
+                      <MetricChip value={group.profitOrLoss} style={{ marginRight: 8, marginBottom: 4 }}>
                           Tot: {formatSignedCurrency(group.profitOrLoss)} ({group.profitOrLoss >= 0 ? '+' : ''}{formatNumber(group.profitOrLossPercent)}%)
-                        </Text>
-                      </View>
+                      </MetricChip>
                       {group.annualizedReturn !== undefined && group.annualizedReturn !== null && (
-                        <View style={[styles.pill, { backgroundColor: (group.annualizedReturn >= 0 ? colors.positive : colors.negative) + '20', marginRight: 8, marginBottom: 4 }]}>
-                          <Text style={[styles.pillText, { color: group.annualizedReturn >= 0 ? colors.positive : colors.negative }]}>
+                        <MetricChip value={group.annualizedReturn} style={{ marginRight: 8, marginBottom: 4 }}>
                             Ann: {group.annualizedReturn >= 0 ? '+' : ''}{formatNumber(group.annualizedReturn)}%{group.isAnnualizedExtrapolated ? '*' : ''}
-                          </Text>
-                        </View>
+                        </MetricChip>
                       )}
                       {(group.dailyChange !== 0 || group.dailyChangePercent !== 0) && (
-                        <View style={[styles.pill, { backgroundColor: (group.dailyChange >= 0 ? colors.positive : colors.negative) + '20', marginBottom: 4 }]}>
-                          <Text style={[styles.pillText, { color: group.dailyChange >= 0 ? colors.positive : colors.negative }]}>
+                        <MetricChip value={group.dailyChange} style={{ marginBottom: 4 }}>
                             Oggi: {formatSignedCurrency(group.dailyChange)} ({group.dailyChange >= 0 ? '+' : ''}{formatNumber(group.dailyChangePercent)}%)
-                          </Text>
-                        </View>
+                        </MetricChip>
                       )}
                   </View>
                 </TouchableOpacity>
@@ -936,22 +925,22 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(40, 235, 207, 0.4)',
-    backgroundColor: 'rgba(40, 235, 207, 0.1)',
+    borderColor: withAlpha(colors.scalable, 0.4),
+    backgroundColor: withAlpha(colors.scalable, 0.1),
     marginRight: 10,
   },
   scalableTopBarBtnActive: {
-    borderColor: '#28EBCF',
-    backgroundColor: 'rgba(40, 235, 207, 0.2)',
+    borderColor: colors.scalable,
+    backgroundColor: withAlpha(colors.scalable, 0.2),
   },
   scalableTopBarBtnExpired: {
-    borderColor: 'rgba(239, 68, 68, 0.4)',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderColor: withAlpha(colors.negative, 0.4),
+    backgroundColor: withAlpha(colors.negative, 0.1),
   },
   scalableTopBarBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#28EBCF',
+    color: colors.scalable,
   },
   syncBanner: {
     marginHorizontal: 16,
@@ -966,16 +955,16 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'space-between',
   },
   syncBannerSyncing: {
-    backgroundColor: 'rgba(40, 235, 207, 0.1)',
-    borderColor: 'rgba(40, 235, 207, 0.35)',
+    backgroundColor: withAlpha(colors.scalable, 0.1),
+    borderColor: withAlpha(colors.scalable, 0.35),
   },
   syncBannerSuccess: {
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    borderColor: 'rgba(16, 185, 129, 0.35)',
+    backgroundColor: withAlpha(colors.positive, 0.12),
+    borderColor: withAlpha(colors.positive, 0.35),
   },
   syncBannerError: {
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    borderColor: 'rgba(239, 68, 68, 0.35)',
+    backgroundColor: withAlpha(colors.negative, 0.12),
+    borderColor: withAlpha(colors.negative, 0.35),
   },
   syncBannerText: {
     fontSize: 13,
@@ -986,13 +975,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    backgroundColor: withAlpha(colors.negative, 0.2),
     marginRight: 6,
   },
   syncRetryBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#EF4444',
+    color: colors.negative,
   },
   header: {
     flexDirection: 'row',
@@ -1087,16 +1076,6 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 8,
     justifyContent: 'flex-start',
   },
-  pill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  pillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
   reorderButton: {
     padding: 8,
     marginLeft: 8,
@@ -1105,7 +1084,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1136,7 +1115,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   drawerOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-start',
     alignItems: 'flex-start',
   },
@@ -1179,7 +1158,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 12,
     marginTop: 14,
     borderWidth: 1,
-    borderColor: '#28EBCF40',
+    borderColor: withAlpha(colors.scalable, 0.251),
   },
   cashYieldHeader: {
     flexDirection: 'row',
@@ -1191,7 +1170,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 6,
-    backgroundColor: '#28EBCF20',
+    backgroundColor: withAlpha(colors.scalable, 0.125),
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
@@ -1203,13 +1182,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginRight: 8,
   },
   rateBadge: {
-    backgroundColor: '#28EBCF20',
+    backgroundColor: withAlpha(colors.scalable, 0.125),
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
   },
   rateBadgeText: {
-    color: '#28EBCF',
+    color: colors.scalable,
     fontSize: 10,
     fontWeight: '700',
   },
@@ -1247,12 +1226,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
-    backgroundColor: 'rgba(40, 235, 207, 0.12)',
+    backgroundColor: withAlpha(colors.scalable, 0.12),
   },
   cashYieldSyncBtnText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#28EBCF',
+    color: colors.scalable,
   },
   priceAlertBanner: {
     backgroundColor: colors.card,
@@ -1262,10 +1241,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1,
   },
   priceAlertBannerTriggeredBorder: {
-    borderColor: '#10B98150',
+    borderColor: withAlpha(colors.positive, 0.314),
   },
   priceAlertBannerApproachingBorder: {
-    borderColor: '#F59E0B50',
+    borderColor: withAlpha(colors.warning, 0.314),
   },
   priceAlertBannerHeader: {
     flexDirection: 'row',
@@ -1282,10 +1261,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginRight: 8,
   },
   priceAlertBannerIconTriggered: {
-    backgroundColor: '#10B98120',
+    backgroundColor: withAlpha(colors.positive, 0.125),
   },
   priceAlertBannerIconApproaching: {
-    backgroundColor: '#F59E0B20',
+    backgroundColor: withAlpha(colors.warning, 0.125),
   },
   priceAlertBannerTitle: {
     fontSize: 13,

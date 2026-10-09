@@ -16,7 +16,7 @@ import {
   Scale
 } from 'lucide-react-native';
 import { useAppTheme } from '../theme/ThemeContext';
-import { ThemeColors } from '../theme/colors';
+import { ThemeColors, withAlpha } from '../theme/colors';
 import { PortfolioHealthCheckResult, HealthCheckRuleResult } from '../utils/portfolioHealthCheck';
 
 interface PortfolioHealthCheckCardProps {
@@ -42,9 +42,9 @@ export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> =
       case 'excellent':
         return colors.positive;
       case 'good':
-        return '#28EBCF';
+        return colors.scalable;
       case 'warning':
-        return '#F59E0B';
+        return colors.warning;
       case 'critical':
         return colors.negative;
     }
@@ -66,15 +66,15 @@ export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> =
   const renderRuleIcon = (category: HealthCheckRuleResult['category']) => {
     switch (category) {
       case 'concentration':
-        return <Scale size={16} color="#28EBCF" />;
+        return <Scale size={16} color={colors.scalable} />;
       case 'liquidity':
-        return <Coins size={16} color="#28EBCF" />;
+        return <Coins size={16} color={colors.scalable} />;
       case 'diversification':
-        return <PieChart size={16} color="#28EBCF" />;
+        return <PieChart size={16} color={colors.scalable} />;
       case 'rebalancing':
-        return <TrendingUp size={16} color="#28EBCF" />;
+        return <TrendingUp size={16} color={colors.scalable} />;
       case 'costs':
-        return <ShieldCheck size={16} color="#28EBCF" />;
+        return <ShieldCheck size={16} color={colors.scalable} />;
     }
   };
 
@@ -82,28 +82,28 @@ export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> =
     switch (status) {
       case 'PASS':
         return (
-          <View style={[styles.statusBadge, { backgroundColor: colors.positive + '20' }]}>
+          <View style={[styles.statusBadge, { backgroundColor: withAlpha(colors.positive, 0.125) }]}>
             <CheckCircle2 size={12} color={colors.positive} style={{ marginRight: 4 }} />
             <Text style={[styles.statusBadgeText, { color: colors.positive }]}>OTTIMALE</Text>
           </View>
         );
       case 'INFO':
         return (
-          <View style={[styles.statusBadge, { backgroundColor: '#3B82F620' }]}>
-            <Info size={12} color="#3B82F6" style={{ marginRight: 4 }} />
-            <Text style={[styles.statusBadgeText, { color: '#3B82F6' }]}>INFO</Text>
+          <View style={[styles.statusBadge, { backgroundColor: withAlpha(colors.info, 0.125) }]}>
+            <Info size={12} color={colors.info} style={{ marginRight: 4 }} />
+            <Text style={[styles.statusBadgeText, { color: colors.info }]}>INFO</Text>
           </View>
         );
       case 'WARNING':
         return (
-          <View style={[styles.statusBadge, { backgroundColor: '#F59E0B20' }]}>
-            <AlertTriangle size={12} color="#F59E0B" style={{ marginRight: 4 }} />
-            <Text style={[styles.statusBadgeText, { color: '#F59E0B' }]}>ATTENZIONE</Text>
+          <View style={[styles.statusBadge, { backgroundColor: withAlpha(colors.warning, 0.125) }]}>
+            <AlertTriangle size={12} color={colors.warning} style={{ marginRight: 4 }} />
+            <Text style={[styles.statusBadgeText, { color: colors.warning }]}>ATTENZIONE</Text>
           </View>
         );
       case 'ALERT':
         return (
-          <View style={[styles.statusBadge, { backgroundColor: colors.negative + '20' }]}>
+          <View style={[styles.statusBadge, { backgroundColor: withAlpha(colors.negative, 0.125) }]}>
             <AlertCircle size={12} color={colors.negative} style={{ marginRight: 4 }} />
             <Text style={[styles.statusBadgeText, { color: colors.negative }]}>CRITICO</Text>
           </View>
@@ -120,7 +120,7 @@ export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> =
         <View style={styles.headerTextContainer}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <View style={styles.iconCircle}>
-              <ShieldCheck size={18} color="#28EBCF" />
+              <ShieldCheck size={18} color={colors.scalable} />
             </View>
             <Text style={styles.cardTitle}>{title}</Text>
           </View>
@@ -128,10 +128,10 @@ export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> =
         </View>
 
         {/* Score Ring / Pill */}
-        <View style={[styles.scoreBadge, { borderColor: scoreColor + '60' }]}>
+        <View style={[styles.scoreBadge, { borderColor: withAlpha(scoreColor, 0.376) }]}>
           <Text style={[styles.scoreValue, { color: scoreColor }]}>{overallScore}</Text>
           <Text style={styles.scoreScale}>/100</Text>
-          <View style={[styles.scoreLevelPill, { backgroundColor: scoreColor + '20' }]}>
+          <View style={[styles.scoreLevelPill, { backgroundColor: withAlpha(scoreColor, 0.125) }]}>
             <Text style={[styles.scoreLevelText, { color: scoreColor }]}>{getLevelLabel()}</Text>
           </View>
         </View>
@@ -172,9 +172,9 @@ export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> =
           {expanded ? 'Nascondi analisi dettagliata' : 'Vedi analisi dettagliata (5 indicatori)'}
         </Text>
         {expanded ? (
-          <ChevronUp size={16} color="#28EBCF" />
+          <ChevronUp size={16} color={colors.scalable} />
         ) : (
-          <ChevronDown size={16} color="#28EBCF" />
+          <ChevronDown size={16} color={colors.scalable} />
         )}
       </TouchableOpacity>
 
@@ -210,7 +210,7 @@ export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> =
                   onPress={() => router.push(rule.actionRoute as Href)}
                 >
                   <Text style={styles.actionButtonText}>{rule.actionLabel}</Text>
-                  <ArrowRight size={14} color="#000" style={{ marginLeft: 4 }} />
+                  <ArrowRight size={14} color={colors.onAccent} style={{ marginLeft: 4 }} />
                 </TouchableOpacity>
               )}
             </View>
@@ -243,7 +243,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#28EBCF20',
+    backgroundColor: withAlpha(colors.scalable, 0.125),
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
@@ -296,7 +296,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 10,
     marginTop: 14,
     borderLeftWidth: 3,
-    borderLeftColor: '#28EBCF',
+    borderLeftColor: colors.scalable,
   },
   summaryText: {
     fontSize: 12,
@@ -341,7 +341,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   expandButtonText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#28EBCF',
+    color: colors.scalable,
     marginRight: 4,
   },
   rulesList: {
@@ -368,7 +368,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 6,
-    backgroundColor: '#28EBCF15',
+    backgroundColor: withAlpha(colors.scalable, 0.082),
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
@@ -407,7 +407,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 8,
     marginTop: 8,
     borderWidth: 1,
-    borderColor: '#28EBCF30',
+    borderColor: withAlpha(colors.scalable, 0.188),
   },
   recommendationText: {
     fontSize: 11,
@@ -418,7 +418,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#28EBCF',
+    backgroundColor: colors.scalable,
     borderRadius: 8,
     paddingVertical: 7,
     paddingHorizontal: 12,
@@ -428,6 +428,6 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   actionButtonText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#000',
+    color: colors.onAccent,
   },
 });
