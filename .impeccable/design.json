@@ -1,0 +1,415 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-09T19:29:37.351506Z",
+  "title": "Design System: My Portfolio",
+  "extensions": {
+    "colorMeta": {
+      "night-canvas": {
+        "role": "neutral",
+        "displayName": "Night Canvas",
+        "canonical": "#121212",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "graphite-card": {
+        "role": "neutral",
+        "displayName": "Graphite Card",
+        "canonical": "#1E1E1E",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "smoke-line": {
+        "role": "neutral",
+        "displayName": "Smoke Line",
+        "canonical": "#2C2C2C",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "mist-text": {
+        "role": "neutral",
+        "displayName": "Mist Text",
+        "canonical": "#F3F4F6",
+        "tonalRamp": [
+          "#0B0B0C",
+          "#242526",
+          "#414243",
+          "#606163",
+          "#818284",
+          "#A4A5A7",
+          "#C8C9CB",
+          "#EDEEF0"
+        ]
+      },
+      "ash-text": {
+        "role": "neutral",
+        "displayName": "Ash Text",
+        "canonical": "#9CA3AF",
+        "tonalRamp": [
+          "#070B13",
+          "#20252F",
+          "#3C424C",
+          "#5B626C",
+          "#7C838E",
+          "#9EA5B1",
+          "#C2CAD6",
+          "#E7EFFC"
+        ]
+      },
+      "gain-green": {
+        "role": "primary",
+        "displayName": "Gain Green",
+        "canonical": "#00D166",
+        "tonalRamp": [
+          "#001700",
+          "#003600",
+          "#00560A",
+          "#00772F",
+          "#249B50",
+          "#51BF72",
+          "#78E596",
+          "#9EFFBA"
+        ]
+      },
+      "loss-red": {
+        "role": "secondary",
+        "displayName": "Loss Red",
+        "canonical": "#FF453A",
+        "tonalRamp": [
+          "#340000",
+          "#590000",
+          "#7F0707",
+          "#A5352C",
+          "#CD594C",
+          "#F47C6E",
+          "#FFA191",
+          "#FFC6B5"
+        ]
+      },
+      "scalable-teal": {
+        "role": "tertiary",
+        "displayName": "Scalable Teal",
+        "canonical": "#28EBCF",
+        "tonalRamp": [
+          "#00180D",
+          "#003827",
+          "#005844",
+          "#007A64",
+          "#009E85",
+          "#00C2A8",
+          "#20E8CC",
+          "#60FFF1"
+        ]
+      },
+      "signal-amber": {
+        "role": "tertiary",
+        "displayName": "Signal Amber",
+        "canonical": "#F59E0B",
+        "tonalRamp": [
+          "#2C0000",
+          "#4E0300",
+          "#712A00",
+          "#954C00",
+          "#BA6E00",
+          "#E0921A",
+          "#FFB64D",
+          "#FFDC75"
+        ]
+      },
+      "paper-canvas": {
+        "role": "neutral",
+        "displayName": "Paper Canvas",
+        "canonical": "#F9FAFB",
+        "tonalRamp": [
+          "#0B0B0C",
+          "#242526",
+          "#414243",
+          "#606162",
+          "#818283",
+          "#A4A5A6",
+          "#C8C9CA",
+          "#EDEEEF"
+        ]
+      },
+      "paper-card": {
+        "role": "neutral",
+        "displayName": "Paper Card",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "paper-line": {
+        "role": "neutral",
+        "displayName": "Paper Line",
+        "canonical": "#E5E7EB",
+        "tonalRamp": [
+          "#0A0B0E",
+          "#242528",
+          "#404245",
+          "#5F6165",
+          "#808286",
+          "#A3A5A9",
+          "#C7C9CD",
+          "#ECEEF2"
+        ]
+      },
+      "slate-text": {
+        "role": "neutral",
+        "displayName": "Slate Text",
+        "canonical": "#334155",
+        "tonalRamp": [
+          "#020B1B",
+          "#192638",
+          "#354357",
+          "#536278",
+          "#74849A",
+          "#96A6BE",
+          "#B9CBE3",
+          "#DEF0FF"
+        ]
+      },
+      "slate-muted": {
+        "role": "neutral",
+        "displayName": "Slate Muted",
+        "canonical": "#64748B",
+        "tonalRamp": [
+          "#020B1C",
+          "#182639",
+          "#344358",
+          "#536279",
+          "#73849B",
+          "#95A6BF",
+          "#B9CBE4",
+          "#DEF0FF"
+        ]
+      },
+      "gain-green-light": {
+        "role": "primary",
+        "displayName": "Gain Green Light",
+        "canonical": "#059669",
+        "tonalRamp": [
+          "#001700",
+          "#003511",
+          "#00552D",
+          "#00774C",
+          "#11996C",
+          "#48BE8E",
+          "#71E3B2",
+          "#98FFD6"
+        ]
+      },
+      "loss-red-light": {
+        "role": "secondary",
+        "displayName": "Loss Red Light",
+        "canonical": "#DC2626",
+        "tonalRamp": [
+          "#340000",
+          "#590000",
+          "#7F060B",
+          "#A5342E",
+          "#CD584E",
+          "#F57C70",
+          "#FFA093",
+          "#FFC6B7"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Valore della posizione nel dettaglio titolo."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Bilancio totale in dashboard."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Nomi dei gruppi e titoli di sezione."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Nomi dei titoli, campi, pulsanti."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Etichette e dettagli secondari."
+      },
+      "metric": {
+        "displayName": "Metric",
+        "purpose": "Chip di rendimento, cifre tabulari."
+      }
+    },
+    "shadows": [
+      {
+        "name": "segment-lift",
+        "value": "0 2px 2px rgba(0,0,0,0.2)",
+        "purpose": "Segmento attivo di un controllo segmentato."
+      },
+      {
+        "name": "floating-soft",
+        "value": "0 2px 8px rgba(0,0,0,0.3)",
+        "purpose": "Banner e prompt fluttuanti."
+      }
+    ],
+    "motion": [
+      {
+        "name": "press-feedback",
+        "value": "opacity 0.7 on press (TouchableOpacity activeOpacity)",
+        "purpose": "Feedback al tocco di righe e pulsanti."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Azione principale di schermata: pillola verde a tutta larghezza.",
+      "html": "<button class=\"ds-btn-primary\">Salva Modifiche</button>",
+      "css": ".ds-btn-primary{font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;width:100%;height:50px;border:none;border-radius:25px;background:#00D166;color:#000;font-size:16px;font-weight:600;cursor:pointer;transition:filter .15s,transform .15s}.ds-btn-primary:hover{filter:brightness(1.08)}.ds-btn-primary:active{transform:scale(.98)}.ds-btn-primary:focus-visible{outline:2px solid #F3F4F6;outline-offset:2px}"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Azione distruttiva: contorno rosso, mai riempito.",
+      "html": "<button class=\"ds-btn-destructive\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 6h18\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/></svg>Elimina Transazione</button>",
+      "css": ".ds-btn-destructive{font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;width:100%;height:50px;display:flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid #FF453A;border-radius:25px;color:#FF453A;font-size:16px;font-weight:600;cursor:pointer;transition:background .15s}.ds-btn-destructive:hover{background:rgba(255,69,58,.08)}.ds-btn-destructive:focus-visible{outline:2px solid #FF453A;outline-offset:2px}"
+    },
+    {
+      "name": "Scalable Sync Button",
+      "kind": "button",
+      "refersTo": "button-scalable",
+      "description": "Azione legata all'integrazione Scalable, unico uso del teal.",
+      "html": "<button class=\"ds-btn-scalable\"><svg width=\"11\" height=\"11\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/></svg>Sincronizza ora</button>",
+      "css": ".ds-btn-scalable{font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border:none;border-radius:6px;background:rgba(40,235,207,.12);color:#28EBCF;font-size:11px;font-weight:600;cursor:pointer;transition:background .15s}.ds-btn-scalable:hover{background:rgba(40,235,207,.2)}.ds-btn-scalable:focus-visible{outline:2px solid #28EBCF;outline-offset:2px}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo tonale senza bordo con etichetta sopra.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Prezzo d'acquisto (unitario)</span><input class=\"ds-input\" value=\"84,88\" inputmode=\"decimal\"></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:8px;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif}.ds-field-label{color:#9CA3AF;font-size:14px}.ds-input{height:50px;padding:0 16px;border:none;border-radius:8px;background:#2C2C2C;color:#F3F4F6;font-size:16px;font-family:inherit;outline:none;transition:box-shadow .15s}.ds-input:focus-visible{box-shadow:0 0 0 2px #00D166}"
+    },
+    {
+      "name": "Metric Chips",
+      "kind": "chip",
+      "refersTo": "chip-metric-gain",
+      "description": "Chip di rendimento colorati per segno, cifre tabulari.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-chip ds-chip-gain\">Tot: +€4.143,68 (+7,24%)</span><span class=\"ds-chip ds-chip-gain\">Ann: +11,22%*</span><span class=\"ds-chip ds-chip-loss\">Tot: -€196,31 (-5,55%)</span></div>",
+      "css": ".ds-chips{display:flex;flex-wrap:wrap;gap:8px;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif}.ds-chip{padding:2px 6px;border-radius:6px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}.ds-chip-gain{background:rgba(0,209,102,.125);color:#00D166}.ds-chip-loss{background:rgba(255,69,58,.125);color:#FF453A}"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "custom",
+      "refersTo": "segmented-control",
+      "description": "Scelta Acquisto/Vendita; segmento attivo sollevato.",
+      "html": "<div class=\"ds-seg\" role=\"tablist\"><button class=\"ds-seg-btn ds-seg-active\" role=\"tab\" aria-selected=\"true\">Acquisto</button><button class=\"ds-seg-btn\" role=\"tab\" aria-selected=\"false\">Vendita</button></div>",
+      "css": ".ds-seg{display:flex;padding:4px;border-radius:8px;background:#2C2C2C;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif}.ds-seg-btn{flex:1;padding:10px 0;border:none;border-radius:6px;background:transparent;color:#9CA3AF;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s,color .15s}.ds-seg-btn:hover{color:#F3F4F6}.ds-seg-active{background:#1E1E1E;color:#F3F4F6;box-shadow:0 2px 2px rgba(0,0,0,.2)}.ds-seg-btn:focus-visible{outline:2px solid #F3F4F6;outline-offset:1px}"
+    },
+    {
+      "name": "Asset Row",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Riga titolo firma: avatar con iniziali, nome, dettagli, valore e rendimento.",
+      "html": "<div class=\"ds-row\" tabindex=\"0\"><div class=\"ds-avatar\">IG</div><div class=\"ds-row-main\"><div class=\"ds-row-name\">Invesco Global Active ESG Equity (Acc)</div><div class=\"ds-row-detail\">41 quote · PM €84,88</div><div class=\"ds-row-detail\">Attuale €99,14</div></div><div class=\"ds-row-side\"><div class=\"ds-row-value\">€4.064,54</div><span class=\"ds-row-chip\">+€584,46 (+16,79%)</span><div class=\"ds-row-sub\">Ann. +28,15%*</div></div></div>",
+      "css": ".ds-row{display:flex;align-items:center;gap:12px;padding:16px;background:#1E1E1E;border-radius:16px;font-family:system-ui, -apple-system, 'SF Pro Text', Roboto, sans-serif;color:#F3F4F6;cursor:pointer;transition:opacity .15s}.ds-row:hover{opacity:.85}.ds-row:focus-visible{outline:2px solid #F3F4F6;outline-offset:2px}.ds-avatar{flex:none;width:48px;height:48px;border-radius:50%;background:#2C2C2C;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}.ds-row-main{flex:1;min-width:0}.ds-row-name{font-size:15px;font-weight:600;line-height:20px;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.ds-row-detail{color:#9CA3AF;font-size:12px;line-height:17px;font-variant-numeric:tabular-nums}.ds-row-side{display:flex;flex-direction:column;align-items:flex-end;font-variant-numeric:tabular-nums}.ds-row-value{font-size:16px;font-weight:600;margin-bottom:6px}.ds-row-chip{padding:3px 6px;border-radius:6px;background:rgba(0,209,102,.125);color:#00D166;font-size:12px;font-weight:700}.ds-row-sub{margin-top:6px;color:#00D166;font-size:11px;font-weight:600}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Il Cruscotto Tascabile",
+    "overview": "Un cruscotto che sta in tasca: si apre dall'iPhone, si legge in tre secondi, si richiude. La domanda \"come sto andando?\" ha sempre la risposta più grande dello schermo: il bilancio totale in alto, poi il rendimento in colore, poi i dettagli a un tocco. Tutto il resto (analisi, fiscalità, PAC) vive un livello sotto e non compete con la risposta principale.\n\nIl mondo è scuro per default (canvas quasi nero, card grafite a strati) con un tema chiaro equivalente. Il colore è informazione: verde e rosso dicono guadagno e perdita, il verde acqua dice \"viene da Scalable\", l'ambra dice \"attenzione\". Nessun colore è decorativo. La forma è morbida e tattile: angoli generosi, pulsanti a pillola, card arrotondate che si toccano con il pollice.\n\nLa densità è alta ma ordinata: molti numeri per schermata, sempre in cifre tabulari e allineati a destra, con le etichette in grigio cenere e i valori in bianco nebbia.",
+    "keyCharacteristics": [
+      "Scuro di default, tema chiaro con gli stessi ruoli.",
+      "Il colore codifica significato (guadagno, perdita, fonte, allerta), mai decorazione.",
+      "Cifre tabulari ovunque ci siano importi o percentuali.",
+      "Forme morbide: card a 16px, campi a 8px, pulsanti principali a pillola.",
+      "Font di sistema (SF Pro su iPhone): si sente nativo nella PWA installata."
+    ],
+    "rules": [
+      {
+        "name": "The Meaning-Only Color Rule",
+        "body": "Verde e rosso compaiono solo per dire guadagno/perdita o confermare/distruggere. Un elemento colorato che non porta questo significato è un errore.",
+        "section": "colors"
+      },
+      {
+        "name": "The Teal Belongs to Scalable Rule",
+        "body": "Il verde acqua identifica ciò che arriva dal broker. Non si usa come accento generico, link o stato di selezione.",
+        "section": "colors"
+      },
+      {
+        "name": "The No-Fake-Zero Rule",
+        "body": "Un dato assente non si colora: se manca (es. variazione giornaliera non disponibile), il chip non viene mostrato, invece di un \"+0,00%\" verde.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Figures Rule",
+        "body": "Ogni importo o percentuale usa cifre tabulari (`fontVariant: ['tabular-nums']`), così le colonne di numeri restano allineate.",
+        "section": "typography"
+      },
+      {
+        "name": "The Locale Number Rule",
+        "body": "Gli importi passano sempre da `formatNumber` / `formatSignedCurrency`: separatore delle migliaia forzato, segno prima della valuta (\"-€231,88\"), mai `toFixed` a mano.",
+        "section": "typography"
+      },
+      {
+        "name": "The Answer-First Rule",
+        "body": "In ogni schermata il numero che risponde alla domanda principale è l'elemento più grande e sta in alto; i chip di rendimento lo seguono subito sotto.",
+        "section": "layout"
+      },
+      {
+        "name": "The Tonal-First Rule",
+        "body": "Per separare due superfici si cambia tono o si aggiunge un bordo smoke-line da 1px; l'ombra è riservata a ciò che si muove o fluttua.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** usare i token di `src/theme/colors.ts` tramite `useAppTheme()`, mai colori neutri scritti a mano.",
+      "**Do** mettere `tabular-nums` su ogni importo e percentuale.",
+      "**Do** formattare importi con `formatNumber` / `formatSignedCurrency`.",
+      "**Do** tenere le azioni principali come pillole Gain Green a tutta larghezza con testo nero.",
+      "**Do** dichiarare stime ed estrapolazioni con asterisco e nota in Ash Text (come lo XIRR sotto l'anno)."
+    ],
+    "donts": [
+      "**Don't** usare Scalable Teal fuori da ciò che riguarda l'integrazione Scalable.",
+      "**Don't** mostrare un dato mancante come zero colorato.",
+      "**Don't** usare bianco o nero puro per testo o sfondi del tema (eccezione: il testo nero sui pulsanti Gain Green).",
+      "**Don't** impilare più di un chip colorato per riga titolo: il rendimento totale ha il chip, le altre metriche vanno in testo secondario.",
+      "**Don't** troncare un ISIN o un ticker in un avatar (\"IE0…\"): usare le iniziali del nome."
+    ]
+  }
+}
