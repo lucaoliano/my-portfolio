@@ -54,13 +54,101 @@ export const calculateFifo = (transactions: Transaction[]): {
 
 /** Le quotazioni Scalable non hanno la variazione giornaliera: uno 0 lì non è un dato reale. */
 const isDailyChangeReliable = (quote: YahooQuote | undefined): boolean =>
-  !!quote && quote.hasDailyChange !== false && quote.source !== 'scalable';
+  !!quote && quote.hasDailyChange === true;
+
+/** Tassi di conversione verso l'euro: 1 unità di valuta = rate EUR. */
+export type FxRates = Record<string, number>;
+
+const BASE_CURRENCY = 'EUR';
+
+const emptyGroup = (groupName: string): GroupedPortfolio => ({
+  groupName,
+  totalInvested: 0,
+  currentTotalValue: 0,
+  profitOrLoss: 0,
+  profitOrLossPercent: 0,
+  dailyChange: 0,
+  dailyChangePercent: 0,
+  assets: [],
+  dailyCoverage: { withData: 0, total: 0 },
+  missingPriceCount: 0,
+  fxMissingCount: 0,
+});
+
+/** Valuta della posizione: le transazioni Scalable sono sempre in euro. */
+const resolveCurrency = (txList: Transaction[], quote: YahooQuote | undefined): string =>
+  txList.some(t => t.source === 'scalable_mcp')
+    ? BASE_CURRENCY
+    : (txList.find(t => t.currency)?.currency || quote?.currency || BASE_CURRENCY).toUpperCase();
+
+const rateFor = (currency: string, fxRates: FxRates): number | null =>
+  currency === BASE_CURRENCY ? 1 : (fxRates[currency] ?? null);
+
+/** Converte i prezzi delle transazioni in euro per l'XIRR di insiemi con valute miste. */
+const toBaseCurrency = (txs: Transaction[], rate: number): Transaction[] =>
+  rate === 1 ? txs : txs.map(t => ({ ...t, purchasePrice: (Number(t.purchasePrice) || 0) * rate }));
+
+interface PositionValuation {
+  asset: AggregatedAsset;
+  /** null = cambio non disponibile: la posizione resta fuori dai totali in euro */
+  rate: number | null;
+}
+
+const valuePosition = (
+  symbol: string,
+  txList: Transaction[],
+  quotes: Record<string, YahooQuote>,
+  assetCategories: Record<string, string>,
+  fxRates: FxRates
+): PositionValuation => {
+  const { totalQuantity, totalInvested, averagePrice } = calculateFifo(txList);
+  const isin = txList.find(t => t.isin)?.isin;
+  const quote = quotes[symbol] || (isin ? quotes[isin] : undefined);
+  const latestNamedTx = [...txList].reverse().find(t => t.name);
+  const currency = resolveCurrency(txList, quote);
+  const rate = rateFor(currency, fxRates);
+
+  const hasPrice = !!quote?.regularMarketPrice && quote.regularMarketPrice > 0;
+  const hasDailyChange = hasPrice && isDailyChangeReliable(quote);
+  // Senza quotazione il titolo resta valutato al costo, ma viene segnalato (hasPrice = false):
+  // mai un prezzo inventato mostrato come reale.
+  const currentPrice = hasPrice ? quote!.regularMarketPrice : averagePrice;
+  const currentTotalValue = totalQuantity * currentPrice;
+  const profitOrLoss = currentTotalValue - totalInvested;
+
+  const xirr = calculateTransactionsXIRR(txList, currentTotalValue);
+
+  return {
+    rate,
+    asset: {
+      symbol,
+      name: latestNamedTx?.name || quote?.longName || quote?.shortName || symbol,
+      totalQuantity,
+      averagePrice,
+      totalInvested,
+      currentPrice,
+      currentTotalValue,
+      profitOrLoss,
+      profitOrLossPercent: totalInvested > 0 ? (profitOrLoss / totalInvested) * 100 : 0,
+      dailyChange: hasDailyChange ? totalQuantity * (quote!.regularMarketChange || 0) : 0,
+      dailyChangePercent: hasDailyChange ? quote!.regularMarketChangePercent || 0 : 0,
+      currency,
+      category: assetCategories[symbol] || (isin ? assetCategories[isin] : undefined) || 'Altro',
+      annualizedReturn: xirr.annualizedPercent,
+      isAnnualizedExtrapolated: xirr.isExtrapolated,
+      hasPrice,
+      hasDailyChange,
+      valueInBase: rate !== null ? currentTotalValue * rate : null,
+    },
+  };
+};
 
 export const calculatePortfolioAggregation = (
   transactions: Transaction[],
   quotes: Record<string, YahooQuote>,
   assetCategories: Record<string, string>,
-  settings: UserSettings | null
+  settings: UserSettings | null,
+  fxRates: FxRates = {}
 ): {
   groupedData: GroupedPortfolio[];
   globalTotalValue: number;
@@ -73,218 +161,124 @@ export const calculatePortfolioAggregation = (
   globalIsAnnualizedExtrapolated: boolean;
   /** Simboli senza quotazione, valutati al prezzo medio di carico */
   missingPriceSymbols: string[];
+  /** Simboli in valuta estera senza cambio disponibile: esclusi dai totali in euro */
+  fxMissingSymbols: string[];
   globalDailyCoverage: Coverage;
-  /** Un titolo per simbolo su tutte le transazioni: una transazione in più gruppi conta una volta */
+  /** Un titolo per simbolo su tutte le transazioni, valori in euro: una transazione in più gruppi conta una volta */
   globalAssets: AggregatedAsset[];
+  /** Almeno un rendimento annuo mostrato (globale, gruppo o titolo) è una stima su meno di un anno */
+  hasExtrapolatedAnnualized: boolean;
 } => {
   const groupsMap: Record<string, GroupedPortfolio> = {};
-
-  if (settings && settings.groups) {
-    settings.groups.forEach(g => {
-      groupsMap[g] = {
-        groupName: g,
-        totalInvested: 0,
-        currentTotalValue: 0,
-        profitOrLoss: 0,
-        profitOrLossPercent: 0,
-        dailyChange: 0,
-        dailyChangePercent: 0,
-        assets: [],
-        dailyCoverage: { withData: 0, total: 0 },
-        missingPriceCount: 0,
-      };
-    });
-  }
+  settings?.groups?.forEach(g => {
+    groupsMap[g] = emptyGroup(g);
+  });
 
   const groupTxs: Record<string, Record<string, Transaction[]>> = {};
   const globalTxs: Record<string, Transaction[]> = {};
 
   transactions.forEach(tx => {
     const txGroups = tx.groups || (tx.group ? [tx.group] : ['Generale']);
-
     txGroups.forEach(gName => {
-      if (!groupsMap[gName]) {
-        groupsMap[gName] = {
-          groupName: gName,
-          totalInvested: 0,
-          currentTotalValue: 0,
-          profitOrLoss: 0,
-          profitOrLossPercent: 0,
-          dailyChange: 0,
-          dailyChangePercent: 0,
-          assets: [],
-          dailyCoverage: { withData: 0, total: 0 },
-          missingPriceCount: 0,
-        };
-      }
-
-      if (!groupTxs[gName]) {
-        groupTxs[gName] = {};
-      }
-      if (!groupTxs[gName][tx.symbol]) {
-        groupTxs[gName][tx.symbol] = [];
-      }
+      if (!groupsMap[gName]) groupsMap[gName] = emptyGroup(gName);
+      groupTxs[gName] = groupTxs[gName] || {};
+      groupTxs[gName][tx.symbol] = groupTxs[gName][tx.symbol] || [];
       groupTxs[gName][tx.symbol].push(tx);
     });
-
-    if (!globalTxs[tx.symbol]) {
-      globalTxs[tx.symbol] = [];
-    }
+    globalTxs[tx.symbol] = globalTxs[tx.symbol] || [];
     globalTxs[tx.symbol].push(tx);
   });
 
-  // Calculate FIFO and prepare assets for each group
-  Object.keys(groupsMap).forEach(gName => {
-    const groupAssetsMap = groupTxs[gName] || {};
+  let hasExtrapolatedAnnualized = false;
 
-    Object.entries(groupAssetsMap).forEach(([symbol, txList]) => {
-      const { totalQuantity, totalInvested, averagePrice } = calculateFifo(txList);
-      const isin = txList.find(t => t.isin)?.isin;
-      const quote = quotes[symbol] || (isin ? quotes[isin] : undefined);
-      const latestNamedTx = [...txList].reverse().find(t => t.name);
-
-      const asset: AggregatedAsset = {
-        symbol,
-        name: latestNamedTx?.name || quote?.longName || quote?.shortName || symbol,
-        totalQuantity,
-        averagePrice,
-        totalInvested,
-        currentPrice: 0,
-        currentTotalValue: 0,
-        profitOrLoss: 0,
-        profitOrLossPercent: 0,
-        dailyChange: 0,
-        dailyChangePercent: 0,
-        currency: (txList.some(t => t.source === 'scalable_mcp' || t.currency === 'EUR') 
-          ? 'EUR' 
-          : (txList.find(t => t.currency)?.currency || quote?.currency || 'EUR')),
-        category: assetCategories[symbol] || (isin ? assetCategories[isin] : undefined) || 'Altro',
-        hasPrice: false,
-        hasDailyChange: false,
-      };
-
-      groupsMap[gName].assets.push(asset);
-    });
-  });
-
-  // Now compute current values, totals, and XIRR for groups and their assets
+  // Gruppi: i valori dei titoli restano nella loro valuta, i totali del gruppo sono in euro
   Object.values(groupsMap).forEach(g => {
     const groupAssetsMap = groupTxs[g.groupName] || {};
+    const groupXirrTxs: Transaction[] = [];
 
-    g.assets.forEach(asset => {
-      const assetTxs = groupAssetsMap[asset.symbol] || [];
-      const isin = assetTxs.find(t => t.isin)?.isin;
-      const quote = quotes[asset.symbol] || (isin ? quotes[isin] : undefined);
-      const hasPrice = !!quote?.regularMarketPrice && quote.regularMarketPrice > 0;
-      const hasDailyChange = hasPrice && isDailyChangeReliable(quote);
-      // Senza quotazione il titolo resta valutato al costo, ma viene segnalato (hasPrice = false):
-      // mai un prezzo inventato mostrato come reale.
-      const currentPrice = hasPrice ? quote!.regularMarketPrice : asset.averagePrice;
-      const dailyChangePercent = hasDailyChange ? quote!.regularMarketChangePercent || 0 : 0;
-      const dailyChangeAbs = hasDailyChange ? quote!.regularMarketChange || 0 : 0;
+    Object.entries(groupAssetsMap).forEach(([symbol, txList]) => {
+      const { asset, rate } = valuePosition(symbol, txList, quotes, assetCategories, fxRates);
+      g.assets.push(asset);
+      if (asset.isAnnualizedExtrapolated && asset.annualizedReturn !== null) hasExtrapolatedAnnualized = true;
+      if (asset.totalQuantity <= 0) return;
 
-      asset.hasPrice = hasPrice;
-      asset.hasDailyChange = hasDailyChange;
-      asset.currentPrice = currentPrice;
-      asset.currentTotalValue = asset.totalQuantity * currentPrice;
-      asset.profitOrLoss = asset.currentTotalValue - asset.totalInvested;
-      asset.profitOrLossPercent = asset.totalInvested > 0 ? (asset.profitOrLoss / asset.totalInvested) * 100 : 0;
-      asset.dailyChange = asset.totalQuantity * dailyChangeAbs;
-      asset.dailyChangePercent = dailyChangePercent;
-
-      // Calculate XIRR for individual asset in this group
-      const assetXirr = calculateTransactionsXIRR(assetTxs, asset.currentTotalValue);
-      asset.annualizedReturn = assetXirr.annualizedPercent;
-      asset.isAnnualizedExtrapolated = assetXirr.isExtrapolated;
-      
-      g.totalInvested += asset.totalInvested;
-      g.currentTotalValue += asset.currentTotalValue;
-      g.dailyChange += asset.dailyChange;
-      if (asset.totalQuantity > 0) {
-        g.dailyCoverage.total += 1;
-        if (hasDailyChange) g.dailyCoverage.withData += 1;
-        if (!hasPrice) g.missingPriceCount += 1;
+      g.dailyCoverage.total += 1;
+      if (!asset.hasPrice) g.missingPriceCount += 1;
+      if (rate === null) {
+        g.fxMissingCount += 1;
+        return;
       }
+      if (asset.hasDailyChange) g.dailyCoverage.withData += 1;
+      g.totalInvested += asset.totalInvested * rate;
+      g.currentTotalValue += asset.currentTotalValue * rate;
+      g.dailyChange += asset.dailyChange * rate;
+      groupXirrTxs.push(...toBaseCurrency(txList, rate));
     });
-    
+
     g.profitOrLoss = g.currentTotalValue - g.totalInvested;
     g.profitOrLossPercent = g.totalInvested > 0 ? (g.profitOrLoss / g.totalInvested) * 100 : 0;
     g.dailyChangePercent = g.currentTotalValue - g.dailyChange > 0
       ? (g.dailyChange / (g.currentTotalValue - g.dailyChange)) * 100
       : 0;
 
-    // Calculate XIRR for group
-    const allGroupTxs: Transaction[] = [];
-    Object.values(groupAssetsMap).forEach(list => allGroupTxs.push(...list));
-    const groupXirr = calculateTransactionsXIRR(allGroupTxs, g.currentTotalValue);
+    const groupXirr = calculateTransactionsXIRR(groupXirrTxs, g.currentTotalValue);
     g.annualizedReturn = groupXirr.annualizedPercent;
     g.isAnnualizedExtrapolated = groupXirr.isExtrapolated;
-      
-    // Ordina gli asset in ordine alfabetico per nome
+    if (groupXirr.isExtrapolated && groupXirr.annualizedPercent !== null) hasExtrapolatedAnnualized = true;
+
     g.assets.sort((a, b) => a.name.localeCompare(b.name));
   });
 
   const groupedData = Object.values(groupsMap).sort((a, b) => a.groupName.localeCompare(b.groupName));
 
-  // Global calculations using FIFO
+  // Totali globali in euro, un titolo per simbolo
   let globalInvested = 0;
   let globalTotalValue = 0;
   let globalDailyChange = 0;
-
   const missingPriceSymbols: string[] = [];
+  const fxMissingSymbols: string[] = [];
   const globalAssets: AggregatedAsset[] = [];
   const globalDailyCoverage: Coverage = { withData: 0, total: 0 };
+  const globalXirrTxs: Transaction[] = [];
 
   Object.entries(globalTxs).forEach(([symbol, txList]) => {
-    const { totalQuantity, totalInvested, averagePrice } = calculateFifo(txList);
-    const isin = txList.find(t => t.isin)?.isin;
-    const quote = quotes[symbol] || (isin ? quotes[isin] : undefined);
-    const hasPrice = !!quote?.regularMarketPrice && quote.regularMarketPrice > 0;
-    const hasDailyChange = hasPrice && isDailyChangeReliable(quote);
-    const currentPrice = hasPrice ? quote!.regularMarketPrice : averagePrice;
-    const dailyChangeAbs = hasDailyChange ? quote!.regularMarketChange || 0 : 0;
+    const { asset, rate } = valuePosition(symbol, txList, quotes, assetCategories, fxRates);
+    if (asset.totalQuantity <= 0) return;
 
-    if (totalQuantity > 0) {
-      if (!hasPrice) missingPriceSymbols.push(symbol);
-      globalDailyCoverage.total += 1;
-      if (hasDailyChange) globalDailyCoverage.withData += 1;
+    globalDailyCoverage.total += 1;
+    if (!asset.hasPrice) missingPriceSymbols.push(symbol);
+    if (rate === null) {
+      fxMissingSymbols.push(symbol);
+      return;
     }
+    if (asset.hasDailyChange) globalDailyCoverage.withData += 1;
 
-    if (totalQuantity > 0) {
-      const value = totalQuantity * currentPrice;
-      const latestNamedTx = [...txList].reverse().find(t => t.name);
-      globalAssets.push({
-        symbol,
-        name: latestNamedTx?.name || quote?.longName || quote?.shortName || symbol,
-        totalQuantity,
-        averagePrice,
-        totalInvested,
-        currentPrice,
-        currentTotalValue: value,
-        profitOrLoss: value - totalInvested,
-        profitOrLossPercent: totalInvested > 0 ? ((value - totalInvested) / totalInvested) * 100 : 0,
-        dailyChange: totalQuantity * dailyChangeAbs,
-        dailyChangePercent: hasDailyChange ? quote!.regularMarketChangePercent || 0 : 0,
-        currency: txList.find(t => t.currency)?.currency || quote?.currency || 'EUR',
-        category: assetCategories[symbol] || (isin ? assetCategories[isin] : undefined) || 'Altro',
-        hasPrice,
-        hasDailyChange,
-      });
-    }
+    globalInvested += asset.totalInvested * rate;
+    globalTotalValue += asset.currentTotalValue * rate;
+    globalDailyChange += asset.dailyChange * rate;
+    globalXirrTxs.push(...toBaseCurrency(txList, rate));
 
-    globalInvested += totalInvested;
-    globalTotalValue += totalQuantity * currentPrice;
-    globalDailyChange += totalQuantity * dailyChangeAbs;
+    // Per l'analisi di salute servono valori confrontabili: tutto in euro
+    globalAssets.push({
+      ...asset,
+      averagePrice: asset.averagePrice * rate,
+      totalInvested: asset.totalInvested * rate,
+      currentPrice: asset.currentPrice * rate,
+      currentTotalValue: asset.currentTotalValue * rate,
+      profitOrLoss: asset.profitOrLoss * rate,
+      dailyChange: asset.dailyChange * rate,
+      currency: BASE_CURRENCY,
+    });
   });
 
   const globalPL = globalTotalValue - globalInvested;
   const globalPLPercent = globalInvested > 0 ? (globalPL / globalInvested) * 100 : 0;
-  const globalDailyChangePercent = globalTotalValue - globalDailyChange > 0 
-    ? (globalDailyChange / (globalTotalValue - globalDailyChange)) * 100 
+  const globalDailyChangePercent = globalTotalValue - globalDailyChange > 0
+    ? (globalDailyChange / (globalTotalValue - globalDailyChange)) * 100
     : 0;
 
-  // Calculate Global XIRR
-  const globalXirr = calculateTransactionsXIRR(transactions, globalTotalValue);
+  const globalXirr = calculateTransactionsXIRR(globalXirrTxs, globalTotalValue);
+  if (globalXirr.isExtrapolated && globalXirr.annualizedPercent !== null) hasExtrapolatedAnnualized = true;
 
   return {
     groupedData,
@@ -297,7 +291,9 @@ export const calculatePortfolioAggregation = (
     globalAnnualizedReturn: globalXirr.annualizedPercent,
     globalIsAnnualizedExtrapolated: globalXirr.isExtrapolated,
     missingPriceSymbols,
+    fxMissingSymbols,
     globalDailyCoverage,
     globalAssets,
+    hasExtrapolatedAnnualized,
   };
 };

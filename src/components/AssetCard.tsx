@@ -23,6 +23,10 @@ interface AssetCardProps {
   hasPrice?: boolean;
   /** false = la quotazione non ha la variazione di oggi */
   hasDailyChange?: boolean;
+  /** Valore in euro per i titoli in valuta estera; null = cambio non disponibile */
+  valueInBase?: number | null;
+  /** Peso della posizione sul totale investito, in percentuale */
+  weightPercent?: number | null;
   isFirst?: boolean;
   isLast?: boolean;
   onPress?: () => void;
@@ -43,6 +47,8 @@ export const AssetCard: React.FC<AssetCardProps> = ({
   isAnnualizedExtrapolated = false,
   hasPrice = true,
   hasDailyChange = true,
+  valueInBase,
+  weightPercent,
   isFirst = false,
   isLast = false,
   onPress 
@@ -64,9 +70,19 @@ export const AssetCard: React.FC<AssetCardProps> = ({
   // un "+0,00%" che sembra un dato reale.
   const hasDailyData = hasPrice && hasDailyChange;
   const hasAnnualized = hasPrice && annualizedReturn !== undefined && annualizedReturn !== null;
+  const isForeign = currency.toUpperCase() !== 'EUR';
+  const weightLabel = weightPercent === undefined || weightPercent === null
+    ? null
+    : weightPercent < 1 ? '<1%' : `${Math.round(weightPercent)}%`;
+  const fxMissing = isForeign && valueInBase === null;
   const accessibilityParts = [
     name,
+    `${quantity} ${quantity === 1 ? 'quota' : 'quote'}`,
     `valore ${currencySymbol}${formatNumber(totalValue)}`,
+    isForeign && valueInBase ? `circa ${formatNumber(valueInBase)} euro` : null,
+    fxMissing ? 'cambio non disponibile, escluso dai totali' : null,
+    weightPercent !== undefined && weightPercent !== null ? `${formatNumber(weightPercent)}% del portafoglio` : null,
+    `prezzo medio ${currencySymbol}${formatNumber(averagePrice)}`,
     hasPrice
       ? `rendimento totale ${formatSignedCurrency(changeAbsolute, currencySymbol)}, ${changeSign}${formatNumber(changePercent)}%`
       : 'prezzo non disponibile, valutato al costo',
@@ -88,56 +104,61 @@ export const AssetCard: React.FC<AssetCardProps> = ({
       accessibilityRole="button"
       accessibilityLabel={accessibilityParts.filter(Boolean).join(', ')}
     >
-      <View style={styles.leftContent}>
-        <View style={styles.symbolContainer}>
-          <Text 
-            style={styles.symbol} 
-            adjustsFontSizeToFit 
-            numberOfLines={1}
-            minimumFontScale={0.5}
-          >
-            {displaySymbol}
-          </Text>
-        </View>
-        <View style={styles.nameContainer}>
-          <Text style={styles.name} numberOfLines={2}>{name}</Text>
-          <Text style={styles.details}>
-            {quantity} {quantity === 1 ? 'quota' : 'quote'}
-          </Text>
-          <Text style={styles.details}>
-            Medio {currencySymbol}{formatNumber(averagePrice)}
-          </Text>
-          <Text style={styles.details}>
-            {hasPrice ? `Attuale ${currencySymbol}${formatNumber(price)}` : 'Prezzo non disponibile'}
-          </Text>
-        </View>
-      </View>
-      <View style={styles.rightContent}>
-        <CopyableText
-          style={[styles.price, !hasPrice && styles.priceUnknown]}
-          valueToCopy={totalValue ? totalValue.toString() : ''}
-          onPress={onPress}
+      <View style={styles.symbolContainer}>
+        <Text
+          style={styles.symbol}
+          adjustsFontSizeToFit
+          numberOfLines={1}
+          minimumFontScale={0.5}
         >
-          {currencySymbol}{totalValue ? formatNumber(totalValue) : '---'}
-        </CopyableText>
-        {hasPrice ? (
-          <MetricChip value={changeAbsolute} size="md">
-            {formatSignedCurrency(changeAbsolute, currencySymbol)} ({changeSign}{formatNumber(changePercent)}%)
-          </MetricChip>
-        ) : (
-          <Text style={styles.unknownNote}>al costo</Text>
-        )}
-        {(hasAnnualized || hasDailyData) && (
-          <Text style={styles.secondaryMetrics}>
-            {hasAnnualized && (
-              <Text style={{ color: annualizedColor }}>
-                Annuo {annualizedReturn >= 0 ? '+' : ''}{formatNumber(annualizedReturn)}%{isAnnualizedExtrapolated ? '*' : ''}
+          {displaySymbol}
+        </Text>
+      </View>
+      {/* Righe a due colonne: il nome usa tutto lo spazio che il valore non occupa */}
+      <View style={styles.body}>
+        <View style={styles.row}>
+          <Text style={styles.name} numberOfLines={2}>{name}</Text>
+          <View style={styles.valueColumn}>
+            <CopyableText
+              style={[styles.price, !hasPrice && styles.priceUnknown]}
+              valueToCopy={totalValue ? totalValue.toString() : ''}
+              onPress={onPress}
+            >
+              {currencySymbol}{totalValue ? formatNumber(totalValue) : '---'}
+            </CopyableText>
+            {isForeign && valueInBase !== undefined && (
+              <Text style={styles.baseValue}>
+                {valueInBase === null ? 'cambio n/d' : `≈ €${formatNumber(valueInBase)}`}
               </Text>
             )}
-            {hasAnnualized && hasDailyData && '  ·  '}
+          </View>
+        </View>
+        <View style={[styles.row, styles.rowSpaced]}>
+          <Text style={styles.details} numberOfLines={2}>
+            {hasPrice
+              ? `${formatNumber(quantity).replace(/,00$/, '')} × ${currencySymbol}${formatNumber(price)}`
+              : `${formatNumber(quantity).replace(/,00$/, '')} ${quantity === 1 ? 'quota' : 'quote'} · prezzo n/d`}
+            {weightLabel && ` · ${weightLabel}`}
+          </Text>
+          {hasPrice ? (
+            <MetricChip value={changeAbsolute} size="md">
+              {formatSignedCurrency(changeAbsolute, currencySymbol)} ({changeSign}{formatNumber(changePercent)}%)
+            </MetricChip>
+          ) : (
+            <Text style={styles.unknownNote}>{fxMissing ? 'escluso dai totali' : 'al costo'}</Text>
+          )}
+        </View>
+        {(hasAnnualized || hasDailyData) && (
+          <Text style={styles.secondaryMetrics}>
             {hasDailyData && (
               <Text style={{ color: dailyChangeColor }}>
                 Oggi {dailyChangeSign}{formatNumber(dailyChangePercent)}%
+              </Text>
+            )}
+            {hasAnnualized && hasDailyData && <Text style={styles.separator}>  ·  </Text>}
+            {hasAnnualized && (
+              <Text style={{ color: annualizedColor }}>
+                Annuo {annualizedReturn >= 0 ? '+' : ''}{formatNumber(annualizedReturn)}%{isAnnualizedExtrapolated ? '*' : ''}
               </Text>
             )}
           </Text>
@@ -165,9 +186,8 @@ const getAvatarLabel = (symbol: string, name: string): string => {
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   card: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
+    alignItems: 'flex-start',
+    paddingVertical: 14,
     paddingHorizontal: 16,
     backgroundColor: colors.card,
   },
@@ -182,11 +202,6 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   cardBorderBottom: {
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-  },
-  leftContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
   },
   symbolContainer: {
     width: 48,
@@ -206,33 +221,53 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     textAlign: 'center',
     width: '100%',
   },
-  nameContainer: {
+  body: {
     flex: 1,
-    marginRight: 12,
+    minWidth: 0,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  rowSpaced: {
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  valueColumn: {
+    alignItems: 'flex-end',
+    marginLeft: 12,
   },
   name: {
+    flex: 1,
     color: colors.text,
     fontSize: 15,
     fontWeight: '600',
     lineHeight: 20,
-    marginBottom: 4,
   },
   details: {
+    flex: 1,
     color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 18,
     fontVariant: ['tabular-nums'],
-  },
-  rightContent: {
-    alignItems: 'flex-end',
-    maxWidth: '55%',
+    marginRight: 8,
   },
   price: {
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
-    marginBottom: 6,
+  },
+  baseValue: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontVariant: ['tabular-nums'],
+    marginTop: 2,
+  },
+  separator: {
+    color: colors.textSecondary,
+    fontWeight: '400',
   },
   priceUnknown: {
     color: colors.textSecondary,
@@ -243,6 +278,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   secondaryMetrics: {
     marginTop: 6,
+    textAlign: 'right',
     fontSize: 12,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],

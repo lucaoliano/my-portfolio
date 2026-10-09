@@ -8,7 +8,7 @@ export const darkColors = {
   textSecondary: "#9CA3AF", // Grigio per testi secondari
   primary: "#F3F4F6", // Niente bianco puro neanche per il colore primario
   positive: "#00D166", // Scalable's signature vibrant green
-  negative: "#FF453A", // Vibrant red
+  negative: "#FF6961", // Rosso vivo: ≥4.5:1 anche sulla sua tinta al 12,5% sulle card
   border: "#2C2C2C",
   inputBackground: "#2C2C2C",
 
@@ -46,14 +46,14 @@ export const lightColors: ThemeColors = {
   text: "#334155", // Slate-700, palesemente non nero puro
   textSecondary: "#64748B", // Blu-grigio per i testi secondari (slate-500)
   primary: "#334155",
-  positive: "#047857", // Verde scuro: ≥4.5:1 anche sulla sua tinta al 12,5%
+  positive: "#046C4E", // Verde scuro: ≥4.5:1 anche sulla sua tinta al 12,5%
   negative: "#B91C1C", // Rosso scuro: ≥4.5:1 anche sulla sua tinta al 12,5%
   border: "#E5E7EB", // Bordi leggeri
   inputBackground: "#F3F4F6", // Sfondo input leggermente scuro
 
   scalable: "#0F766E",
   scalableSurface: "#E6F7F4",
-  warning: "#B45309",
+  warning: "#A14A0B", // ≥4.5:1 anche sulla sua tinta e su warningSurface
   warningSurface: "#FEF3C7",
   negativeSurface: "#FEE2E2",
   info: "#1D4ED8",

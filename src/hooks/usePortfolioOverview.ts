@@ -22,8 +22,8 @@ export const usePortfolioOverview = (userId: string | undefined) => {
   const quotesState = usePortfolioQuotes(userId, transactions, txLoading);
 
   const aggregation = useMemo(
-    () => calculatePortfolioAggregation(transactions, quotesState.quotes, assetCategories, settings),
-    [transactions, quotesState.quotes, assetCategories, settings]
+    () => calculatePortfolioAggregation(transactions, quotesState.quotes, assetCategories, settings, quotesState.fxRates),
+    [transactions, quotesState.quotes, assetCategories, settings, quotesState.fxRates]
   );
 
   const isScalableConnected = !!scalableConfig?.enabled && scalableConfig?.status === 'connected';
@@ -41,7 +41,7 @@ export const usePortfolioOverview = (userId: string | undefined) => {
       allAssets,
       scalableCash,
       (scalableConfig?.interestPlan as ScalableInterestPlanId) || 'prime',
-      configuredInterestRate ?? 2.6,
+      configuredInterestRate ?? null,
       scalableSavingsPlans
     ),
     [allAssets, scalableCash, scalableConfig?.interestPlan, configuredInterestRate, scalableSavingsPlans]

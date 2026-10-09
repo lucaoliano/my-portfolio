@@ -37,6 +37,8 @@ export interface AggregatedAsset {
   hasPrice: boolean;
   /** false = la quotazione non riporta la variazione di oggi (es. prezzi Scalable) */
   hasDailyChange: boolean;
+  /** Valore della posizione in euro; null se la valuta è estera e manca il cambio */
+  valueInBase?: number | null;
 }
 
 /** Quanti titoli contribuiscono a un dato aggregato (es. variazione di oggi). */
@@ -59,6 +61,8 @@ export interface GroupedPortfolio {
   dailyCoverage: Coverage;
   /** Titoli del gruppo senza quotazione (valutati al costo) */
   missingPriceCount: number;
+  /** Titoli in valuta estera senza cambio disponibile, esclusi dai totali */
+  fxMissingCount: number;
 }
 
 export type RootStackParamList = {

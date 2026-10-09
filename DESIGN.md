@@ -8,7 +8,7 @@ colors:
   mist-text: "#F3F4F6"
   ash-text: "#9CA3AF"
   gain-green: "#00D166"
-  loss-red: "#FF453A"
+  loss-red: "#FF6961"
   scalable-teal: "#28EBCF"
   scalable-surface: "#102A27"
   signal-amber: "#F59E0B"
@@ -26,10 +26,10 @@ colors:
   paper-line: "#E5E7EB"
   slate-text: "#334155"
   slate-muted: "#64748B"
-  gain-green-light: "#047857"
+  gain-green-light: "#046C4E"
   loss-red-light: "#B91C1C"
   scalable-teal-light: "#0F766E"
-  signal-amber-light: "#B45309"
+  signal-amber-light: "#A14A0B"
   info-blue-light: "#1D4ED8"
 typography:
   display:
@@ -250,17 +250,23 @@ Forme morbide e tattili. Card e gruppi a 16px, card interne e righe di menu a 12
 - Header di schermata a tre zone con titolo centrato a 18px; icona chiudi (X) per i fogli, freccia indietro per i dettagli.
 - La dashboard ha menu hamburger a sinistra, titolo grande a sinistra, chip Scalable e ricerca a destra.
 
+### Hero Return
+Sotto il bilancio il rendimento totale è testo a 18px peso 700 colorato per segno ("+€4.124,12 (+13,95%)") con l'etichetta " in totale" in Ash Text: è la risposta più visibile dopo il bilancio, non un chip da 11px.
+
 ### Secondary Metrics Line
-Sotto l'unico chip di rendimento: "Annuo +11,22%* · Oggi +€12,30 (+0,42%)", testo a 13px peso 600, colorato per segno, separatori in Ash Text. Se la variazione di oggi copre solo una parte dei titoli si aggiunge "su 3 di 7 titoli"; se non ne copre nessuno, "Oggi" non compare.
+Sotto il rendimento (o il chip di gruppo): "Oggi +€12,30 (+0,42%) · Annuo +11,22%*", prima oggi e poi il lungo periodo, testo 13–14px peso 600 colorato per segno, separatori in Ash Text. Se la variazione di oggi copre solo una parte dei titoli si aggiunge "su 3 di 7 titoli"; se non ne copre nessuno resta "Oggi n/d" in Ash Text. Per i titoli Scalable la percentuale di oggi arriva da Yahoo Finance tramite l'ISIN.
+
+### Cash Row
+La liquidità Scalable è una riga da 56px: icona monete teal, "Liquidità Scalable" con tasso e rendimento sotto, saldo a destra e chevron. Nessun pulsante dentro: la sincronizzazione sta solo nella barra in alto e nel trascina-per-aggiornare.
 
 ### Data Status Notes
-Note a 12px in Ash Text sotto le metriche: orario delle quotazioni ("Quotazioni delle 17:35") e, in Signal Amber, i titoli senza prezzo ("1 titolo senza prezzo, valutati al costo"). Un errore di aggiornamento diventa un riquadro amber-surface con azione "Riprova" e non sparisce da solo.
+Una sola riga a 12px in Ash Text sotto le metriche, con le parti separate da " · ": orario dei prezzi ("Prezzi delle 17:35"), ultima sincronizzazione Scalable e, in Signal Amber, i titoli senza prezzo ("1 titolo senza prezzo, valutati al costo"). Un errore di aggiornamento diventa un riquadro amber-surface con azione "Riprova" e non sparisce da solo.
 
 ### Health Check Row
 Riga da 48px su graphite-card: icona scudo neutra, "Salute del portafoglio", punteggio colorato per livello (verde, ambra, rosso; mai teal), livello in Ash Text e chevron. Apre `/health-check`.
 
 ### Asset Row (signature)
-La riga titolo: avatar circolare con iniziali, nome su due righe, dettagli in Ash Text su tre righe ("41 quote", "Medio €84,88", "Attuale €99,14"); a destra il valore della posizione, un solo chip di rendimento totale e una riga secondaria "Annuo +28,15%* · Oggi +0,42%" colorata per segno. Senza quotazione il valore passa in Ash Text, il chip lascia il posto a "al costo" e i dettagli dicono "Prezzo non disponibile".
+La riga titolo: avatar circolare con iniziali e, accanto, righe a due colonne. Prima riga: nome (fino a due righe) e valore della posizione, con "≈ €1.990,04" sotto per i titoli in valuta estera. Seconda riga: "41 × €99,14 · 12%" (quantità, prezzo, peso nel portafoglio) e il chip di rendimento totale. Terza riga, allineata a destra: "Oggi +0,64% · Annuo +28,17%*". Il prezzo medio sta nel dettaglio del titolo. Senza quotazione il valore passa in Ash Text, il chip lascia il posto a "al costo" e i dettagli dicono "Prezzo non disponibile".
 
 ## Do's and Don'ts
 
@@ -278,5 +284,6 @@ La riga titolo: avatar circolare con iniziali, nome su due righe, dettagli in As
 - **Don't** usare bianco o nero puro per testo o sfondi del tema (eccezione: il testo nero sui pulsanti Gain Green).
 - **Don't** impilare più di un chip colorato per riga titolo: il rendimento totale ha il chip, le altre metriche vanno in testo secondario.
 - **Don't** troncare un ISIN o un ticker in un avatar ("IE0…"): usare le iniziali del nome.
+- **Don't** sommare valute diverse senza cambio: i totali sono in euro, i titoli esteri senza cambio restano fuori e lo si dice.
 - **Don't** annidare un pulsante dentro un altro (sul web diventa `<button>` dentro `<button>`): controlli affiancati, mai uno dentro l'altro.
 - **Don't** usare un'area di tocco sotto 44×44pt; per controlli visivamente più piccoli aggiungere `hitSlop`.

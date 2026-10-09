@@ -9,7 +9,7 @@ interface CopyableTextProps extends TextProps {
   valueToCopy: string;
 }
 
-export const CopyableText: React.FC<CopyableTextProps> = ({ valueToCopy, children, style, onPress, ...props }) => {
+export const CopyableText: React.FC<CopyableTextProps> = ({ valueToCopy, children, style, onPress, accessibilityLabel, ...props }) => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const { width: screenWidth } = useWindowDimensions();
@@ -48,6 +48,7 @@ export const CopyableText: React.FC<CopyableTextProps> = ({ valueToCopy, childre
         activeOpacity={0.6}
         delayLongPress={300}
         accessibilityHint="Tieni premuto per copiare il valore"
+        accessibilityLabel={accessibilityLabel}
       >
         <Text style={style} selectable={false} {...props}>
           {children}

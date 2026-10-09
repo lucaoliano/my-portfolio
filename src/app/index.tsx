@@ -220,32 +220,29 @@ export const PortfolioScreen = () => {
     globalAnnualizedReturn,
     globalIsAnnualizedExtrapolated,
     missingPriceSymbols,
+    fxMissingSymbols,
     globalDailyCoverage,
+    hasExtrapolatedAnnualized,
   } = aggregation;
 
   const displayTotalValue = (includeCashInTotal && scalableCash > 0)
     ? (globalTotalValue + scalableCash)
     : globalTotalValue;
 
-  const lastSyncLabel = (() => {
-    if (!scalableConfig?.lastSyncedAt) return 'Non ancora sincronizzato';
-    const d = new Date(scalableConfig.lastSyncedAt);
-    if (isNaN(d.getTime())) return 'Sincronizzato di recente';
-    const isToday = d.toDateString() === new Date().toDateString();
+  const formatWhen = (d: Date, prefix: { today: string; other: string }) => {
     const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return isToday
-      ? `Sincronizzato oggi alle ${timeStr}`
-      : `Sincronizzato il ${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} alle ${timeStr}`;
-  })();
+    return d.toDateString() === new Date().toDateString()
+      ? `${prefix.today} ${timeStr}`
+      : `${prefix.other} ${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} alle ${timeStr}`;
+  };
 
-  const quotesStatusLabel = useMemo(() => {
-    if (!quotesUpdatedAt) return null;
-    const isToday = quotesUpdatedAt.toDateString() === new Date().toDateString();
-    const timeStr = quotesUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return isToday
-      ? `Quotazioni delle ${timeStr}`
-      : `Quotazioni del ${quotesUpdatedAt.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} alle ${timeStr}`;
-  }, [quotesUpdatedAt]);
+  const lastSyncDate = scalableConfig?.lastSyncedAt ? new Date(scalableConfig.lastSyncedAt) : null;
+  const lastSyncLabel = lastSyncDate && !isNaN(lastSyncDate.getTime())
+    ? formatWhen(lastSyncDate, { today: 'Scalable sincronizzato alle', other: 'Scalable sincronizzato il' })
+    : null;
+  const quotesStatusLabel = quotesUpdatedAt
+    ? formatWhen(quotesUpdatedAt, { today: 'Prezzi delle', other: 'Prezzi del' })
+    : null;
 
   const scalableYield = useMemo(() => {
     return calculateCashYield(scalableCash, configuredInterestRate ?? 0);
@@ -264,6 +261,19 @@ export const PortfolioScreen = () => {
     return indexA - indexB;
   });
 
+  // Gruppi con esattamente gli stessi titoli di un gruppo precedente: lo diciamo, così le somme non confondono
+  const duplicateOf: Record<string, string> = {};
+  const seenSignatures: Record<string, string> = {};
+  sections.forEach(g => {
+    if (g.assets.length === 0) return;
+    const signature = g.assets.map(a => `${a.symbol}:${a.totalQuantity}`).sort().join('|');
+    if (seenSignatures[signature]) {
+      duplicateOf[g.groupName] = seenSignatures[signature];
+    } else {
+      seenSignatures[signature] = g.groupName;
+    }
+  });
+
   if (isInitialLoading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -272,79 +282,111 @@ export const PortfolioScreen = () => {
     );
   }
 
-  /** "Annuo +11,22%* · Oggi +€12,30 (+0,42%)" — un solo chip colorato per blocco, il resto è testo secondario. */
+  /**
+   * "Oggi +€12,30 (+0,42%) · Annuo +11,22%*": prima la risposta alla domanda della sera, poi il lungo periodo.
+   * Se nessun titolo ha la variazione di oggi lo diciamo ("Oggi n/d") invece di farla sparire.
+   */
   const renderSecondaryMetrics = (opts: {
     annualized?: number | null;
     extrapolated?: boolean;
     daily: number;
     dailyPercent: number;
     coverage: Coverage;
+    large?: boolean;
   }) => {
     const hasAnnualized = opts.annualized !== undefined && opts.annualized !== null;
     const hasDaily = opts.coverage.withData > 0;
-    if (!hasAnnualized && !hasDaily) return null;
+    if (opts.coverage.total === 0 && !hasAnnualized) return null;
     const partialDaily = hasDaily && opts.coverage.withData < opts.coverage.total;
     return (
-      <Text style={styles.secondaryMetrics}>
+      <Text style={[styles.secondaryMetrics, opts.large && styles.secondaryMetricsLarge]}>
+        {hasDaily ? (
+          <Text style={{ color: opts.daily >= 0 ? colors.positive : colors.negative }}>
+            Oggi {formatSignedCurrency(opts.daily)} ({signedPercent(opts.dailyPercent)})
+          </Text>
+        ) : (
+          <Text style={styles.metricSeparator}>Oggi n/d</Text>
+        )}
+        {partialDaily && (
+          <Text style={styles.metricSeparator}> su {opts.coverage.withData} di {opts.coverage.total} titoli</Text>
+        )}
+        {hasAnnualized && <Text style={styles.metricSeparator}>  ·  </Text>}
         {hasAnnualized && (
           <Text style={{ color: opts.annualized! >= 0 ? colors.positive : colors.negative }}>
             Annuo {signedPercent(opts.annualized!)}{opts.extrapolated ? '*' : ''}
           </Text>
-        )}
-        {hasAnnualized && hasDaily && <Text style={styles.metricSeparator}>  ·  </Text>}
-        {hasDaily && (
-          <Text style={{ color: opts.daily >= 0 ? colors.positive : colors.negative }}>
-            Oggi {formatSignedCurrency(opts.daily)} ({signedPercent(opts.dailyPercent)})
-          </Text>
-        )}
-        {partialDaily && (
-          <Text style={styles.metricSeparator}> su {opts.coverage.withData} di {opts.coverage.total} titoli</Text>
         )}
       </Text>
     );
   };
 
   const hasTriggeredAlerts = triggeredAlerts.length > 0;
+  const syncIconOnly = showCompactTitle && transactions.length > 0;
+  const alertCount = hasTriggeredAlerts ? triggeredAlerts.length : approachingAlerts.length;
+
+  // Una sola riga di stato sotto il bilancio: orari dei dati e titoli fuori dai calcoli
+  const statusParts: { text: string; warn?: boolean }[] = [];
+  if (quotesStatusLabel) statusParts.push({ text: quotesStatusLabel });
+  if (isScalableConnected && lastSyncLabel) statusParts.push({ text: lastSyncLabel });
+  if (missingPriceSymbols.length > 0) {
+    statusParts.push({
+      text: missingPriceSymbols.length === 1
+        ? '1 titolo senza prezzo, valutato al costo'
+        : `${missingPriceSymbols.length} titoli senza prezzo, valutati al costo`,
+      warn: true,
+    });
+  }
+  if (fxMissingSymbols.length > 0) {
+    statusParts.push({
+      text: `${plural(fxMissingSymbols.length, 'titolo escluso', 'titoli esclusi')}: cambio non disponibile`,
+      warn: true,
+    });
+  }
+  const noDailyForScalable = globalDailyCoverage.total > 0 && globalDailyCoverage.withData < globalDailyCoverage.total;
 
   const listHeader = (
     <View style={styles.header}>
       <Text style={styles.headerSubtitle}>Bilancio totale</Text>
-      <CopyableText style={styles.headerTitle} valueToCopy={displayTotalValue.toString()} accessibilityRole="header">
+      <CopyableText
+        style={styles.headerTitle}
+        valueToCopy={displayTotalValue.toString()}
+        accessibilityLabel={`Bilancio totale €${formatNumber(displayTotalValue)}`}
+      >
         €{formatNumber(displayTotalValue)}
       </CopyableText>
       {scalableCash > 0 && (
         <Text style={styles.headerNote}>
           {includeCashInTotal
             ? `Investito €${formatNumber(globalTotalValue)} · Liquidità €${formatNumber(scalableCash)}`
-            : `Liquidità Scalable esclusa (€${formatNumber(scalableCash)})`}
+            : `Esclusa la liquidità Scalable (€${formatNumber(scalableCash)})`}
         </Text>
       )}
 
       {transactions.length > 0 && (
         <View style={styles.headerMetrics}>
-          <MetricChip value={globalPL} style={{ alignSelf: 'flex-start' }}>
-            Totale {formatSignedCurrency(globalPL)} ({signedPercent(globalPLPercent)})
-          </MetricChip>
+          <Text style={[styles.heroReturn, { color: globalPL >= 0 ? colors.positive : colors.negative }]}>
+            {formatSignedCurrency(globalPL)} ({signedPercent(globalPLPercent)})
+            <Text style={styles.heroReturnLabel}> in totale</Text>
+          </Text>
           {renderSecondaryMetrics({
             annualized: globalAnnualizedReturn,
             extrapolated: globalIsAnnualizedExtrapolated,
             daily: globalDailyChange,
             dailyPercent: globalDailyChangePercent,
             coverage: globalDailyCoverage,
+            large: true,
           })}
-          {globalIsAnnualizedExtrapolated && globalAnnualizedReturn !== null && (
-            <Text style={styles.footnote}>*Stima annua (XIRR) su meno di un anno di storico</Text>
-          )}
-          {(quotesStatusLabel || missingPriceSymbols.length > 0) && (
+          {statusParts.length > 0 && (
             <Text style={styles.footnote}>
-              {quotesStatusLabel}
-              {quotesStatusLabel && missingPriceSymbols.length > 0 ? ' · ' : ''}
-              {missingPriceSymbols.length > 0 && (
-                <Text style={{ color: colors.warning }}>
-                  {plural(missingPriceSymbols.length, 'titolo senza prezzo', 'titoli senza prezzo')}, valutati al costo
+              {statusParts.map((part, i) => (
+                <Text key={part.text} style={part.warn ? { color: colors.warning } : undefined}>
+                  {i > 0 ? ' · ' : ''}{part.text}
                 </Text>
-              )}
+              ))}
             </Text>
+          )}
+          {noDailyForScalable && globalDailyCoverage.withData === 0 && (
+            <Text style={styles.footnote}>Variazione di oggi non disponibile per questi prezzi.</Text>
           )}
         </View>
       )}
@@ -352,7 +394,10 @@ export const PortfolioScreen = () => {
       {quotesError && (
         <View style={styles.inlineAlert} accessibilityRole="alert">
           <AlertCircle size={16} color={colors.warning} style={{ marginRight: 8 }} />
-          <Text style={styles.inlineAlertText}>{quotesError}</Text>
+          <Text style={styles.inlineAlertText}>
+            {quotesError}
+            {quotesStatusLabel ? ` Ultimi prezzi: ${quotesStatusLabel.replace(/^Prezzi /, '')}.` : ' Mostro gli ultimi prezzi sincronizzati.'}
+          </Text>
           <TouchableOpacity
             style={styles.inlineAlertAction}
             onPress={() => refreshQuotes(true)}
@@ -364,69 +409,31 @@ export const PortfolioScreen = () => {
         </View>
       )}
 
-      {/* Liquidità Scalable: la card apre l'integrazione, il pulsante di sync è un controllo separato */}
+      {/* Liquidità Scalable: una riga, il dettaglio è nella schermata dell'integrazione */}
       {isScalableConnected && (
-        <View style={styles.cashYieldBanner}>
-          <TouchableOpacity
-            onPress={() => router.push('/integrations/scalable')}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Liquidità Scalable, apri i dettagli"
-          >
-            <View style={styles.cashYieldHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                <View style={styles.cashYieldIcon}>
-                  <Coins size={14} color={colors.scalable} />
-                </View>
-                <Text style={styles.cashYieldTitle}>Liquidità Scalable</Text>
-                {configuredInterestRate !== undefined ? (
-                  <View style={styles.rateBadge}>
-                    <Text style={styles.rateBadgeText}>{formatNumber(configuredInterestRate)}% annuo</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.cashEstText}>Imposta il tasso</Text>
-                )}
-              </View>
-              <ChevronRight size={16} color={colors.textSecondary} />
-            </View>
-            {scalableCash > 0 && (
-              <View style={styles.cashYieldDetailsRow}>
-                <Text style={styles.cashBalanceText}>
-                  Saldo libero: <Text style={styles.cashBalanceValue}>€{formatNumber(scalableCash)}</Text>
-                </Text>
-                {scalableYield.annualNet > 0 && (
-                  <Text style={styles.cashEstText}>
-                    Rendimento: <Text style={{ color: colors.positive, fontWeight: '700' }}>+€{formatNumber(scalableYield.annualNet)}/anno</Text> netti
-                  </Text>
-                )}
-              </View>
-            )}
-          </TouchableOpacity>
-          <View style={styles.cashYieldFooterRow}>
-            <Text style={styles.cashYieldSyncTimeText}>{lastSyncLabel}</Text>
-            <TouchableOpacity
-              style={styles.cashYieldSyncBtn}
-              onPress={() => handleSyncScalable(false)}
-              disabled={scalableSyncing}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityState={{ busy: scalableSyncing, disabled: scalableSyncing }}
-            >
-              {scalableSyncing ? (
-                <ActivityIndicator size={12} color={colors.scalable} style={{ marginRight: 6 }} />
-              ) : (
-                <RefreshCw size={12} color={colors.scalable} style={{ marginRight: 6 }} />
-              )}
-              <Text style={styles.cashYieldSyncBtnText}>
-                {scalableSyncing ? 'Sincronizzo…' : 'Sincronizza ora'}
-              </Text>
-            </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.cashRow}
+          onPress={() => router.push('/integrations/scalable')}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`Liquidità Scalable €${formatNumber(scalableCash)}${configuredInterestRate !== undefined ? `, tasso ${formatNumber(configuredInterestRate)}%, rendimento stimato ${formatNumber(scalableYield.annualNet)} euro l'anno` : ', tasso non impostato'}`}
+        >
+          <Coins size={18} color={colors.scalable} style={{ marginRight: 10 }} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.cashRowTitle}>Liquidità Scalable</Text>
+            <Text style={styles.cashRowDetail} numberOfLines={1}>
+              {configuredInterestRate !== undefined
+                ? `${formatNumber(configuredInterestRate)}% annuo${scalableYield.annualNet > 0 ? ` · +€${formatNumber(scalableYield.annualNet)}/anno netti` : ''}`
+                : 'Imposta il tasso del tuo piano'}
+            </Text>
           </View>
-        </View>
+          <Text style={styles.cashRowValue}>€{formatNumber(scalableCash)}</Text>
+          <ChevronRight size={16} color={colors.textSecondary} style={{ marginLeft: 4 }} />
+        </TouchableOpacity>
       )}
 
       {/* Price alert Scalable */}
-      {isScalableConnected && (hasTriggeredAlerts || approachingAlerts.length > 0) && (
+      {isScalableConnected && alertCount > 0 && (
         <TouchableOpacity
           style={[
             styles.priceAlertBanner,
@@ -452,11 +459,11 @@ export const PortfolioScreen = () => {
                 styles.priceAlertBannerIcon,
                 hasTriggeredAlerts ? styles.priceAlertBannerIconTriggered : styles.priceAlertBannerIconApproaching
               ]}>
-                <Bell size={14} color={hasTriggeredAlerts ? colors.positive : colors.warning} />
+                <Bell size={14} color={hasTriggeredAlerts ? colors.scalable : colors.warning} />
               </View>
               <Text style={styles.priceAlertBannerTitle}>
                 {hasTriggeredAlerts
-                  ? `${plural(triggeredAlerts.length, 'avviso di prezzo raggiunto', 'avvisi di prezzo raggiunti')}`
+                  ? plural(triggeredAlerts.length, 'avviso di prezzo raggiunto', 'avvisi di prezzo raggiunti')
                   : `${plural(approachingAlerts.length, 'avviso di prezzo vicino', 'avvisi di prezzo vicini')} alla soglia`}
               </Text>
             </View>
@@ -467,7 +474,7 @@ export const PortfolioScreen = () => {
             {hasTriggeredAlerts
               ? `${triggeredAlerts[0].alert.name || triggeredAlerts[0].alert.symbol} ha raggiunto ${triggeredAlerts[0].calculation.targetPriceFormatted} (ora ${triggeredAlerts[0].calculation.currentPriceFormatted})`
               : `${approachingAlerts[0].alert.name || approachingAlerts[0].alert.symbol} è a ${approachingAlerts[0].calculation.distanceFormatted} dalla soglia di ${approachingAlerts[0].calculation.targetPriceFormatted}`}
-            {(hasTriggeredAlerts ? triggeredAlerts.length : approachingAlerts.length) > 1 ? ' e altri' : ''}
+            {alertCount > 1 ? ` e ${plural(alertCount - 1, 'altro', 'altri')}` : ''}
           </Text>
         </TouchableOpacity>
       )}
@@ -477,6 +484,11 @@ export const PortfolioScreen = () => {
   const listFooter = allAssets.length > 0 ? (
     <View style={styles.listFooter}>
       <HealthCheckSummaryRow healthCheck={healthCheck} onPress={() => router.push('/health-check')} />
+      {hasExtrapolatedAnnualized && (
+        <Text style={[styles.footnote, { marginTop: 16 }]}>
+          *Rendimento annuo (XIRR) stimato: le posizioni hanno meno di un anno di storico, quindi il dato è proiettato su base annua.
+        </Text>
+      )}
     </View>
   ) : null;
 
@@ -502,14 +514,19 @@ export const PortfolioScreen = () => {
             <Menu size={26} color={colors.text} />
           </TouchableOpacity>
           {showCompactTitle && transactions.length > 0 ? (
-            <View style={styles.compactTitle} accessibilityRole="header">
+            <View
+              style={styles.compactTitle}
+              accessible
+              accessibilityRole="header"
+              accessibilityLabel={`Bilancio totale €${formatNumber(displayTotalValue)}, rendimento totale ${signedPercent(globalPLPercent)}`}
+            >
               <Text style={styles.compactTitleValue} numberOfLines={1}>€{formatNumber(displayTotalValue)}</Text>
               <Text style={[styles.compactTitleDelta, { color: globalPL >= 0 ? colors.positive : colors.negative }]}>
-                {signedPercent(globalPLPercent)}
+                Tot {signedPercent(globalPLPercent)}
               </Text>
             </View>
           ) : (
-            <Text style={styles.topBarTitle} accessibilityRole="header">Dashboard</Text>
+            <Text style={styles.topBarTitle} accessibilityRole="header">Panoramica</Text>
           )}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -539,18 +556,21 @@ export const PortfolioScreen = () => {
               accessibilityState={{ busy: scalableSyncing, disabled: scalableSyncing }}
             >
               {scalableSyncing ? (
-                <ActivityIndicator size={12} color={colors.scalable} style={{ marginRight: 6 }} />
+                <ActivityIndicator size={12} color={colors.scalable} style={{ marginRight: syncIconOnly ? 0 : 6 }} />
               ) : scalableConfig?.status === 'expired' ? (
-                <AlertCircle size={12} color={colors.negative} style={{ marginRight: 6 }} />
+                <AlertCircle size={12} color={colors.negative} style={{ marginRight: syncIconOnly ? 0 : 6 }} />
               ) : (
-                <RefreshCw size={12} color={colors.scalable} style={{ marginRight: 6 }} />
+                <RefreshCw size={12} color={colors.scalable} style={{ marginRight: syncIconOnly ? 0 : 6 }} />
               )}
-              <Text style={[
-                styles.scalableTopBarBtnText,
-                scalableConfig?.status === 'expired' && { color: colors.negative }
-              ]}>
-                {scalableSyncing ? 'Sincronizzo…' : scalableConfig?.status === 'expired' ? 'Ricollega' : 'Scalable'}
-              </Text>
+              {/* Con il bilancio compatto nella barra il pulsante resta solo icona, per non troncare il valore */}
+              {!syncIconOnly && (
+                <Text style={[
+                  styles.scalableTopBarBtnText,
+                  scalableConfig?.status === 'expired' && { color: colors.negative }
+                ]}>
+                  {scalableSyncing ? 'Sincronizzo…' : scalableConfig?.status === 'expired' ? 'Ricollega' : 'Sincronizza'}
+                </Text>
+              )}
             </TouchableOpacity>
           )}
 
@@ -652,7 +672,9 @@ export const PortfolioScreen = () => {
             const isCollapsed = collapsedGroups.has(group.groupName);
             const hasComposition = group.assets.length > 0 && group.currentTotalValue > 0;
             // Nessun prezzo nel gruppo: il rendimento sarebbe 0% per costruzione, quindi non lo mostriamo
-            const allUnpriced = group.dailyCoverage.total > 0 && group.missingPriceCount === group.dailyCoverage.total;
+            const allUnpriced = group.dailyCoverage.total > 0 && (
+              group.missingPriceCount === group.dailyCoverage.total || group.fxMissingCount === group.dailyCoverage.total
+            );
 
             return (
               <View style={styles.groupOuterContainer}>
@@ -672,7 +694,12 @@ export const PortfolioScreen = () => {
                       ) : (
                         <ChevronDown size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
                       )}
-                      <Text style={styles.sectionTitle} numberOfLines={1}>{group.groupName}</Text>
+                      <View style={{ flexShrink: 1 }}>
+                        <Text style={styles.sectionTitle} numberOfLines={1}>{group.groupName}</Text>
+                        {duplicateOf[group.groupName] && (
+                          <Text style={styles.groupNote} numberOfLines={1}>Stessi titoli di {duplicateOf[group.groupName]}</Text>
+                        )}
+                      </View>
                     </TouchableOpacity>
 
                     {hasComposition && (
@@ -689,8 +716,11 @@ export const PortfolioScreen = () => {
                       style={styles.sectionValue}
                       valueToCopy={group.currentTotalValue.toString()}
                       onPress={() => toggleGroup(group.groupName)}
+                      accessibilityLabel={`Valore del gruppo ${group.groupName}: €${formatNumber(group.currentTotalValue)}`}
                     >
-                      €{formatNumber(group.currentTotalValue)}
+                      {group.fxMissingCount > 0 && group.fxMissingCount === group.dailyCoverage.total
+                        ? 'n/d'
+                        : `€${formatNumber(group.currentTotalValue)}`}
                     </CopyableText>
                   </View>
 
@@ -700,7 +730,11 @@ export const PortfolioScreen = () => {
                     accessible={false}
                   >
                     {allUnpriced ? (
-                      <Text style={styles.footnote}>Prezzi non disponibili: valutato al costo</Text>
+                      <Text style={styles.footnote}>
+                        {group.fxMissingCount === group.dailyCoverage.total
+                          ? 'Escluso dal totale: cambio non disponibile'
+                          : 'Prezzi non disponibili: valutato al costo'}
+                      </Text>
                     ) : (
                       <>
                         <MetricChip value={group.profitOrLoss} style={{ alignSelf: 'flex-start' }}>
@@ -716,6 +750,11 @@ export const PortfolioScreen = () => {
                         {group.missingPriceCount > 0 && (
                           <Text style={styles.footnote}>
                             {plural(group.missingPriceCount, 'titolo valutato', 'titoli valutati')} al costo
+                          </Text>
+                        )}
+                        {group.fxMissingCount > 0 && (
+                          <Text style={styles.footnote}>
+                            {plural(group.fxMissingCount, 'titolo escluso', 'titoli esclusi')} dal totale: cambio non disponibile
                           </Text>
                         )}
                       </>
@@ -740,6 +779,8 @@ export const PortfolioScreen = () => {
                     isAnnualizedExtrapolated={asset.isAnnualizedExtrapolated}
                     hasPrice={asset.hasPrice}
                     hasDailyChange={asset.hasDailyChange}
+                    valueInBase={asset.valueInBase}
+                    weightPercent={asset.valueInBase && globalTotalValue > 0 ? (asset.valueInBase / globalTotalValue) * 100 : null}
                     isFirst={index === 0}
                     isLast={index === group.assets.length - 1}
                     onPress={() => router.push({ pathname: '/asset/[id]', params: { id: asset.symbol, symbol: asset.symbol, name: asset.name, currentPrice: asset.currentPrice, currency: asset.currency, groupName: group.groupName, dailyChange: asset.dailyChange, dailyChangePercent: asset.dailyChangePercent, hasPrice: asset.hasPrice ? '1' : '0' } })}
@@ -882,8 +923,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
   },
   iconButtonSmall: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 4,
@@ -983,8 +1024,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.onStrong,
   },
   bannerClose: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1020,6 +1061,55 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
     color: colors.textSecondary,
+  },
+  secondaryMetricsLarge: {
+    fontSize: 14,
+    marginTop: 6,
+  },
+  heroReturn: {
+    fontSize: 18,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  heroReturnLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  cashRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 56,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: 16,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: withAlpha(colors.scalable, 0.25),
+  },
+  cashRowTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  cashRowDetail: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+  },
+  cashRowValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+    marginLeft: 8,
+  },
+  groupNote: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   metricSeparator: {
     color: colors.textSecondary,
@@ -1228,95 +1318,6 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.text,
     fontSize: 17,
     fontWeight: '500',
-  },
-  cashYieldBanner: {
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    padding: 12,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: withAlpha(colors.scalable, 0.25),
-  },
-  cashYieldHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  cashYieldIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    backgroundColor: withAlpha(colors.scalable, 0.125),
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  cashYieldTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.text,
-    marginRight: 8,
-  },
-  rateBadge: {
-    backgroundColor: withAlpha(colors.scalable, 0.125),
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  rateBadgeText: {
-    color: colors.scalable,
-    fontSize: 12,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
-  cashYieldDetailsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  cashBalanceText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  cashBalanceValue: {
-    color: colors.text,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
-  cashEstText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  cashYieldFooterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  cashYieldSyncTimeText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    flexShrink: 1,
-  },
-  cashYieldSyncBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 32,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: withAlpha(colors.scalable, 0.12),
-    marginLeft: 8,
-  },
-  cashYieldSyncBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.scalable,
   },
   priceAlertBanner: {
     backgroundColor: colors.card,
