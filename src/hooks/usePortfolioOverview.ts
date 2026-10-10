@@ -43,9 +43,13 @@ export const usePortfolioOverview = (userId: string | undefined) => {
       (scalableConfig?.interestPlan as ScalableInterestPlanId) || 'prime',
       configuredInterestRate ?? null,
       scalableSavingsPlans,
-      { scalableConnected: isScalableConnected, includeCashInWeights: includeCashInTotal }
+      {
+        scalableConnected: isScalableConnected,
+        includeCashInWeights: includeCashInTotal,
+        incompleteAssets: aggregation.fxMissingSymbols.length + aggregation.missingPriceSymbols.length,
+      }
     ),
-    [allAssets, scalableCash, scalableConfig?.interestPlan, configuredInterestRate, scalableSavingsPlans, isScalableConnected, includeCashInTotal]
+    [aggregation.fxMissingSymbols.length, aggregation.missingPriceSymbols.length, allAssets, scalableCash, scalableConfig?.interestPlan, configuredInterestRate, scalableSavingsPlans, isScalableConnected, includeCashInTotal]
   );
 
   const isInitialLoading =

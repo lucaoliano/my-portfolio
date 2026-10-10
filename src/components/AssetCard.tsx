@@ -114,7 +114,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({
       if (!hasDailyData) return <Text style={styles.unknownNote}>{dailyLabel} n/d</Text>;
       return (
         <MetricChip value={dailyChange} size="md">
-          {dailyEstimated ? '≈' : ''}{formatSignedCurrency(dailyChange, currencySymbol)} ({dailyChangeSign}{formatNumber(dailyChangePercent)}%)
+          {dailyEstimated ? '≈ ' : ''}{formatSignedCurrency(dailyChange, currencySymbol)} ({dailyChangeSign}{formatNumber(dailyChangePercent)}%)
         </MetricChip>
       );
     }
@@ -168,19 +168,24 @@ export const AssetCard: React.FC<AssetCardProps> = ({
             <Text style={[styles.price, !hasPrice && styles.priceUnknown]}>
               {copied ? 'Copiato' : `${currencySymbol}${totalValue ? formatNumber(totalValue) : '---'}`}
             </Text>
-            {isForeign && valueInBase !== undefined && (
+            {/* Sotto il valore, il suo peso: "72% del totale" (o il controvalore in euro per le valute estere) */}
+            {/* Senza prezzo la nota "escluso dai totali" sotto basta: niente terza etichetta per lo stesso fatto */}
+            {hasPrice && (weightLabel || (isForeign && valueInBase !== undefined)) && (
               <Text style={styles.baseValue}>
-                {valueInBase === null ? 'cambio n/d' : `≈ €${formatNumber(valueInBase)}`}
+                {isForeign && valueInBase !== undefined
+                  ? valueInBase === null ? 'cambio n/d' : `≈ €${formatNumber(valueInBase)}`
+                  : null}
+                {isForeign && valueInBase !== undefined && weightLabel ? ' · ' : null}
+                {weightLabel ? `${weightLabel} del totale` : null}
               </Text>
             )}
           </View>
         </View>
         <View style={[styles.row, styles.rowSpaced]}>
-          <Text style={styles.details} numberOfLines={2}>
+          <Text style={styles.details} numberOfLines={1}>
             {hasPrice
               ? `${formatNumber(quantity).replace(/,00$/, '')} × ${currencySymbol}${formatNumber(price)}`
               : `${formatNumber(quantity).replace(/,00$/, '')} ${quantity === 1 ? 'quota' : 'quote'} · prezzo n/d`}
-            {weightLabel && ` · ${weightLabel}`}
           </Text>
           {renderMetric()}
         </View>
@@ -194,7 +199,7 @@ const ISIN_PATTERN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
 /** Un ISIN troncato ("IE0...") non dice nulla: per gli ISIN usiamo le iniziali del nome. */
 const getAvatarLabel = (symbol: string, name: string): string => {
   const base = symbol.split('.')[0];
-  if (!ISIN_PATTERN.test(base)) return base;
+  if (!ISIN_PATTERN.test(base)) return base.slice(0, 4);
   const initials = name
     .split(/\s+/)
     .filter(word => /^[A-Za-z0-9]/.test(word))
@@ -225,19 +230,19 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.border,
   },
   symbolContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    paddingHorizontal: 4,
+    marginRight: 10,
+    paddingHorizontal: 2,
     overflow: 'hidden',
   },
   symbol: {
     color: colors.text,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',
     width: '100%',
