@@ -990,7 +990,7 @@ export default function ScalableMcpSetupScreen() {
                 <View style={{ marginLeft: 12, flex: 1 }}>
                   <Text style={styles.taxReportTitle}>Zainetto Fiscale & Minusvalenze</Text>
                   <Text style={styles.taxReportSubtitle}>
-                    Scadenzario a 4 anni • Aliquota 26% • Compensazioni FIFO
+                    Stima dalle transazioni sincronizzate · costo medio ponderato
                   </Text>
                 </View>
               </View>
@@ -998,28 +998,28 @@ export default function ScalableMcpSetupScreen() {
 
             <View style={styles.taxReportMetricsRow}>
               <View style={styles.taxReportMetricCol}>
-                <Text style={styles.taxReportMetricLabel}>Minusvalenze Attive</Text>
+                <Text style={styles.taxReportMetricLabel}>Minusvalenze disponibili</Text>
                 <Text style={styles.taxReportMetricValue}>
-                  €{formatNumber(taxReport?.totalActiveLosses || 0)}
+                  {taxReport ? `€${formatNumber(taxReport.totalActiveLosses)}` : 'n/d'}
                 </Text>
               </View>
 
               <View style={styles.taxReportMetricCol}>
-                <Text style={styles.taxReportMetricLabel}>Risparmio Fiscale (26%)</Text>
-                <Text style={[styles.taxReportMetricValue, { color: colors.positive }]}>
-                  €{formatNumber(taxReport?.potentialTaxSavings || 0)}
+                <Text style={styles.taxReportMetricLabel}>Imposte evitabili (fino a)</Text>
+                <Text style={styles.taxReportMetricValue}>
+                  {taxReport ? `€${formatNumber(taxReport.potentialTaxSavings)}` : 'n/d'}
                 </Text>
               </View>
 
               <View style={styles.taxReportMetricCol}>
-                <Text style={styles.taxReportMetricLabel}>In Scadenza {new Date().getFullYear()}</Text>
+                <Text style={styles.taxReportMetricLabel}>In scadenza {new Date().getFullYear()}</Text>
                 <Text
                   style={[
                     styles.taxReportMetricValue,
                     (taxReport?.lossesExpiringThisYear || 0) > 0 && { color: colors.warning },
                   ]}
                 >
-                  €{formatNumber(taxReport?.lossesExpiringThisYear || 0)}
+                  {taxReport ? `€${formatNumber(taxReport.lossesExpiringThisYear)}` : 'n/d'}
                 </Text>
               </View>
             </View>

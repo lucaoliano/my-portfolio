@@ -203,31 +203,53 @@ export const getHistoricalPrice = onCall(async (request: CallableRequest<{ symbo
   }
 
   try {
-    // Gestione deterministica in UTC per evitare shift del fuso orario
-    const targetDate = new Date(`${date}T00:00:00.000Z`);
-    const endDate = new Date(targetDate);
-    endDate.setUTCDate(endDate.getUTCDate() + 1);
+    // Gli ISIN (titoli Scalable) vanno tradotti nel simbolo Yahoo, preferendo le borse in euro
+    const yahooSymbol = ISIN_PATTERN.test(symbol) ? await resolveYahooSymbol(symbol) : symbol;
+    if (!yahooSymbol) return { price: null, currency: null, priceDate: null, fxRateToEur: null };
 
-    // Inizia la ricerca fino a 4 giorni prima per coprire weekend e festività
-    const startDate = new Date(targetDate);
-    startDate.setUTCDate(startDate.getUTCDate() - 4);
+    const closeOn = async (sym: string) => {
+      // Finestra di 5 giorni fino alla data scelta: copre weekend e festività
+      const targetDate = new Date(`${date}T00:00:00.000Z`);
+      const endDate = new Date(targetDate);
+      endDate.setUTCDate(endDate.getUTCDate() + 1);
+      const startDate = new Date(targetDate);
+      startDate.setUTCDate(startDate.getUTCDate() - 4);
+      const rows = await yf.historical(sym, {
+        period1: startDate.toISOString().split("T")[0],
+        period2: endDate.toISOString().split("T")[0],
+      });
+      const last = rows && rows.length > 0 ? rows[rows.length - 1] : null;
+      return last ? { close: last.close, date: new Date(last.date).toISOString().slice(0, 10) } : null;
+    };
 
-    const period1 = startDate.toISOString().split("T")[0];
-    const period2 = endDate.toISOString().split("T")[0];
+    const close = await closeOn(yahooSymbol);
+    if (!close) return { price: null, currency: null, priceDate: null, fxRateToEur: null };
 
-    const results = await yf.historical(symbol, {
-      period1,
-      period2,
-    });
-
-    if (results && results.length > 0) {
-      // Prendi l'ultimo prezzo di chiusura disponibile nella finestra temporale
-      const lastResult = results[results.length - 1];
-      return { price: lastResult.close };
-    } else {
-      // Se non ci sono dati, ritorniamo null
-      return { price: null };
+    // Valuta di quotazione e cambio verso l'euro dello stesso giorno: il prezzo da solo non basta
+    let currency: string | null = null;
+    try {
+      const q = await yf.quote(yahooSymbol);
+      currency = (q as { currency?: string } | undefined)?.currency ?? null;
+    } catch {
+      currency = null;
     }
+    // Le quotazioni in pence (GBp) arrivano in centesimi di sterlina
+    let price = close.close;
+    if (currency === "GBp" || currency === "GBX") {
+      price = price / 100;
+      currency = "GBP";
+    }
+    currency = currency ? currency.toUpperCase() : null;
+    let fxRateToEur: number | null = currency === "EUR" ? 1 : null;
+    if (currency && currency !== "EUR") {
+      try {
+        const fx = await closeOn(`${currency}EUR=X`);
+        fxRateToEur = fx ? fx.close : null;
+      } catch {
+        fxRateToEur = null;
+      }
+    }
+    return { price, currency, priceDate: close.date, fxRateToEur, yahooSymbol };
   } catch (error: unknown) {
     console.error(`Error calling Yahoo Finance historical for ${symbol} on ${date}:`, error instanceof Error ? error.message : String(error));
     throw new HttpsError(

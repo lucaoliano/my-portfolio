@@ -82,20 +82,30 @@ export const searchSymbol = async (query: string): Promise<YahooSearchResult[]> 
   }
 };
 
+export interface HistoricalQuote {
+  price: number;
+  /** Valuta di quotazione (es. "USD"); null se Yahoo non la riporta */
+  currency: string | null;
+  /** Giorno di borsa da cui viene la chiusura (può precedere la data scelta: weekend, festivi) */
+  priceDate: string | null;
+  /** Euro per 1 unità della valuta, alla stessa data */
+  fxRateToEur: number | null;
+}
+
 /**
- * Fetch historical price for a symbol on a specific date
+ * Prezzo di chiusura di un titolo a una data, con valuta e cambio in euro.
+ * null = nessun prezzo per quella data; un errore di rete viene rilanciato, così la schermata può dirlo.
  */
-export const getHistoricalPrice = async (symbol: string, date: string): Promise<number | null> => {
+export const getHistoricalQuote = async (symbol: string, date: string): Promise<HistoricalQuote | null> => {
   if (!symbol || !date) return null;
-  
   const getHistoricalPriceFn = httpsCallable(functions, 'getHistoricalPrice');
-  
-  try {
-    const result = await getHistoricalPriceFn({ symbol, date });
-    const data = result.data as { price: number | null };
-    return data.price;
-  } catch (error) {
-    console.error("Error fetching historical price:", error);
-    return null;
-  }
+  const result = await getHistoricalPriceFn({ symbol, date });
+  const data = result.data as Partial<HistoricalQuote> & { price: number | null };
+  if (!data || typeof data.price !== 'number' || data.price <= 0) return null;
+  return {
+    price: data.price,
+    currency: data.currency ?? null,
+    priceDate: data.priceDate ?? null,
+    fxRateToEur: typeof data.fxRateToEur === 'number' && data.fxRateToEur > 0 ? data.fxRateToEur : null,
+  };
 };

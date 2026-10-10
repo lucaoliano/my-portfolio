@@ -144,7 +144,6 @@ function InnerLayout() {
           <Stack.Screen name="manage-groups" options={{ presentation: 'modal' }} />
           <Stack.Screen name="add-transaction" options={{ presentation: 'modal' }} />
           <Stack.Screen name="edit-transaction" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="change-group" options={{ presentation: 'modal' }} />
           <Stack.Screen name="profile" options={{ presentation: 'modal' }} />
           <Stack.Screen name="settings" />
           <Stack.Screen name="pac-calculator" />

@@ -1,369 +1,271 @@
-import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import {
-  ChevronLeft,
-  RefreshCw,
-  Receipt,
-  ShieldCheck,
-  AlertTriangle,
-  TrendingUp,
-  TrendingDown,
-  Calendar,
-  Info,
-  Clock,
-  ArrowUpRight,
-  ArrowDownRight,
-  Sparkles,
-  CheckCircle2,
-  BookOpen,
-} from 'lucide-react-native';
+import { ChevronLeft, RefreshCw, AlertCircle, Info } from 'lucide-react-native';
 
 import { useAppTheme } from '../theme/ThemeContext';
 import { ThemeColors, withAlpha } from '../theme/colors';
 import { auth } from '../config/firebase';
 import { useTransactions } from '../hooks/useTransactions';
+import { useAssetCategories } from '../hooks/useAssetCategories';
+import { useScalableConfig } from '../hooks/useScalableConfig';
 import { useScalableTaxReport } from '../hooks/useScalableTaxReport';
-import { formatNumber } from '../utils/formatters';
-import { TaxLossBucket, RealizedTrade, TaxOptimizationTip } from '../types';
+import { formatDate, formatNumber, formatSignedCurrency } from '../utils/formatters';
+import { BrokerTaxReport, RealizedTrade, TaxLossBucket } from '../types';
 
-type ActiveTab = 'buckets' | 'trades' | 'strategies';
+type ActiveTab = 'years' | 'sales' | 'rules';
 
+const TABS: { key: ActiveTab; label: string }[] = [
+  { key: 'years', label: 'Per anno' },
+  { key: 'sales', label: 'Vendite' },
+  { key: 'rules', label: 'Regole' },
+];
+
+const eur = (value: number) => `€${formatNumber(value)}`;
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+const BUCKET_STATUS: Record<TaxLossBucket['status'] | 'EXPIRING', string> = {
+  ACTIVE: 'Disponibili',
+  EXPIRING: 'In scadenza quest\'anno',
+  COMPENSATED: 'Usate per intero',
+  EXPIRED: 'Scadute',
+};
+
+const TREATMENT_NOTE: Record<NonNullable<RealizedTrade['treatment']>, string | null> = {
+  diversi: null,
+  capitale: 'ETF o fondo: il guadagno non compensa',
+  stato: 'Titolo di Stato: conta per il 48,08%',
+};
+
+/**
+ * Zainetto fiscale: una stima per intermediario, calcolata dalle transazioni.
+ * Il numero può finire in una dichiarazione dei redditi: diciamo sempre come è calcolato e che fa fede il broker.
+ */
 export default function TaxReportScreen() {
   const router = useRouter();
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
-
-  const [activeTab, setActiveTab] = useState<ActiveTab>('buckets');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('years');
+  const [brokerId, setBrokerId] = useState<BrokerTaxReport['brokerId'] | null>(null);
 
   const userId = auth.currentUser?.uid;
-  const { transactions } = useTransactions(userId);
-  const {
-    taxReport,
-    tips,
-    loading,
-    refreshing,
-    refreshTaxReport,
-  } = useScalableTaxReport(userId, transactions);
+  const { transactions, loading: transactionsLoading } = useTransactions(userId);
+  const { assetMeta } = useAssetCategories(userId);
+  const { config: scalableConfig } = useScalableConfig(userId);
+  const isScalableConnected = !!scalableConfig?.enabled && scalableConfig?.status === 'connected';
+  const { brokers, officialScalable, tips, loading, refreshing, refreshError, refreshTaxReport } =
+    useScalableTaxReport(userId, transactions, { transactionsLoading, assetMeta });
 
   const currentYear = new Date().getFullYear();
+  // Di partenza l'intermediario che ha vendite: un zainetto vuoto non è la prima cosa da mostrare
+  const selected = brokers.find(b => b.brokerId === brokerId)
+    ?? brokers.find(b => b.report.realizedTrades.length > 0 || (b.report.excludedTrades?.length ?? 0) > 0)
+    ?? brokers[0]
+    ?? null;
+  const report = selected?.report ?? null;
 
-  const activeBuckets = useMemo(() => {
-    return (taxReport?.buckets || []).filter((b) => b.status === 'ACTIVE');
-  }, [taxReport]);
+  const header = (
+    <View style={styles.header}>
+      <TouchableOpacity
+        style={styles.iconButton}
+        onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        accessibilityRole="button"
+        accessibilityLabel="Indietro"
+      >
+        <ChevronLeft size={26} color={colors.text} />
+      </TouchableOpacity>
+      <Text style={styles.headerTitle} accessibilityRole="header">Zainetto fiscale</Text>
+      {isScalableConnected ? (
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={refreshTaxReport}
+          disabled={refreshing}
+          accessibilityRole="button"
+          accessibilityLabel="Aggiorna da Scalable"
+          aria-busy={refreshing}
+        >
+          {refreshing ? <ActivityIndicator size="small" color={colors.textSecondary} /> : <RefreshCw size={20} color={colors.text} />}
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.iconButton} />
+      )}
+    </View>
+  );
 
-  const hasExpiringLosses = (taxReport?.lossesExpiringThisYear || 0) > 0;
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        {header}
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.textSecondary} />
+          <Text style={styles.muted}>Calcolo dello zainetto dalle tue transazioni…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const hasSales = brokers.some(b => b.report.realizedTrades.length > 0 || (b.report.excludedTrades?.length ?? 0) > 0);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-          activeOpacity={0.7}
-        >
-          <ChevronLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Zainetto Fiscale</Text>
-          <Text style={styles.headerSubtitle}>Minusvalenze & Compensazioni Fiscali</Text>
-        </View>
-        <TouchableOpacity
-          onPress={refreshTaxReport}
-          style={styles.refreshButton}
-          disabled={refreshing}
-          activeOpacity={0.7}
-        >
-          {refreshing ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <RefreshCw size={20} color={colors.textSecondary} />
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Main KPI Hero Cards */}
-        <View style={styles.heroRow}>
-          {/* Active Minusvalenze Card */}
-          <View style={[styles.kpiCard, styles.kpiCardHighlight]}>
-            <View style={styles.kpiHeader}>
-              <Receipt size={18} color={colors.primary} />
-              <View style={styles.badgeSource}>
-                <Text style={styles.badgeSourceText}>
-                  {taxReport?.source === 'mcp'
-                    ? 'SCALABLE MCP'
-                    : taxReport?.source === 'hybrid'
-                    ? 'IBRIDO MCP'
-                    : 'CALCOLO FIFO'}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.kpiLabel}>Zainetto Fiscale Totale</Text>
-            <Text style={styles.kpiValue}>
-              €{formatNumber(taxReport?.totalActiveLosses || 0)}
-            </Text>
-            <Text style={styles.kpiSubtext}>Minusvalenze compensabili attive</Text>
-          </View>
-
-          {/* Potential Tax Savings Card */}
-          <View style={styles.kpiCard}>
-            <View style={styles.kpiHeader}>
-              <ShieldCheck size={18} color={colors.positive} />
-              <View style={[styles.badgeSource, { backgroundColor: withAlpha(colors.positive, 0.125) }]}>
-                <Text style={[styles.badgeSourceText, { color: colors.positive }]}>
-                  ALIQUOTA 26%
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.kpiLabel}>Credito Fiscale Potenziale</Text>
-            <Text style={[styles.kpiValue, { color: colors.positive }]}>
-              €{formatNumber(taxReport?.potentialTaxSavings || 0)}
-            </Text>
-            <Text style={styles.kpiSubtext}>Risparmio d&apos;imposta su future plusvalenze</Text>
-          </View>
-        </View>
-
-        {/* Expiring Losses Alert Banner (if any) */}
-        {hasExpiringLosses && (
-          <View style={styles.urgentBanner}>
-            <AlertTriangle size={24} color={colors.warning} style={{ marginRight: 12 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.urgentBannerTitle}>
-                Attenzione: Minusvalenze in Scadenza il 31/12/{currentYear}
-              </Text>
-              <Text style={styles.urgentBannerText}>
-                Hai €{formatNumber(taxReport?.lossesExpiringThisYear || 0)} di minusvalenze generate
-                nel {currentYear - 4} che scadranno entro fine anno se non compensate con plusvalenze da
-                azioni singole, ETC o certificates.
-              </Text>
-            </View>
+    <SafeAreaView style={styles.container}>
+      {header}
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Come è calcolato: prima del numero, non in fondo */}
+        <Text style={styles.disclaimer}>
+          Stima calcolata dalle transazioni presenti nell&apos;app: costo medio ponderato, commissioni incluse, importi in euro.
+          Non è consulenza fiscale: fa fede il rendiconto del tuo intermediario.
+        </Text>
+        {refreshError && (
+          <View style={styles.notice} accessibilityRole="alert">
+            <AlertCircle size={16} color={colors.warning} style={styles.noticeIcon} />
+            <Text style={styles.noticeText}>{refreshError}</Text>
           </View>
         )}
 
-        {/* Realized P&L Current Year Strip */}
-        <View style={styles.currentYearStrip}>
-          <View style={styles.currentYearCol}>
-            <Text style={styles.stripLabel}>Plusvalenze Realizzate {currentYear}</Text>
-            <View style={styles.stripRow}>
-              <ArrowUpRight size={14} color={colors.positive} />
-              <Text style={[styles.stripValue, { color: colors.positive }]}>
-                +€{formatNumber(taxReport?.realizedGainsCurrentYear || 0)}
-              </Text>
-            </View>
+        {!hasSales || !report ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>Nessuna vendita registrata</Text>
+            <Text style={styles.muted}>
+              Lo zainetto si forma quando vendi un titolo in perdita. Le vendite inserite o sincronizzate compariranno qui.
+            </Text>
           </View>
-          <View style={styles.stripDivider} />
-          <View style={styles.currentYearCol}>
-            <Text style={styles.stripLabel}>Minusvalenze Realizzate {currentYear}</Text>
-            <View style={styles.stripRow}>
-              <ArrowDownRight size={14} color={colors.negative} />
-              <Text style={[styles.stripValue, { color: colors.negative }]}>
-                -€{formatNumber(taxReport?.realizedLossesCurrentYear || 0)}
+        ) : (
+          <>
+            {brokers.length > 1 && (
+              <View style={styles.segmented} accessibilityRole="tablist" aria-label="Intermediario">
+                {brokers.map(b => {
+                  const isSelected = b.brokerId === selected?.brokerId;
+                  return (
+                    <TouchableOpacity
+                      key={b.brokerId}
+                      style={[styles.segment, isSelected && styles.segmentActive]}
+                      onPress={() => setBrokerId(b.brokerId)}
+                      accessibilityRole="tab"
+                      aria-selected={isSelected}
+                    >
+                      <Text style={[styles.segmentText, isSelected && styles.segmentTextActive]} numberOfLines={1}>
+                        {b.brokerId === 'scalable' ? 'Scalable' : 'Inserite a mano'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* La risposta: quanto ho a disposizione */}
+            <View style={styles.hero}>
+              <Text style={styles.heroLabel}>Minusvalenze disponibili{brokers.length === 1 ? ` · ${selected!.label}` : ''}</Text>
+              <Text style={styles.heroValue}>{eur(report.totalActiveLosses)}</Text>
+              <Text style={styles.heroNote}>
+                {report.totalActiveLosses > 0
+                  ? `Possono evitare fino a ${eur(report.potentialTaxSavings)} di imposte (26%) su plusvalenze future compensabili presso questo intermediario.`
+                  : 'Nessuna minusvalenza ancora utilizzabile.'}
               </Text>
-            </View>
-          </View>
-          <View style={styles.stripDivider} />
-          <View style={styles.currentYearCol}>
-            <Text style={styles.stripLabel}>Netto Realizzato</Text>
-            <View style={styles.stripRow}>
-              {(taxReport?.netRealizedCurrentYear || 0) >= 0 ? (
-                <TrendingUp size={14} color={colors.positive} />
-              ) : (
-                <TrendingDown size={14} color={colors.negative} />
+              {selected!.brokerId === 'scalable' && officialScalable && Math.abs(officialScalable.totalActiveLosses - report.totalActiveLosses) > 0.5 && (
+                <Text style={styles.heroNote}>
+                  Scalable riporta {eur(officialScalable.totalActiveLosses)}: in caso di differenza fa fede il dato del broker.
+                </Text>
               )}
-              <Text
-                style={[
-                  styles.stripValue,
-                  {
-                    color:
-                      (taxReport?.netRealizedCurrentYear || 0) >= 0 ? colors.positive : colors.negative,
-                  },
-                ]}
-              >
-                €{formatNumber(taxReport?.netRealizedCurrentYear || 0)}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Tab Switcher */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'buckets' && styles.tabButtonActive]}
-            onPress={() => setActiveTab('buckets')}
-            activeOpacity={0.7}
-          >
-            <Clock
-              size={16}
-              color={activeTab === 'buckets' ? colors.primary : colors.textSecondary}
-            />
-            <Text
-              style={[
-                styles.tabButtonText,
-                activeTab === 'buckets' && styles.tabButtonTextActive,
-              ]}
-            >
-              Scadenziario ({activeBuckets.length})
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'trades' && styles.tabButtonActive]}
-            onPress={() => setActiveTab('trades')}
-            activeOpacity={0.7}
-          >
-            <Receipt
-              size={16}
-              color={activeTab === 'trades' ? colors.primary : colors.textSecondary}
-            />
-            <Text
-              style={[
-                styles.tabButtonText,
-                activeTab === 'trades' && styles.tabButtonTextActive,
-              ]}
-            >
-              Trade Chiusi ({taxReport?.realizedTrades?.length || 0})
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'strategies' && styles.tabButtonActive]}
-            onPress={() => setActiveTab('strategies')}
-            activeOpacity={0.7}
-          >
-            <Sparkles
-              size={16}
-              color={activeTab === 'strategies' ? colors.primary : colors.textSecondary}
-            />
-            <Text
-              style={[
-                styles.tabButtonText,
-                activeTab === 'strategies' && styles.tabButtonTextActive,
-              ]}
-            >
-              Strategie ({tips.length})
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Tab 1: Scadenziario Annuale Buckets */}
-        {activeTab === 'buckets' && (
-          <View style={styles.tabContent}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Zainetto Fiscale per Anno Fiscale</Text>
-              <Text style={styles.sectionHelper}>Regola quadriennale italiana (Anno + 4)</Text>
             </View>
 
-            {loading ? (
-              <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: 32 }} />
-            ) : (taxReport?.buckets || []).length === 0 ? (
-              <View style={styles.emptyCard}>
-                <CheckCircle2 size={36} color={colors.positive} />
-                <Text style={styles.emptyTitle}>Nessuna minusvalenza registrata</Text>
-                <Text style={styles.emptySubtitle}>
-                  Non hai perdite fiscali pregresse da compensare o il tuo zainetto è vuoto.
+            {report.lossesExpiringThisYear > 0 && (
+              <View style={styles.notice}>
+                <AlertCircle size={16} color={colors.warning} style={styles.noticeIcon} />
+                <Text style={styles.noticeText}>
+                  {eur(report.lossesExpiringThisYear)} di minusvalenze del {currentYear - 4} scadono il 31 dicembre {currentYear}.
                 </Text>
               </View>
-            ) : (
-              (taxReport?.buckets || []).map((bucket) => (
-                <BucketCard key={bucket.yearCreated} bucket={bucket} colors={colors} styles={styles} />
-              ))
             )}
-          </View>
-        )}
 
-        {/* Tab 2: Operazioni Chiuse Realized Trades */}
-        {activeTab === 'trades' && (
-          <View style={styles.tabContent}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Storico Operazioni Concluse (FIFO)</Text>
-              <Text style={styles.sectionHelper}>
-                Calcolo plusvalenze e minusvalenze deterministico First-In, First-Out
-              </Text>
-            </View>
-
-            {loading ? (
-              <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: 32 }} />
-            ) : (taxReport?.realizedTrades || []).length === 0 ? (
-              <View style={styles.emptyCard}>
-                <Receipt size={36} color={colors.textSecondary} />
-                <Text style={styles.emptyTitle}>Nessun trade di vendita registrato</Text>
-                <Text style={styles.emptySubtitle}>
-                  Quando venderai una posizione (o sincronizzerai vendite da Scalable MCP), il calcolo
-                  FIFO mostrerà qui il guadagno o la perdita realizzata.
-                </Text>
+            {(report.excludedTrades?.length ?? 0) > 0 && (
+              <View style={styles.notice}>
+                <AlertCircle size={16} color={colors.warning} style={styles.noticeIcon} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.noticeText}>
+                    {plural(report.excludedTrades!.length, 'vendita non calcolata', 'vendite non calcolate')}: la stima potrebbe essere incompleta.
+                  </Text>
+                  {report.excludedTrades!.map(t => (
+                    <Text key={t.id} style={styles.noticeDetail}>
+                      {t.name}, {formatDate(t.date)}: {t.reason === 'fx'
+                        ? 'manca il cambio in euro del giorno (aggiungilo nella transazione)'
+                        : 'mancano gli acquisti corrispondenti'}
+                    </Text>
+                  ))}
+                </View>
               </View>
-            ) : (
-              (taxReport?.realizedTrades || []).map((trade) => (
-                <TradeCard key={trade.id} trade={trade} colors={colors} styles={styles} />
-              ))
             )}
-          </View>
-        )}
 
-        {/* Tab 3: Strategie & Guida Fiscale */}
-        {activeTab === 'strategies' && (
-          <View style={styles.tabContent}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Strategie di Ottimizzazione Fiscale</Text>
-              <Text style={styles.sectionHelper}>
-                Regole e consigli matematici per non sprecare minusvalenze
-              </Text>
+            {/* L'anno in corso: cosa usa lo zainetto e cosa no */}
+            <View style={styles.yearCard}>
+              <Text style={styles.cardTitle}>{currentYear}</Text>
+              <View style={styles.yearRow}>
+                <Text style={styles.yearLabel}>Plusvalenze compensabili</Text>
+                <Text style={styles.yearValue}>{eur(report.realizedGainsCurrentYear)}</Text>
+              </View>
+              <View style={styles.yearRow}>
+                <Text style={styles.yearLabel}>Minusvalenze realizzate</Text>
+                <Text style={styles.yearValue}>{eur(report.realizedLossesCurrentYear)}</Text>
+              </View>
+              {(report.fundGainsCurrentYear ?? 0) > 0 && (
+                <View style={styles.yearRow}>
+                  <Text style={styles.yearLabel}>Guadagni da ETF e fondi (non compensano)</Text>
+                  <Text style={styles.yearValue}>{eur(report.fundGainsCurrentYear!)}</Text>
+                </View>
+              )}
             </View>
 
-            {/* Tips generated deterministically */}
-            {tips.map((tip) => (
-              <TipCard key={tip.id} tip={tip} colors={colors} styles={styles} />
+            <View style={styles.tabs} accessibilityRole="tablist">
+              {TABS.map(tab => {
+                const isSelected = activeTab === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    style={[styles.tab, isSelected && styles.tabActive]}
+                    onPress={() => setActiveTab(tab.key)}
+                    accessibilityRole="tab"
+                    aria-selected={isSelected}
+                  >
+                    <Text style={[styles.tabText, isSelected && styles.tabTextActive]} numberOfLines={1}>{tab.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {activeTab === 'years' && (
+              report.buckets.length === 0 ? (
+                <Text style={styles.muted}>Nessuna vendita in perdita presso questo intermediario.</Text>
+              ) : (
+                report.buckets.map(bucket => <BucketCard key={bucket.yearCreated} bucket={bucket} styles={styles} />)
+              )
+            )}
+
+            {activeTab === 'sales' && (
+              report.realizedTrades.length === 0 ? (
+                <Text style={styles.muted}>Nessuna vendita calcolata presso questo intermediario.</Text>
+              ) : (
+                [...report.realizedTrades].reverse().map(trade => (
+                  <TradeRow key={trade.id} trade={trade} styles={styles} colors={colors} />
+                ))
+              )
+            )}
+          </>
+        )}
+
+        {(activeTab === 'rules' || !hasSales || !report) && (
+          <View style={{ marginTop: 8 }}>
+            {(!hasSales || !report) && <Text style={styles.sectionTitle}>Cosa compensa cosa</Text>}
+            {tips.map(tip => (
+              <View key={tip.id} style={styles.ruleCard}>
+                <View style={styles.ruleHeader}>
+                  {tip.type === 'EXPIRING_LOSSES'
+                    ? <AlertCircle size={16} color={colors.warning} style={styles.noticeIcon} />
+                    : <Info size={16} color={colors.textSecondary} style={styles.noticeIcon} />}
+                  <Text style={styles.ruleTitle}>{tip.title}</Text>
+                </View>
+                <Text style={styles.ruleText}>{tip.description}</Text>
+              </View>
             ))}
-
-            {/* Reference Table: Che cosa compensa le minusvalenze */}
-            <View style={styles.guideCard}>
-              <View style={styles.guideHeader}>
-                <BookOpen size={18} color={colors.primary} />
-                <Text style={styles.guideTitle}>Guida Rapida: Compensabilità Fiscale</Text>
-              </View>
-
-              <View style={styles.guideRow}>
-                <View style={[styles.guidePill, { backgroundColor: withAlpha(colors.positive, 0.125) }]}>
-                  <Text style={[styles.guidePillText, { color: colors.positive }]}>COMPENSA</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.guideRowTitle}>Redditi Diversi</Text>
-                  <Text style={styles.guideRowDesc}>
-                    Azioni singole, ETC su materie prime (es. Oro fisico), Certificati di investimento,
-                    Crypto, opzioni e derivati.
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.guideDivider} />
-
-              <View style={styles.guideRow}>
-                <View style={[styles.guidePill, { backgroundColor: withAlpha(colors.negative, 0.125) }]}>
-                  <Text style={[styles.guidePillText, { color: colors.negative }]}>NON COMPENSA</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.guideRowTitle}>Redditi di Capitale (ETF UCITS & Cedole)</Text>
-                  <Text style={styles.guideRowDesc}>
-                    Plusvalenze da ETF armonizzati e dividendi. Vengono tassati al 26% separatamente senza
-                    poter scalare lo zainetto pregresso. Nota: vendere un ETF in perdita genera comunque
-                    minusvalenze!
-                  </Text>
-                </View>
-              </View>
-            </View>
           </View>
         )}
       </ScrollView>
@@ -371,636 +273,156 @@ export default function TaxReportScreen() {
   );
 }
 
-// ---------------- Bucket Card Component ----------------
-function BucketCard({
-  bucket,
-  colors,
-  styles,
-}: {
-  bucket: TaxLossBucket;
-  colors: ThemeColors;
-  styles: ReturnType<typeof getStyles>;
-}) {
-  const percentCompensated =
-    bucket.initialAmount > 0
-      ? Math.min(100, Math.round((bucket.compensatedAmount / bucket.initialAmount) * 100))
-      : 0;
-
-  const isExpiring = bucket.isExpiringThisYear && bucket.status === 'ACTIVE';
-
-  return (
-    <View style={[styles.bucketCard, isExpiring && styles.bucketCardExpiring]}>
-      <View style={styles.bucketTopRow}>
-        <View style={styles.bucketYearBadge}>
-          <Calendar size={14} color={colors.primary} />
-          <Text style={styles.bucketYearText}>Generata: {bucket.yearCreated}</Text>
-        </View>
-
-        <View
-          style={[
-            styles.statusPill,
-            bucket.status === 'COMPENSATED'
-              ? { backgroundColor: withAlpha(colors.positive, 0.125) }
-              : bucket.status === 'EXPIRED'
-              ? { backgroundColor: withAlpha(colors.textSecondary, 0.125) }
-              : isExpiring
-              ? { backgroundColor: withAlpha(colors.warning, 0.125) }
-              : { backgroundColor: withAlpha(colors.info, 0.125) },
-          ]}
-        >
-          <Text
-            style={[
-              styles.statusPillText,
-              bucket.status === 'COMPENSATED'
-                ? { color: colors.positive }
-                : bucket.status === 'EXPIRED'
-                ? { color: colors.textSecondary }
-                : isExpiring
-                ? { color: colors.warning }
-                : { color: colors.info },
-            ]}
-          >
-            {bucket.status === 'COMPENSATED'
-              ? 'COMPLETATA'
-              : bucket.status === 'EXPIRED'
-              ? 'SCADUTA'
-              : isExpiring
-              ? 'IN SCADENZA'
-              : 'ATTIVA'}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.bucketDetailsGrid}>
-        <View style={styles.bucketDetailItem}>
-          <Text style={styles.bucketDetailLabel}>Iniziale</Text>
-          <Text style={styles.bucketDetailVal}>€{formatNumber(bucket.initialAmount)}</Text>
-        </View>
-
-        <View style={styles.bucketDetailItem}>
-          <Text style={styles.bucketDetailLabel}>Compensato</Text>
-          <Text style={[styles.bucketDetailVal, { color: colors.positive }]}>
-            €{formatNumber(bucket.compensatedAmount)}
-          </Text>
-        </View>
-
-        <View style={styles.bucketDetailItem}>
-          <Text style={styles.bucketDetailLabel}>Residuo da Usare</Text>
-          <Text style={[styles.bucketDetailVal, { color: colors.text, fontWeight: '700' }]}>
-            €{formatNumber(bucket.remainingAmount)}
-          </Text>
-        </View>
-      </View>
-
-      {/* Progress Bar */}
-      <View style={styles.progressContainer}>
-        <View style={[styles.progressBar, { width: `${percentCompensated}%` }]} />
-      </View>
-
-      <View style={styles.bucketFooterRow}>
-        <Text style={styles.bucketExpiryText}>
-          Scadenza limite: 31 Dicembre {bucket.yearExpires}
-        </Text>
-        <Text style={styles.bucketPercentText}>{percentCompensated}% compensato</Text>
-      </View>
-    </View>
-  );
-}
-
-// ---------------- Trade Card Component ----------------
-function TradeCard({
-  trade,
-  colors,
-  styles,
-}: {
-  trade: RealizedTrade;
-  colors: ThemeColors;
-  styles: ReturnType<typeof getStyles>;
-}) {
-  const pnlPercent =
-    trade.costBasis > 0
-      ? Math.round((trade.realizedGainOrLoss / trade.costBasis) * 10000) / 100
-      : 0;
-
-  const dateStr = new Date(trade.date).toLocaleDateString('it-IT', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-
-  return (
-    <View style={styles.tradeCard}>
-      <View style={styles.tradeTopRow}>
-        <View style={{ flex: 1, marginRight: 8 }}>
-          <Text style={styles.tradeSymbol}>{trade.symbol}</Text>
-          <Text style={styles.tradeName} numberOfLines={1}>
-            {trade.name}
-          </Text>
-        </View>
-
-        <View style={styles.tradePnlContainer}>
-          <Text
-            style={[
-              styles.tradePnlValue,
-              { color: trade.realizedGainOrLoss >= 0 ? colors.positive : colors.negative },
-            ]}
-          >
-            {trade.realizedGainOrLoss >= 0 ? '+' : ''}€{formatNumber(trade.realizedGainOrLoss)}
-          </Text>
-          <Text
-            style={[
-              styles.tradePnlPercent,
-              { color: trade.realizedGainOrLoss >= 0 ? colors.positive : colors.negative },
-            ]}
-          >
-            {pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(2)}%
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.tradeDivider} />
-
-      <View style={styles.tradeMetaRow}>
-        <Text style={styles.tradeMetaText}>Data: {dateStr}</Text>
-        <Text style={styles.tradeMetaText}>Qtà: {trade.quantity}</Text>
-        <Text style={styles.tradeMetaText}>PMC: €{formatNumber(trade.costBasis / (trade.quantity || 1))}</Text>
-        <Text style={styles.tradeMetaText}>Vendita: €{formatNumber(trade.salePrice)}</Text>
-      </View>
-    </View>
-  );
-}
-
-// ---------------- Tip Card Component ----------------
-function TipCard({
-  tip,
-  colors,
-  styles,
-}: {
-  tip: TaxOptimizationTip;
-  colors: ThemeColors;
-  styles: ReturnType<typeof getStyles>;
-}) {
-  const isHigh = tip.priority === 'HIGH';
-
+const BucketCard = ({ bucket, styles }: { bucket: TaxLossBucket; styles: ReturnType<typeof getStyles> }) => {
+  const statusKey = bucket.isExpiringThisYear ? 'EXPIRING' : bucket.status;
+  const usedShare = bucket.initialAmount > 0 ? Math.min(1, bucket.compensatedAmount / bucket.initialAmount) : 0;
   return (
     <View
-      style={[
-        styles.tipCard,
-        isHigh && { borderColor: colors.warning, borderWidth: 1.5 },
-      ]}
+      style={styles.bucketCard}
+      accessible
+      accessibilityLabel={`Minusvalenze ${bucket.yearCreated}: ${eur(bucket.initialAmount)}, usate ${eur(bucket.compensatedAmount)}, residue ${eur(bucket.remainingAmount)}. ${BUCKET_STATUS[statusKey]}, utilizzabili fino al 31 dicembre ${bucket.yearExpires}`}
     >
-      <View style={styles.tipHeader}>
-        {tip.type === 'EXPIRING_LOSSES' ? (
-          <AlertTriangle size={18} color={colors.warning} />
-        ) : tip.type === 'HARVESTING_OPPORTUNITY' ? (
-          <Sparkles size={18} color={colors.primary} />
-        ) : (
-          <Info size={18} color={colors.info} />
-        )}
-        <Text style={styles.tipTitle}>{tip.title}</Text>
+      <View style={styles.bucketHeader}>
+        <Text style={styles.cardTitle}>Minusvalenze {bucket.yearCreated}</Text>
+        <Text style={[styles.bucketStatus, statusKey === 'EXPIRING' && styles.bucketStatusWarning]}>{BUCKET_STATUS[statusKey]}</Text>
       </View>
-      <Text style={styles.tipDesc}>{tip.description}</Text>
-      {tip.impactEur !== undefined && (
-        <View style={styles.tipImpactBadge}>
-          <Text style={styles.tipImpactText}>
-            Impatto fiscale stimato: €{formatNumber(tip.impactEur)}
-          </Text>
+      <View style={styles.bucketNumbers}>
+        <View style={styles.bucketCol}>
+          <Text style={styles.bucketLabel}>Generate</Text>
+          <Text style={styles.bucketValue}>{eur(bucket.initialAmount)}</Text>
         </View>
-      )}
+        <View style={styles.bucketCol}>
+          <Text style={styles.bucketLabel}>Usate</Text>
+          <Text style={styles.bucketValue}>{eur(bucket.compensatedAmount)}</Text>
+        </View>
+        <View style={styles.bucketCol}>
+          <Text style={styles.bucketLabel}>{bucket.status === 'EXPIRED' ? 'Perse' : 'Residue'}</Text>
+          <Text style={styles.bucketValue}>{eur(bucket.remainingAmount)}</Text>
+        </View>
+      </View>
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${Math.round(usedShare * 100)}%` }]} />
+      </View>
+      <Text style={styles.bucketExpiry}>Utilizzabili fino al 31 dicembre {bucket.yearExpires}</Text>
     </View>
   );
-}
+};
 
-// ---------------- Styles ----------------
-const getStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      backgroundColor: colors.card,
-    },
-    backButton: {
-      padding: 8,
-      borderRadius: 8,
-    },
-    headerTitleContainer: {
-      flex: 1,
-      marginHorizontal: 8,
-    },
-    headerTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    headerSubtitle: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      marginTop: 2,
-    },
-    refreshButton: {
-      padding: 8,
-      borderRadius: 8,
-    },
-    scrollContent: {
-      padding: 16,
-      paddingBottom: 48,
-    },
-    heroRow: {
-      flexDirection: 'row',
-      gap: 12,
-      marginBottom: 16,
-    },
-    kpiCard: {
-      flex: 1,
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      padding: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    kpiCardHighlight: {
-      borderColor: withAlpha(colors.primary, 0.314),
-    },
-    kpiHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    badgeSource: {
-      backgroundColor: withAlpha(colors.primary, 0.125),
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 6,
-    },
-    badgeSourceText: {
-      fontSize: 9,
-      fontWeight: '700',
-      color: colors.primary,
-    },
-    kpiLabel: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      marginBottom: 4,
-    },
-    kpiValue: {
-      fontSize: 20,
-      fontWeight: '800',
-      color: colors.text,
-      marginBottom: 4,
-    },
-    kpiSubtext: {
-      fontSize: 11,
-      color: colors.textSecondary,
-      lineHeight: 14,
-    },
-    urgentBanner: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      backgroundColor: withAlpha(colors.warning, 0.082),
-      borderColor: colors.warning,
-      borderWidth: 1,
-      borderRadius: 12,
-      padding: 14,
-      marginBottom: 16,
-    },
-    urgentBannerTitle: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.warning,
-      marginBottom: 4,
-    },
-    urgentBannerText: {
-      fontSize: 12,
-      color: colors.text,
-      lineHeight: 17,
-    },
-    currentYearStrip: {
-      flexDirection: 'row',
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderWidth: 1,
-      borderColor: colors.border,
-      marginBottom: 16,
-      alignItems: 'center',
-    },
-    currentYearCol: {
-      flex: 1,
-      alignItems: 'center',
-    },
-    stripDivider: {
-      width: 1,
-      height: 28,
-      backgroundColor: colors.border,
-      marginHorizontal: 8,
-    },
-    stripLabel: {
-      fontSize: 10,
-      color: colors.textSecondary,
-      marginBottom: 4,
-      textAlign: 'center',
-    },
-    stripRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    stripValue: {
-      fontSize: 13,
-      fontWeight: '700',
-    },
-    tabContainer: {
-      flexDirection: 'row',
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 4,
-      borderWidth: 1,
-      borderColor: colors.border,
-      marginBottom: 16,
-      gap: 4,
-    },
-    tabButton: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 8,
-      paddingHorizontal: 6,
-      borderRadius: 8,
-      gap: 6,
-    },
-    tabButtonActive: {
-      backgroundColor: withAlpha(colors.primary, 0.082),
-    },
-    tabButtonText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: colors.textSecondary,
-    },
-    tabButtonTextActive: {
-      color: colors.primary,
-    },
-    tabContent: {
-      gap: 12,
-    },
-    sectionHeaderRow: {
-      marginBottom: 4,
-    },
-    sectionTitle: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    sectionHelper: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      marginTop: 2,
-    },
-    bucketCard: {
-      backgroundColor: colors.card,
-      borderRadius: 14,
-      padding: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    bucketCardExpiring: {
-      borderColor: colors.warning,
-      borderWidth: 1.5,
-    },
-    bucketTopRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 12,
-    },
-    bucketYearBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    bucketYearText: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    statusPill: {
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 8,
-    },
-    statusPillText: {
-      fontSize: 10,
-      fontWeight: '700',
-    },
-    bucketDetailsGrid: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 10,
-    },
-    bucketDetailItem: {
-      flex: 1,
-    },
-    bucketDetailLabel: {
-      fontSize: 11,
-      color: colors.textSecondary,
-      marginBottom: 2,
-    },
-    bucketDetailVal: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: colors.text,
-    },
-    progressContainer: {
-      height: 6,
-      backgroundColor: colors.border,
-      borderRadius: 3,
-      overflow: 'hidden',
-      marginBottom: 8,
-    },
-    progressBar: {
-      height: '100%',
-      backgroundColor: colors.positive,
-      borderRadius: 3,
-    },
-    bucketFooterRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    bucketExpiryText: {
-      fontSize: 11,
-      color: colors.textSecondary,
-    },
-    bucketPercentText: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: colors.textSecondary,
-    },
-    emptyCard: {
-      backgroundColor: colors.card,
-      borderRadius: 14,
-      padding: 24,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    emptyTitle: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: colors.text,
-      marginTop: 10,
-      marginBottom: 4,
-    },
-    emptySubtitle: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      textAlign: 'center',
-      lineHeight: 18,
-    },
-    tradeCard: {
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    tradeTopRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    tradeSymbol: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    tradeName: {
-      fontSize: 11,
-      color: colors.textSecondary,
-      marginTop: 2,
-    },
-    tradePnlContainer: {
-      alignItems: 'flex-end',
-    },
-    tradePnlValue: {
-      fontSize: 14,
-      fontWeight: '700',
-    },
-    tradePnlPercent: {
-      fontSize: 11,
-      fontWeight: '600',
-      marginTop: 1,
-    },
-    tradeDivider: {
-      height: 1,
-      backgroundColor: colors.border,
-      marginVertical: 8,
-    },
-    tradeMetaRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    tradeMetaText: {
-      fontSize: 11,
-      color: colors.textSecondary,
-    },
-    tipCard: {
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    tipHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: 6,
-    },
-    tipTitle: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: colors.text,
-      flex: 1,
-    },
-    tipDesc: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      lineHeight: 18,
-    },
-    tipImpactBadge: {
-      marginTop: 8,
-      alignSelf: 'flex-start',
-      backgroundColor: withAlpha(colors.positive, 0.082),
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 6,
-    },
-    tipImpactText: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: colors.positive,
-    },
-    guideCard: {
-      backgroundColor: colors.card,
-      borderRadius: 14,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: colors.border,
-      marginTop: 8,
-    },
-    guideHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: 12,
-    },
-    guideTitle: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    guideRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 12,
-    },
-    guidePill: {
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
-    },
-    guidePillText: {
-      fontSize: 9,
-      fontWeight: '800',
-    },
-    guideRowTitle: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: colors.text,
-      marginBottom: 2,
-    },
-    guideRowDesc: {
-      fontSize: 11,
-      color: colors.textSecondary,
-      lineHeight: 16,
-    },
-    guideDivider: {
-      height: 1,
-      backgroundColor: colors.border,
-      marginVertical: 12,
-    },
-  });
+const TradeRow = ({ trade, styles, colors }: { trade: RealizedTrade; styles: ReturnType<typeof getStyles>; colors: ThemeColors }) => {
+  const note = trade.treatment ? TREATMENT_NOTE[trade.treatment] : null;
+  const percent = trade.costBasis > 0 ? (trade.realizedGainOrLoss / trade.costBasis) * 100 : null;
+  return (
+    <View style={styles.tradeRow}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.tradeName} numberOfLines={2}>{trade.name}</Text>
+        <Text style={styles.tradeMeta}>
+          {formatDate(trade.date)} · {formatNumber(trade.quantity).replace(/,00$/, '')} {trade.quantity === 1 ? 'quota' : 'quote'}
+        </Text>
+        <Text style={styles.tradeMeta}>
+          Costo {eur(trade.costBasis)}{trade.proceeds !== undefined ? ` · Incasso ${eur(trade.proceeds)}` : ''}
+        </Text>
+        {note && <Text style={styles.tradeMeta}>{note}</Text>}
+      </View>
+      <View style={styles.tradeResult}>
+        <Text style={[styles.tradeGain, { color: trade.realizedGainOrLoss >= 0 ? colors.positive : colors.negative }]}>
+          {formatSignedCurrency(trade.realizedGainOrLoss)}
+        </Text>
+        {percent !== null && (
+          <Text style={styles.tradeMeta}>{percent >= 0 ? '+' : ''}{formatNumber(percent)}%</Text>
+        )}
+      </View>
+    </View>
+  );
+};
+
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
+  content: { padding: 16, paddingBottom: 48 },
+  disclaimer: { fontSize: 12, lineHeight: 17, color: colors.textSecondary, marginBottom: 16 },
+  muted: { fontSize: 14, lineHeight: 20, color: colors.textSecondary, textAlign: 'left' },
+  emptyCard: { backgroundColor: colors.card, borderRadius: 16, padding: 20, marginBottom: 24, gap: 8 },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
+  segmented: {
+    flexDirection: 'row',
+    backgroundColor: colors.inputBackground,
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 16,
+  },
+  segment: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 8, paddingHorizontal: 8 },
+  segmentActive: { backgroundColor: colors.card },
+  segmentText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
+  segmentTextActive: { color: colors.text },
+  hero: { marginBottom: 16 },
+  heroLabel: { fontSize: 14, color: colors.textSecondary, marginBottom: 4 },
+  heroValue: { fontSize: 32, fontWeight: '700', color: colors.text, fontVariant: ['tabular-nums'] },
+  heroNote: { fontSize: 14, lineHeight: 20, color: colors.textSecondary, marginTop: 6 },
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: colors.warningSurface,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  noticeIcon: { marginRight: 8, marginTop: 2 },
+  noticeText: { flex: 1, fontSize: 14, lineHeight: 20, color: colors.text },
+  noticeDetail: { fontSize: 13, lineHeight: 18, color: colors.text, marginTop: 4 },
+  yearCard: { backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 20 },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
+  yearRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 10, gap: 12 },
+  yearLabel: { flex: 1, fontSize: 14, lineHeight: 20, color: colors.textSecondary },
+  yearValue: { fontSize: 15, fontWeight: '600', color: colors.text, fontVariant: ['tabular-nums'] },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: colors.inputBackground,
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 16,
+  },
+  tab: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 8, paddingHorizontal: 4 },
+  tabActive: { backgroundColor: colors.card },
+  tabText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
+  tabTextActive: { color: colors.text },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 12 },
+  bucketCard: { backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 12 },
+  bucketHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  bucketStatus: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+  bucketStatusWarning: { color: colors.warning },
+  bucketNumbers: { flexDirection: 'row', marginTop: 12 },
+  bucketCol: { flex: 1 },
+  bucketLabel: { fontSize: 12, color: colors.textSecondary, marginBottom: 2 },
+  bucketValue: { fontSize: 15, fontWeight: '600', color: colors.text, fontVariant: ['tabular-nums'] },
+  // Quota usata: una barra neutra, non verde (non è un guadagno)
+  progressTrack: { height: 4, borderRadius: 2, backgroundColor: colors.inputBackground, marginTop: 12, overflow: 'hidden' },
+  progressFill: { height: 4, borderRadius: 2, backgroundColor: withAlpha(colors.text, 0.55) },
+  bucketExpiry: { fontSize: 12, color: colors.textSecondary, marginTop: 8 },
+  tradeRow: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    gap: 12,
+  },
+  tradeName: { fontSize: 15, fontWeight: '600', color: colors.text },
+  tradeMeta: { fontSize: 12, lineHeight: 17, color: colors.textSecondary, marginTop: 2, fontVariant: ['tabular-nums'] },
+  tradeResult: { alignItems: 'flex-end' },
+  tradeGain: { fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  ruleCard: { backgroundColor: colors.card, borderRadius: 14, padding: 14, marginBottom: 10 },
+  ruleHeader: { flexDirection: 'row', alignItems: 'flex-start' },
+  ruleTitle: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text },
+  ruleText: { fontSize: 14, lineHeight: 20, color: colors.textSecondary, marginTop: 6 },
+});

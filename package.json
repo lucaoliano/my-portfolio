@@ -49,7 +49,8 @@
     "deploy:functions": "npm --prefix functions run build && firebase deploy --only functions",
     "deploy:rules": "firebase deploy --only firestore:rules",
     "deploy:indexes": "firebase deploy --only firestore:indexes",
-    "deploy:all": "npm run build && firebase deploy"
+    "deploy:all": "npm run build && firebase deploy",
+    "test:calc": "npx tsx scripts/check-calculations.ts"
   },
   "private": true,
   "allowScripts": {
