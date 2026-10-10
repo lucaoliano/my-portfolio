@@ -190,6 +190,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   rangeButtonActive: {
     backgroundColor: colors.inputBackground,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   rangeButtonDisabled: {
     opacity: 0.4,

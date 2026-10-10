@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { ChevronLeft, RefreshCw, AlertCircle, Info } from 'lucide-react-native';
 
 import { useAppTheme } from '../theme/ThemeContext';
-import { ThemeColors, withAlpha } from '../theme/colors';
+import { ThemeColors } from '../theme/colors';
 import { auth } from '../config/firebase';
 import { useTransactions } from '../hooks/useTransactions';
 import { useAssetCategories } from '../hooks/useAssetCategories';
@@ -352,7 +352,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   content: { padding: 16, paddingBottom: 48 },
   disclaimer: { fontSize: 12, lineHeight: 17, color: colors.textSecondary, marginBottom: 16 },
   muted: { fontSize: 14, lineHeight: 20, color: colors.textSecondary, textAlign: 'left' },
-  emptyCard: { backgroundColor: colors.card, borderRadius: 16, padding: 20, marginBottom: 24, gap: 8 },
+  emptyCard: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 16, padding: 20, marginBottom: 24, gap: 8 },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
   segmented: {
     flexDirection: 'row',
@@ -362,7 +362,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: 16,
   },
   segment: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 8, paddingHorizontal: 8 },
-  segmentActive: { backgroundColor: colors.card },
+  segmentActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   segmentText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
   segmentTextActive: { color: colors.text },
   hero: { marginBottom: 16 },
@@ -380,7 +380,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   noticeIcon: { marginRight: 8, marginTop: 2 },
   noticeText: { flex: 1, fontSize: 14, lineHeight: 20, color: colors.text },
   noticeDetail: { fontSize: 13, lineHeight: 18, color: colors.text, marginTop: 4 },
-  yearCard: { backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 20 },
+  yearCard: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 20 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
   yearRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 10, gap: 12 },
   yearLabel: { flex: 1, fontSize: 14, lineHeight: 20, color: colors.textSecondary },
@@ -393,11 +393,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: 16,
   },
   tab: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 8, paddingHorizontal: 4 },
-  tabActive: { backgroundColor: colors.card },
+  tabActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   tabText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
   tabTextActive: { color: colors.text },
   sectionTitle: { fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 12 },
-  bucketCard: { backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 12 },
+  bucketCard: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 12 },
   bucketHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   bucketStatus: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
   bucketStatusWarning: { color: colors.warning },
@@ -406,10 +406,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   bucketLabel: { fontSize: 12, color: colors.textSecondary, marginBottom: 2 },
   bucketValue: { fontSize: 15, fontWeight: '600', color: colors.text, fontVariant: ['tabular-nums'] },
   // Quota usata: una barra neutra, non verde (non è un guadagno)
-  progressTrack: { height: 4, borderRadius: 2, backgroundColor: colors.inputBackground, marginTop: 12, overflow: 'hidden' },
-  progressFill: { height: 4, borderRadius: 2, backgroundColor: withAlpha(colors.text, 0.55) },
+  progressTrack: { height: 4, borderRadius: 2, backgroundColor: colors.border, marginTop: 12, overflow: 'hidden' },
+  progressFill: { height: 4, borderRadius: 2, backgroundColor: colors.text },
   bucketExpiry: { fontSize: 12, color: colors.textSecondary, marginTop: 8 },
-  tradeRow: {
+  tradeRow: { borderWidth: 1, borderColor: colors.border,
     flexDirection: 'row',
     backgroundColor: colors.card,
     borderRadius: 14,
@@ -421,7 +421,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   tradeMeta: { fontSize: 12, lineHeight: 17, color: colors.textSecondary, marginTop: 2, fontVariant: ['tabular-nums'] },
   tradeResult: { alignItems: 'flex-end' },
   tradeGain: { fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  ruleCard: { backgroundColor: colors.card, borderRadius: 14, padding: 14, marginBottom: 10 },
+  ruleCard: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 14, padding: 14, marginBottom: 10 },
   ruleHeader: { flexDirection: 'row', alignItems: 'flex-start' },
   ruleTitle: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text },
   ruleText: { fontSize: 14, lineHeight: 20, color: colors.textSecondary, marginTop: 6 },

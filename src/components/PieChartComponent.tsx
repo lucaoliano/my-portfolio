@@ -1,4 +1,4 @@
-import { ThemeColors } from '../theme/colors';
+import { ThemeColors, withAlpha } from '../theme/colors';
 import React from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { PieChart } from 'react-native-chart-kit';
@@ -14,37 +14,35 @@ interface PieChartComponentProps {
   title?: string;
 }
 
-// Pre-defined category colors
-const categoryColors: Record<string, string> = {
-  'Azioni': '#EF4444', // Red
-  'Obbligazioni': '#3B82F6', // Blue
-  'Materie prime': '#EAB308', // Yellow
-  'Criptovalute': '#8B5CF6', // Purple
-  'Liquidità': '#10B981', // Green
-  'Altro': '#6B7280', // Gray
+// Colori per classe di attivo, leggibili (≥3:1) sia su card scura sia su card bianca
+const CATEGORY_COLORS: Record<'dark' | 'light', Record<string, string>> = {
+  dark: {
+    'Azioni': '#F87171',
+    'Obbligazioni': '#60A5FA',
+    'Materie prime': '#FACC15',
+    'Criptovalute': '#A78BFA',
+    'Liquidità': '#34D399',
+    'Altro': '#9CA3AF',
+  },
+  light: {
+    'Azioni': '#DC2626',
+    'Obbligazioni': '#2563EB',
+    'Materie prime': '#A16207',
+    'Criptovalute': '#7C3AED',
+    'Liquidità': '#047857',
+    'Altro': '#6B7280',
+  },
 };
-
-const generateColors = (count: number, colors: ThemeColors) => {
-  const baseColors = [
-    colors.primary,
-    '#3B82F6', // Blue
-    colors.positive,
-    colors.negative,
-    '#F59E0B', // Amber
-    '#8B5CF6', // Purple
-    '#EC4899', // Pink
-    '#14B8A6', // Teal
-    '#06B6D4', // Cyan
-    '#F97316', // Orange
-  ];
-  
-  return Array.from({ length: count }).map((_, i) => baseColors[i % baseColors.length]);
+const FALLBACK_COLORS: Record<'dark' | 'light', string[]> = {
+  dark: ['#FB923C', '#F472B6', '#22D3EE', '#FBBF24'],
+  light: ['#B45309', '#BE185D', '#0E7490', '#C2410C'],
 };
 
 export const PieChartComponent: React.FC<PieChartComponentProps> = ({ data, title }) => {
-  const { colors } = useAppTheme();
+  const { colors, theme } = useAppTheme();
   const styles = getStyles(colors);
   const { width: screenWidth } = useWindowDimensions();
+  const mode = theme;
 
   if (!data || data.length === 0) {
     return (
@@ -54,10 +52,8 @@ export const PieChartComponent: React.FC<PieChartComponentProps> = ({ data, titl
     );
   }
 
-  const chartColors = generateColors(data.length, colors);
-  
   const chartData = data.map((item, index) => {
-    const color = categoryColors[item.label] || chartColors[index];
+    const color = CATEGORY_COLORS[mode][item.label] || FALLBACK_COLORS[mode][index % FALLBACK_COLORS[mode].length];
     return {
       name: item.label,
       population: item.value,
@@ -80,7 +76,7 @@ export const PieChartComponent: React.FC<PieChartComponentProps> = ({ data, titl
           backgroundColor: colors.card,
           backgroundGradientFrom: colors.card,
           backgroundGradientTo: colors.card,
-          color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+          color: (opacity = 1) => withAlpha(colors.text, opacity),
         }}
         accessor={"population"}
         backgroundColor={"transparent"}

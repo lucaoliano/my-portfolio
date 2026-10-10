@@ -346,7 +346,7 @@ export default function ScalableIntegrationScreen() {
 
   const switchProps = (value: boolean) => ({
     value,
-    trackColor: { false: withAlpha(colors.textSecondary, 0.45), true: colors.primary },
+    trackColor: { false: colors.inputBorder, true: colors.primary },
     thumbColor: colors.card,
     // react-native-web usa activeThumbColor per il pallino acceso
     ...({ activeThumbColor: colors.background } as object),
@@ -713,7 +713,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
   content: { padding: 16, paddingBottom: 48 },
-  card: { backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 16 },
+  card: { backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
   cardWarning: { backgroundColor: colors.warningSurface },
   cardTitle: { fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 6 },
   cardTitleSmall: { fontSize: 15, fontWeight: '600', color: colors.text },
@@ -800,7 +800,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     height: 50,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
     backgroundColor: colors.inputBackground,
     paddingHorizontal: 14,
     color: colors.text,
@@ -817,7 +817,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
     justifyContent: 'center',
   },
   chipActive: { borderColor: colors.text, backgroundColor: withAlpha(colors.text, 0.1) },
