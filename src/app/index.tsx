@@ -897,6 +897,7 @@ export const PortfolioScreen = () => {
                     hasPrice={asset.hasPrice}
                     hasDailyChange={asset.hasDailyChange}
                     valueInBase={asset.valueInBase}
+                    category={asset.category && asset.category !== 'Altro' ? asset.category : undefined}
                     weightPercent={asset.valueInBase && displayTotalValue > 0 ? (asset.valueInBase / displayTotalValue) * 100 : null}
                     isFirst={index === 0}
                     isLast={index === group.assets.length - 1}

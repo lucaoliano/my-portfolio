@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { COLLECTIONS } from '../constants/collections';
+import { resolveAssetCategory } from '../constants/assetClasses';
 
 export const useAssetCategories = (userId: string | undefined) => {
   const [assetCategories, setAssetCategories] = useState<Record<string, string>>({});
@@ -20,7 +21,8 @@ export const useAssetCategories = (userId: string | undefined) => {
     const unsubscribe = onSnapshot(qAssets, (querySnapshot) => {
       const cats: Record<string, string> = {};
       querySnapshot.forEach((doc) => {
-        cats[doc.id] = doc.data().category;
+        const info = resolveAssetCategory(doc.data());
+        if (info) cats[doc.id] = info.category;
       });
       setAssetCategories(cats);
       setLoading(false);
