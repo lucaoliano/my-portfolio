@@ -3,8 +3,12 @@ import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import Svg, { Path, Line, Text as SvgText, G } from 'react-native-svg';
 import { ThemeColors, withAlpha } from '../theme/colors';
 import { useAppTheme } from '../theme/ThemeContext';
-import { formatNumber } from '../utils/formatters';
-import { PacParams, calculatePAC } from '../utils/pacCalculator';
+import { formatNumber, formatDecimal } from '../utils/formatters';
+import { PacParams, calculatePAC, accumulationOnly } from '../utils/pacCalculator';
+
+const SVG_FONT = 'system-ui, -apple-system, sans-serif';
+
+const pct = (value: number) => `${formatDecimal(value, 2)}%`;
 
 interface FeeDragComparisonChartProps {
   baseParams: PacParams;
@@ -15,7 +19,7 @@ interface FeeDragComparisonChartProps {
 
 const formatCompactK = (num: number): string => {
   if (num >= 1000000) {
-    return `${(num / 1000000).toFixed(1).replace('.0', '')}M`;
+    return `${formatDecimal(num / 1000000, 1).replace(/[,.]0$/, '')}M`;
   }
   if (num >= 1000) {
     return `${Math.round(num / 1000)}k`;
@@ -35,12 +39,14 @@ export const FeeDragComparisonChart: React.FC<FeeDragComparisonChartProps> = ({
   const width = Math.max(300, screenWidth - 32);
 
   const chartData = useMemo(() => {
-    const grossReturn = baseParams.expectedAnnualReturn;
+    // Stessi parametri di calculateFeeDrag: sola fase di accumulo, bollo come impostato dall'utente
+    const params = accumulationOnly(baseParams);
+    const grossReturn = params.expectedAnnualReturn;
     const lowReturn = Math.max(0, grossReturn - lowCostTER);
     const highReturn = Math.max(0, grossReturn - highCostTER);
 
-    const lowRes = calculatePAC({ ...baseParams, expectedAnnualReturn: lowReturn, applyStampDuty: false });
-    const highRes = calculatePAC({ ...baseParams, expectedAnnualReturn: highReturn, applyStampDuty: false });
+    const lowRes = calculatePAC({ ...params, expectedAnnualReturn: lowReturn });
+    const highRes = calculatePAC({ ...params, expectedAnnualReturn: highReturn });
 
     const lowYears = lowRes.yearlyData;
     const highYears = highRes.yearlyData;
@@ -61,7 +67,7 @@ export const FeeDragComparisonChart: React.FC<FeeDragComparisonChartProps> = ({
 
     const pTop = 20;
     const pBottom = 35;
-    const pLeft = 45;
+    const pLeft = 48;
     const pRight = 15;
 
     const innerWidth = width - pLeft - pRight;
@@ -113,25 +119,37 @@ export const FeeDragComparisonChart: React.FC<FeeDragComparisonChartProps> = ({
     };
   }, [baseParams, lowCostTER, highCostTER, width, height]);
 
+  const lastYear = chartData.points[chartData.points.length - 1]?.year;
+  const summary =
+    `Grafico: capitale stimato dopo ${lastYear} anni con costo basso ${pct(lowCostTER)} €${formatNumber(chartData.finalLow)}, ` +
+    `con costo alto ${pct(highCostTER)} €${formatNumber(chartData.finalHigh)}; differenza dovuta ai costi €${formatNumber(chartData.diff)}.`;
+
   return (
     <View style={styles.container}>
       <View style={styles.summaryBox}>
         <View style={styles.summaryCol}>
-          <Text style={styles.summaryLabel}>Con ETF ({lowCostTER}% TER):</Text>
-          <Text style={[styles.summaryVal, { color: colors.positive }]}>€ {formatNumber(chartData.finalLow)}</Text>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendLine, { backgroundColor: colors.info }]} />
+            <Text style={styles.summaryLabel}>Costo basso ({pct(lowCostTER)})</Text>
+          </View>
+          <Text style={styles.summaryVal}>€{formatNumber(chartData.finalLow)}</Text>
         </View>
         <View style={styles.summaryCol}>
-          <Text style={styles.summaryLabel}>Con Fondo Banca ({highCostTER}% TER):</Text>
-          <Text style={styles.summaryVal}>€ {formatNumber(chartData.finalHigh)}</Text>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendLine, styles.legendLineDashed, { borderColor: colors.textSecondary }]} />
+            <Text style={styles.summaryLabel}>Costo alto ({pct(highCostTER)})</Text>
+          </View>
+          <Text style={styles.summaryVal}>€{formatNumber(chartData.finalHigh)}</Text>
         </View>
       </View>
 
-      <View style={styles.lossBadge}>
-        <Text style={styles.lossText}>
-          💸 Denaro perso in commissioni a lungo termine: <Text style={{ fontWeight: 'bold' }}>-€ {formatNumber(chartData.diff)}</Text>
+      <View style={styles.diffBadge}>
+        <Text style={styles.diffText}>
+          Differenza dovuta ai costi dopo {lastYear} anni: <Text style={{ fontWeight: 'bold' }}>€{formatNumber(chartData.diff)}</Text>
         </Text>
       </View>
 
+      <View role="img" aria-label={summary}>
       <Svg width={width} height={height}>
         {/* Grid lines */}
         {chartData.gridTicks.map((tick, idx) => (
@@ -148,7 +166,8 @@ export const FeeDragComparisonChart: React.FC<FeeDragComparisonChartProps> = ({
               x={chartData.pLeft - 8}
               y={tick.y + 4}
               fill={colors.textSecondary}
-              fontSize="11"
+              fontSize="12"
+              fontFamily={SVG_FONT}
               textAnchor="end"
             >
               {formatCompactK(tick.val)}
@@ -156,12 +175,12 @@ export const FeeDragComparisonChart: React.FC<FeeDragComparisonChartProps> = ({
           </G>
         ))}
 
-        {/* Shaded difference area (fee drag) */}
-        <Path d={chartData.diffAreaPath} fill={withAlpha(colors.negative, 0.15)} />
+        {/* Area della differenza dovuta ai costi */}
+        <Path d={chartData.diffAreaPath} fill={withAlpha(colors.info, 0.12)} />
 
         {/* Lines */}
-        <Path d={chartData.lowPath} fill="none" stroke={colors.positive} strokeWidth="3" />
-        <Path d={chartData.highPath} fill="none" stroke={colors.negative} strokeWidth="2.5" strokeDasharray="4 4" />
+        <Path d={chartData.lowPath} fill="none" stroke={colors.info} strokeWidth="3" />
+        <Path d={chartData.highPath} fill="none" stroke={colors.textSecondary} strokeWidth="2.5" strokeDasharray="5 4" />
 
         {/* X Axis bottom line */}
         <Line
@@ -178,7 +197,8 @@ export const FeeDragComparisonChart: React.FC<FeeDragComparisonChartProps> = ({
           x={chartData.pLeft}
           y={height - 12}
           fill={colors.textSecondary}
-          fontSize="11"
+          fontSize="12"
+              fontFamily={SVG_FONT}
           textAnchor="start"
         >
           Anno 1
@@ -187,12 +207,14 @@ export const FeeDragComparisonChart: React.FC<FeeDragComparisonChartProps> = ({
           x={width - chartData.pRight}
           y={height - 12}
           fill={colors.textSecondary}
-          fontSize="11"
+          fontSize="12"
+              fontFamily={SVG_FONT}
           textAnchor="end"
         >
-          Anno {chartData.points[chartData.points.length - 1]?.year}
+          Anno {lastYear}
         </SvgText>
       </Svg>
+      </View>
     </View>
   );
 };
@@ -227,20 +249,36 @@ const getStyles = (colors: ThemeColors) =>
       color: colors.text,
       fontSize: 15,
       fontWeight: 'bold',
+      fontVariant: ['tabular-nums'],
     },
-    lossBadge: {
-      backgroundColor: withAlpha(colors.negative, 0.12),
+    legendRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 2,
+    },
+    legendLine: {
+      width: 16,
+      height: 3,
+      borderRadius: 2,
+      marginRight: 6,
+    },
+    legendLineDashed: {
+      height: 0,
+      borderTopWidth: 2,
+      borderStyle: 'dashed',
+    },
+    diffBadge: {
+      backgroundColor: colors.inputBackground,
       borderRadius: 8,
       marginHorizontal: 16,
       paddingVertical: 8,
       paddingHorizontal: 12,
       marginBottom: 12,
-      borderWidth: 1,
-      borderColor: withAlpha(colors.negative, 0.3),
     },
-    lossText: {
-      color: colors.negative,
+    diffText: {
+      color: colors.text,
       fontSize: 13,
       textAlign: 'center',
+      fontVariant: ['tabular-nums'],
     },
   });

@@ -19,6 +19,10 @@ interface PacSliderProps {
   minLabel?: string;
   maxLabel?: string;
   onChange: (value: number) => void;
+  /** Nome letto dagli screen reader (aria-label) */
+  label?: string;
+  /** Valore letto dagli screen reader (aria-valuetext), es. "25 anni" */
+  formatValue?: (value: number) => string;
 }
 
 export const PacSlider: React.FC<PacSliderProps> = ({
@@ -29,6 +33,8 @@ export const PacSlider: React.FC<PacSliderProps> = ({
   minLabel,
   maxLabel,
   onChange,
+  label,
+  formatValue,
 }) => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
@@ -37,6 +43,12 @@ export const PacSlider: React.FC<PacSliderProps> = ({
 
   const clampedValue = Math.max(min, Math.min(max, value));
   const fraction = (clampedValue - min) / (max - min || 1);
+  const valueText = formatValue ? formatValue(clampedValue) : String(clampedValue);
+
+  const stepBy = (direction: 1 | -1) => {
+    const next = Math.round((clampedValue + direction * step) / step) * step;
+    onChange(Math.max(min, Math.min(max, next)));
+  };
 
   const updateFromPosition = useCallback(
     (posX: number) => {
@@ -80,7 +92,20 @@ export const PacSlider: React.FC<PacSliderProps> = ({
       <View
         style={styles.touchArea}
         onLayout={onLayout}
-        {...(Platform.OS !== 'web' ? panResponder.panHandlers : {})}
+        {...(Platform.OS !== 'web'
+          ? {
+              ...panResponder.panHandlers,
+              accessible: true,
+              accessibilityRole: 'adjustable' as const,
+              accessibilityLabel: label,
+              accessibilityValue: { min, max, now: clampedValue, text: valueText },
+              accessibilityActions: [{ name: 'increment' as const }, { name: 'decrement' as const }],
+              onAccessibilityAction: (e: { nativeEvent: { actionName: string } }) => {
+                if (e.nativeEvent.actionName === 'increment') stepBy(1);
+                if (e.nativeEvent.actionName === 'decrement') stepBy(-1);
+              },
+            }
+          : {})}
       >
         {/* Visual Custom Track */}
         <View style={styles.trackBackground} pointerEvents="none">
@@ -108,6 +133,8 @@ export const PacSlider: React.FC<PacSliderProps> = ({
             max,
             step,
             value: clampedValue,
+            'aria-label': label,
+            'aria-valuetext': valueText,
             onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
               const val = parseFloat(e.target.value);
               if (!isNaN(val)) onChange(val);
@@ -128,7 +155,8 @@ export const PacSlider: React.FC<PacSliderProps> = ({
               padding: 0,
               zIndex: 10,
               WebkitAppearance: 'none',
-              touchAction: 'none',
+              // pan-y: un trascinamento verticale scorre la pagina invece di restare bloccato sul cursore
+              touchAction: 'pan-y',
             },
           })}
       </View>
@@ -154,7 +182,7 @@ const getStyles = (colors: ThemeColors) =>
         : {}),
     },
     touchArea: {
-      height: 38,
+      height: 44,
       justifyContent: 'center',
       position: 'relative',
       ...(Platform.OS === 'web'
@@ -162,13 +190,13 @@ const getStyles = (colors: ThemeColors) =>
             cursor: 'pointer',
             userSelect: 'none',
             WebkitUserSelect: 'none',
-            touchAction: 'none',
+            touchAction: 'pan-y',
           } as object)
         : {}),
     },
     trackBackground: {
       height: 6,
-      backgroundColor: colors.border,
+      backgroundColor: colors.inputBorder,
       borderRadius: 3,
       overflow: 'hidden',
       width: '100%',

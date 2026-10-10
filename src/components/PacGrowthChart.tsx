@@ -3,8 +3,10 @@ import { View, Text, StyleSheet, PanResponder, useWindowDimensions, GestureRespo
 import Svg, { Rect, Line, Text as SvgText, G } from 'react-native-svg';
 import { ThemeColors, withAlpha } from '../theme/colors';
 import { useAppTheme } from '../theme/ThemeContext';
-import { formatNumber } from '../utils/formatters';
+import { formatNumber, formatSignedCurrency, formatDecimal } from '../utils/formatters';
 import { PacYearData } from '../utils/pacCalculator';
+
+const SVG_FONT = 'system-ui, -apple-system, sans-serif';
 
 interface PacGrowthChartProps {
   data: PacYearData[];
@@ -14,11 +16,13 @@ interface PacGrowthChartProps {
   accumulationYears?: number;
   applyTaxes?: boolean;
   displayRealValues?: boolean;
+  /** Etichetta del periodo della rata di prelievo, es. "/ mese", "/ trimestre" */
+  withdrawalPeriodLabel?: string;
 }
 
 const formatCompactK = (num: number): string => {
   if (num >= 1000000) {
-    return `${(num / 1000000).toFixed(1).replace('.0', '')}M`;
+    return `${formatDecimal(num / 1000000, 1).replace(/[,.]0$/, '')}M`;
   }
   if (num >= 1000) {
     return `${Math.round(num / 1000)}k`;
@@ -33,6 +37,7 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
   accumulationYears = 25,
   applyTaxes = false,
   displayRealValues = false,
+  withdrawalPeriodLabel = '/ mese',
 }) => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
@@ -68,7 +73,7 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
 
     const pTop = 24;
     const pBottom = 40;
-    const pLeft = 45;
+    const pLeft = 48;
     const pRight = 15;
 
     const innerWidth = width - pLeft - pRight;
@@ -123,6 +128,7 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
         totalInvested: d.totalInvested,
         realTotalInvested: d.realTotalInvested,
         totalInterest: d.totalInterest,
+        effectiveInvested,
         totalWithdrawn: d.totalWithdrawn,
         realTotalWithdrawn: d.realTotalWithdrawn,
         withdrawalsThisYear: d.withdrawalsThisYear,
@@ -139,7 +145,7 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
 
     const today = new Date();
     const startYear = today.getFullYear();
-    const months = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+    const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
     const monthName = months[today.getMonth()];
     const day = today.getDate();
     const startDateLabel = `${day} ${monthName} ${startYear}`;
@@ -207,6 +213,15 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
   const colorWithdrawalBalance = colors.info;
   const colorWithdrawn = colors.chartWithdrawal;
 
+  const lastBar = chartLayout.bars[chartLayout.bars.length - 1];
+  const peakBar = chartLayout.bars.find((b) => b.year === accumulationYears) ?? lastBar;
+  const summary =
+    `Grafico a barre${displayRealValues ? ' in euro di oggi' : ''}: a fine accumulo (${peakBar.dateLabel ?? ''}) valore stimato €${formatNumber(peakBar.effectiveBalance)}, ` +
+    `versato €${formatNumber(peakBar.effectiveInvested)}` +
+    (hasWithdrawalPhase
+      ? `; dopo i prelievi (${lastBar.dateLabel ?? ''}) capitale residuo €${formatNumber(lastBar.effectiveBalance)}.`
+      : '.');
+
   return (
     <View style={styles.container}>
       {selectedPoint && (
@@ -215,23 +230,8 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
             <Text style={styles.tooltipYear}>
               Anno {selectedPoint.year} ({selectedPoint.dateLabel || ''}){selectedPoint.age ? ` • ${selectedPoint.age} anni` : ''}
             </Text>
-            <View
-              style={[
-                styles.phaseBadge,
-                {
-                  backgroundColor:
-                    selectedPoint.phase === 'accumulation' ? withAlpha(colors.positive, 0.2) : withAlpha(colors.chartWithdrawal, 0.2),
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.phaseBadgeText,
-                  {
-                    color: selectedPoint.phase === 'accumulation' ? colors.positive : colors.chartWithdrawal,
-                  },
-                ]}
-              >
+            <View style={styles.phaseBadge}>
+              <Text style={styles.phaseBadgeText}>
                 {selectedPoint.phase === 'accumulation' ? 'Accumulo' : 'Prelievo'}
               </Text>
             </View>
@@ -242,15 +242,13 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
               <View style={styles.tooltipRow}>
                 <View style={[styles.legendDot, { backgroundColor: colorInvested }]} />
                 <Text style={styles.tooltipLabel}>Versato:</Text>
-                <Text style={styles.tooltipValue}>
-                  € {formatNumber(displayRealValues ? selectedPoint.realTotalInvested : selectedPoint.totalInvested)}
-                </Text>
+                <Text style={styles.tooltipValue}>€{formatNumber(selectedPoint.effectiveInvested)}</Text>
               </View>
               <View style={styles.tooltipRow}>
                 <View style={[styles.legendDot, { backgroundColor: colorInterest }]} />
-                <Text style={styles.tooltipLabel}>Rendimento:</Text>
-                <Text style={[styles.tooltipValue, { color: colorInterest }]}>
-                  +€ {formatNumber(selectedPoint.totalInterest)}
+                <Text style={styles.tooltipLabel}>{applyTaxes ? 'Rendimento netto:' : 'Rendimento:'}</Text>
+                <Text style={styles.tooltipValue}>
+                  {formatSignedCurrency(selectedPoint.effectiveBalance - selectedPoint.effectiveInvested)}
                 </Text>
               </View>
             </>
@@ -258,31 +256,29 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
             <>
               <View style={styles.tooltipRow}>
                 <View style={[styles.legendDot, { backgroundColor: colorWithdrawn }]} />
-                <Text style={styles.tooltipLabel}>Prelievi totali:</Text>
-                <Text style={[styles.tooltipValue, { color: colorWithdrawn }]}>
-                  € {formatNumber(displayRealValues ? selectedPoint.realTotalWithdrawn : selectedPoint.totalWithdrawn)}
+                <Text style={styles.tooltipLabel}>Prelievi lordi totali:</Text>
+                <Text style={styles.tooltipValue}>
+                  €{formatNumber(displayRealValues ? selectedPoint.realTotalWithdrawn : selectedPoint.totalWithdrawn)}
                 </Text>
               </View>
               {selectedPoint.monthlyWithdrawalNominal !== undefined && selectedPoint.monthlyWithdrawalNominal > 0 && (
                 <View style={styles.tooltipRow}>
-                  <Text style={[styles.tooltipLabel, { fontSize: 10, color: colors.chartWithdrawal }]}>
-                    Rata: €{formatNumber(selectedPoint.monthlyWithdrawalNominal)}/m (Oggi: €{formatNumber(selectedPoint.monthlyWithdrawalReal ?? 0)}/m)
+                  <Text style={styles.tooltipLabel}>
+                    Rata: €{formatNumber(selectedPoint.monthlyWithdrawalNominal)} {withdrawalPeriodLabel} (oggi: €{formatNumber(selectedPoint.monthlyWithdrawalReal ?? 0)})
                   </Text>
                 </View>
               )}
               <View style={styles.tooltipRow}>
                 <View style={[styles.legendDot, { backgroundColor: colorWithdrawalBalance }]} />
                 <Text style={styles.tooltipLabel}>
-                  {applyTaxes ? 'Residuo netto (26%):' : 'Capitale residuo:'}
+                  {applyTaxes ? 'Residuo netto:' : 'Capitale residuo:'}
                 </Text>
-                <Text style={[styles.tooltipValue, { color: colorWithdrawalBalance }]}>
-                  € {formatNumber(selectedPoint.effectiveBalance)}
-                </Text>
+                <Text style={styles.tooltipValue}>€{formatNumber(selectedPoint.effectiveBalance)}</Text>
               </View>
               {applyTaxes && (
                 <View style={styles.tooltipRow}>
-                  <Text style={[styles.tooltipLabel, { fontSize: 10, color: colors.textSecondary }]}>
-                    (Lordo: € {formatNumber(displayRealValues ? selectedPoint.realEndBalance : selectedPoint.endBalance)})
+                  <Text style={styles.tooltipLabel}>
+                    (lordo: €{formatNumber(displayRealValues ? selectedPoint.realEndBalance : selectedPoint.endBalance)})
                   </Text>
                 </View>
               )}
@@ -308,13 +304,13 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
                 : applyTaxes ? 'Patrimonio residuo netto:' : 'Patrimonio residuo:'}
             </Text>
             <Text style={[styles.tooltipValue, { fontWeight: 'bold' }]}>
-              € {formatNumber(selectedPoint.effectiveBalance)}
+              €{formatNumber(selectedPoint.effectiveBalance)}
             </Text>
           </View>
         </View>
       )}
 
-      <View {...panResponder.panHandlers} style={{ width, height }}>
+      <View {...panResponder.panHandlers} style={{ width, height }} role="img" aria-label={summary}>
         <Svg width={width} height={height}>
           {/* Grid lines and Y axis labels */}
           {chartLayout.gridTicks.map((tick, idx) => (
@@ -331,7 +327,8 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
                 x={chartLayout.pLeft - 8}
                 y={tick.y + 4}
                 fill={colors.textSecondary}
-                fontSize="11"
+                fontSize="12"
+            fontFamily={SVG_FONT}
                 textAnchor="end"
               >
                 {formatCompactK(tick.val)}
@@ -347,19 +344,20 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
                 y1={chartLayout.pTop}
                 x2={chartLayout.splitX}
                 y2={chartLayout.pTop + chartLayout.innerHeight}
-                stroke={colors.chartWithdrawal}
+                stroke={colors.textSecondary}
                 strokeWidth="1.5"
                 strokeDasharray="4 3"
               />
               <SvgText
                 x={chartLayout.splitX}
                 y={chartLayout.pTop - 8}
-                fill={colors.chartWithdrawal}
-                fontSize="10"
+                fill={colors.textSecondary}
+                fontSize="12"
+                fontFamily={SVG_FONT}
                 fontWeight="bold"
                 textAnchor="middle"
               >
-                Inizio Prelievi
+                Inizio prelievi
               </SvgText>
             </G>
           )}
@@ -449,7 +447,8 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
             x={chartLayout.pLeft}
             y={height - 12}
             fill={colors.textSecondary}
-            fontSize="11"
+            fontSize="12"
+            fontFamily={SVG_FONT}
             fontWeight="500"
             textAnchor="start"
           >
@@ -459,7 +458,8 @@ export const PacGrowthChart: React.FC<PacGrowthChartProps> = ({
             x={width - chartLayout.pRight}
             y={height - 12}
             fill={colors.textSecondary}
-            fontSize="11"
+            fontSize="12"
+            fontFamily={SVG_FONT}
             fontWeight="500"
             textAnchor="end"
           >
@@ -521,10 +521,13 @@ const getStyles = (colors: ThemeColors) =>
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: 6,
+      marginLeft: 8,
+      backgroundColor: withAlpha(colors.tooltipTextSecondary, 0.15),
     },
     phaseBadgeText: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: 'bold',
+      color: colors.tooltipText,
     },
     tooltipRow: {
       flexDirection: 'row',
@@ -539,12 +542,14 @@ const getStyles = (colors: ThemeColors) =>
     },
     tooltipLabel: {
       color: colors.tooltipTextSecondary,
-      fontSize: 11,
+      fontSize: 12,
       flex: 1,
+      marginRight: 8,
     },
     tooltipValue: {
       color: colors.tooltipText,
       fontSize: 12,
       fontWeight: '600',
+      fontVariant: ['tabular-nums'],
     },
   });
