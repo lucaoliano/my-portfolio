@@ -1,77 +1,120 @@
 import { ThemeColors } from '../theme/colors';
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TrendingUp, Mail } from 'lucide-react-native';
 import { useAppTheme } from '../theme/ThemeContext';
 import { auth } from '../config/firebase';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, getRedirectResult, signInWithPopup, signInWithRedirect } from 'firebase/auth';
+
+const errorCode = (error: unknown): string | undefined =>
+  error && typeof error === 'object' ? (error as { code?: string }).code : undefined;
 
 const isPopupCancellationError = (error: unknown): boolean => {
-  if (!error || typeof error !== 'object') {
-    return false;
-  }
-
-  const code = (error as { code?: string }).code;
+  const code = errorCode(error);
   return code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request';
+};
+
+/** Messaggio per l'utente: mai il testo grezzo di Firebase. */
+const loginErrorMessage = (error: unknown): string => {
+  switch (errorCode(error)) {
+    case 'auth/popup-blocked':
+      return 'Il browser ha bloccato la finestra di accesso. Consenti i popup e riprova.';
+    case 'auth/network-request-failed':
+      return 'Connessione assente. Riprova.';
+    default:
+      return 'Accesso non riuscito. Riprova.';
+  }
+};
+
+const createProvider = () => {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  return provider;
 };
 
 export const LoginScreen = () => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Se l'accesso è passato dal redirect (popup bloccato), un eventuale errore arriva qui al ritorno
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    let cancelled = false;
+    getRedirectResult(auth).catch((err: unknown) => {
+      if (cancelled || isPopupCancellationError(err)) return;
+      console.warn('Errore login (redirect):', err);
+      setError(loginErrorMessage(err));
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleGoogleLogin = async () => {
+    if (Platform.OS !== 'web') return;
     setLoading(true);
+    setError(null);
     try {
-      if (Platform.OS === 'web') {
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: 'select_account' });
-        await signInWithPopup(auth, provider);
-      } else {
-        Alert.alert(
-          'Non supportato', 
-          'Il login con Google popup è supportato solo su Web/PWA al momento. Usa la PWA per testare.'
-        );
-      }
-    } catch (error: unknown) {
-      if (isPopupCancellationError(error)) {
+      await signInWithPopup(auth, createProvider());
+    } catch (err: unknown) {
+      if (isPopupCancellationError(err)) {
         return;
       }
-
-      console.error('Errore login:', error);
-      const message = error instanceof Error ? error.message : 'Errore sconosciuto durante il login.';
-      Alert.alert('Errore di Accesso', message);
+      if (errorCode(err) === 'auth/popup-blocked') {
+        // Popup bloccato (succede spesso nella PWA installata su iOS): si ripiega sul redirect
+        try {
+          await signInWithRedirect(auth, createProvider());
+          return;
+        } catch (redirectErr: unknown) {
+          console.warn('Errore login (redirect):', redirectErr);
+        }
+      }
+      console.warn('Errore login:', err);
+      setError(loginErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
+  const isWeb = Platform.OS === 'web';
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.iconContainer}>
-          <TrendingUp size={64} color={colors.positive} />
+        <View style={styles.iconContainer} aria-hidden>
+          <TrendingUp size={64} color={colors.text} />
         </View>
-        <Text style={styles.title}>My Portfolio</Text>
+        <Text style={styles.title} role="heading">My Portfolio</Text>
         <Text style={styles.subtitle}>
-          Accedi per gestire il tuo portafoglio in modo sicuro e privato.
+          {isWeb
+            ? 'Accedi per gestire il tuo portafoglio in modo sicuro e privato.'
+            : "L'accesso con Google per ora è disponibile solo dal browser. Apri My Portfolio dal sito o dall'app installata dalla schermata Home."}
         </Text>
 
-        <TouchableOpacity 
-          style={[styles.loginButton, loading && { opacity: 0.7 }]} 
-          onPress={handleGoogleLogin}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color={colors.onAccent} />
-          ) : (
-            <>
-              <Mail size={20} color={colors.onAccent} style={{ marginRight: 12 }} />
-              <Text style={styles.loginButtonText}>Accedi con Google</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {isWeb && (
+          <TouchableOpacity
+            style={[styles.loginButton, loading && { opacity: 0.7 }]}
+            onPress={handleGoogleLogin}
+            disabled={loading}
+            accessibilityRole="button"
+            aria-busy={loading}
+            aria-label="Accedi con Google"
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.onAccent} />
+            ) : (
+              <>
+                <Mail size={20} color={colors.onAccent} style={{ marginRight: 12 }} />
+                <Text style={styles.loginButtonText}>Accedi con Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {error && (
+          <Text style={styles.errorText} role="alert">{error}</Text>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -115,15 +158,23 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: colors.positive,
     width: '100%',
-    height: 56,
-    borderRadius: 28,
+    maxWidth: 420,
+    height: 50,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
   },
   loginButtonText: {
     color: colors.onAccent,
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  errorText: {
+    color: colors.negative,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 16,
+    textAlign: 'center',
   },
 });
 

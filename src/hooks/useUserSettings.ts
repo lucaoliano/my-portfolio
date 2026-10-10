@@ -52,7 +52,9 @@ export const useUserSettings = (userId: string | undefined) => {
           });
 
           if (hasMissing) {
-            const updatedGroups = Array.from(currentGroups).sort();
+            // Il Set conserva l'ordine d'inserimento: i gruppi mancanti vanno in coda,
+            // senza riordinare quelli che l'utente ha già sistemato
+            const updatedGroups = Array.from(currentGroups);
             await updateDoc(prefRef, { groups: updatedGroups });
             currentSettings.groups = updatedGroups;
           }

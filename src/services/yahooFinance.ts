@@ -65,21 +65,15 @@ export const getQuotes = async (symbols: string[]): Promise<YahooQuote[]> => {
 };
 
 /**
- * Search for a symbol/company using Firebase Cloud Functions
+ * Cerca un titolo per nome, ticker o ISIN (Yahoo Finance via Cloud Function).
+ * Un errore di rete o del servizio viene rilanciato, così la schermata non lo scambia per "nessun risultato".
  */
 export const searchSymbol = async (query: string): Promise<YahooSearchResult[]> => {
   if (!query) return [];
-  
   const searchSymbolFn = httpsCallable(functions, 'searchSymbol');
-  
-  try {
-    const result = await searchSymbolFn({ query });
-    const data = result.data as { results: YahooSearchResult[] };
-    return data.results || [];
-  } catch (error) {
-    console.error("Error searching symbol:", error);
-    return [];
-  }
+  const result = await searchSymbolFn({ query });
+  const data = result.data as { results?: YahooSearchResult[] } | null;
+  return data?.results || [];
 };
 
 export interface HistoricalQuote {

@@ -1,6 +1,8 @@
 import { ThemeColors } from '../theme/colors';
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { usePathname } from 'expo-router';
 import { useAppTheme } from '../theme/ThemeContext';
 
 interface BeforeInstallPromptEvent extends Event {
@@ -11,31 +13,39 @@ interface BeforeInstallPromptEvent extends Event {
 type NavigatorWithStandalone = Navigator & { standalone?: boolean };
 type WindowWithMSStream = Window & { MSStream?: unknown };
 
+const DISMISSED_KEY = 'pwa_install_dismissed';
+
+// iPadOS si presenta come "Macintosh": lo si riconosce dal touch
+const isIOSDevice = () =>
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as WindowWithMSStream).MSStream)
+  || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+
 export const InstallPrompt = () => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
+  const insets = useSafeAreaInsets();
+  const pathname = usePathname();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showIOSPrompt, setShowIOSPrompt] = useState(false);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
-    // Detect if dismissed previously in localStorage
     try {
-      if (typeof window !== 'undefined' && window.localStorage?.getItem('pwa_install_dismissed') === 'true') {
+      if (typeof window !== 'undefined' && window.localStorage?.getItem(DISMISSED_KEY) === 'true') {
         return;
       }
     } catch {
-      // Ignore storage access error
+      // Storage non disponibile: si mostra comunque
     }
 
-    // Detect if already installed (standalone mode)
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
+    // Già installata (modalità standalone)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
                          || (window.navigator as NavigatorWithStandalone).standalone;
-    
+
     if (isStandalone) return;
 
-    // Handle Android / Chrome beforeinstallprompt
+    // Android / Chrome: beforeinstallprompt
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
@@ -43,9 +53,8 @@ export const InstallPrompt = () => {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // iOS detection for manual prompt
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as WindowWithMSStream).MSStream;
-    if (isIOS && !isStandalone) {
+    // iOS / iPadOS: istruzioni manuali
+    if (isIOSDevice()) {
       const timer = setTimeout(() => {
         setShowIOSPrompt(true);
       }, 3000);
@@ -62,13 +71,11 @@ export const InstallPrompt = () => {
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
-    
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      console.log('User accepted the A2HS prompt');
-    } else {
-      console.log('User dismissed the A2HS prompt');
+    try {
+      await deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+    } catch {
+      // Il browser può rifiutare un secondo prompt: si chiude il banner comunque
     }
     setDeferredPrompt(null);
   };
@@ -78,29 +85,35 @@ export const InstallPrompt = () => {
     setShowIOSPrompt(false);
     try {
       if (typeof window !== 'undefined') {
-        window.localStorage?.setItem('pwa_install_dismissed', 'true');
+        window.localStorage?.setItem(DISMISSED_KEY, 'true');
       }
     } catch {
-      // Ignore storage write error
+      // Storage non scrivibile: il banner tornerà alla prossima apertura
     }
   };
 
+  // Al login l'utente ha un altro compito: il banner aspetta la panoramica
+  if (pathname === '/login') return null;
   if (!deferredPrompt && !showIOSPrompt) return null;
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[styles.container, { top: insets.top + 12 }]}
+      role="dialog"
+      aria-label="Installa My Portfolio"
+      aria-live="polite"
+    >
       <Text style={styles.text}>
-        {showIOSPrompt 
-          ? "Installa l'app: tocca Condividi e poi 'Aggiungi alla schermata Home'"
-          : "Aggiungi quest'app alla tua schermata Home per un'esperienza migliore!"}
+        Installa My Portfolio sulla schermata Home per aprirla a schermo intero.
+        {showIOSPrompt ? ' Tocca Condividi, poi “Aggiungi alla schermata Home”.' : ''}
       </Text>
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.buttonSecondary} onPress={handleDismiss}>
-          <Text style={styles.buttonTextSecondary}>Ignora</Text>
+        <TouchableOpacity style={styles.buttonSecondary} onPress={handleDismiss} accessibilityRole="button">
+          <Text style={styles.buttonTextSecondary}>Non ora</Text>
         </TouchableOpacity>
         {!showIOSPrompt && (
-          <TouchableOpacity style={styles.buttonPrimary} onPress={handleInstallClick}>
-            <Text style={styles.buttonTextPrimary}>Installa</Text>
+          <TouchableOpacity style={styles.buttonPrimary} onPress={() => void handleInstallClick()} accessibilityRole="button">
+            <Text style={styles.buttonTextPrimary}>Aggiungi alla schermata Home</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -111,9 +124,10 @@ export const InstallPrompt = () => {
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 60, // mostriamolo in alto per differenziarlo dall'update prompt
-    left: 20,
-    right: 20,
+    left: 16,
+    right: 16,
+    maxWidth: 560,
+    alignSelf: 'center',
     backgroundColor: colors.card,
     padding: 16,
     borderRadius: 12,
@@ -121,12 +135,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.border,
     zIndex: 9998, // Appena sotto a UpdatePrompt se dovessero esserci entrambi
     flexDirection: 'column',
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
     gap: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 5,
   },
   text: {
@@ -137,26 +151,29 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   buttonContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
     gap: 8,
-    alignSelf: 'flex-end',
   },
   buttonSecondary: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    borderRadius: 8,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.inputBorder,
   },
   buttonTextSecondary: {
-    color: colors.textSecondary,
+    color: colors.text,
     fontSize: 14,
     fontWeight: '600',
   },
   buttonPrimary: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    borderRadius: 8,
     backgroundColor: colors.positive,
   },
   buttonTextPrimary: {

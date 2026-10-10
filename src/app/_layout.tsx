@@ -2,13 +2,13 @@ import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Stack, useRouter, useSegments, ThemeProvider as ExpoThemeProvider, DefaultTheme, DarkTheme } from 'expo-router';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, TouchableOpacity, AppState, AppStateStatus } from 'react-native';
+import { View, Text, TouchableOpacity, AppState, AppStateStatus, ActivityIndicator, Platform } from 'react-native';
 import { Lock } from 'lucide-react-native';
 
 import '../global.css';
 import { ThemeProvider, useAppTheme } from '../theme/ThemeContext';
 import { auth } from '../config/firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { PortfolioSkeleton } from '../components/PortfolioSkeleton';
 import { UpdatePrompt } from '../components/UpdatePrompt';
 import { InstallPrompt } from '../components/InstallPrompt';
@@ -34,6 +34,8 @@ function InnerLayout() {
 
   const { isEnabled, isLoading: biometricLoading, authenticate } = useBiometrics(user?.uid);
   const [isUnlocked, setIsUnlocked] = React.useState(false);
+  const [unlocking, setUnlocking] = React.useState(false);
+  const [unlockError, setUnlockError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -61,8 +63,10 @@ function InnerLayout() {
 
   const isLocked = Boolean(!loading && !biometricLoading && user && isEnabled && !isUnlocked);
 
+  // Su iOS/Android il prompt biometrico parte da solo; sul web la passkey (WebAuthn) richiede un
+  // gesto dell'utente, quindi si aspetta il tocco su "Sblocca"
   React.useEffect(() => {
-    if (isLocked) {
+    if (isLocked && Platform.OS !== 'web') {
       let isSubscribed = true;
       authenticate().then(success => {
         if (isSubscribed && success) {
@@ -88,11 +92,42 @@ function InnerLayout() {
 
   }, [user, loading, biometricLoading, segments, router]);
 
+  const unlock = async () => {
+    if (unlocking) return;
+    setUnlocking(true);
+    setUnlockError(null);
+    const success = await authenticate();
+    setUnlocking(false);
+    if (success) {
+      setIsUnlocked(true);
+    } else {
+      setUnlockError('Sblocco non riuscito. Riprova.');
+    }
+  };
+
+  const signOutFromLock = async () => {
+    setUnlockError(null);
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.warn('Errore logout:', error);
+      setUnlockError('Uscita non riuscita. Riprova.');
+    }
+  };
+
   if (loading || biometricLoading) {
+    // Utente già noto come disconnesso: niente scheletro del portafoglio, si sta andando al login
+    const signedOut = !loading && !user;
     return (
       <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
         <SafeAreaView style={{ flex: 1 }}>
-          <PortfolioSkeleton />
+          {signedOut ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator color={colors.textSecondary} />
+            </View>
+          ) : (
+            <PortfolioSkeleton />
+          )}
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -104,24 +139,39 @@ function InnerLayout() {
         <ExpoThemeProvider value={CustomTheme}>
           <StatusBar style={theme === 'dark' ? "light" : "dark"} />
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-            <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: colors.card, justifyContent: 'center', alignItems: 'center', marginBottom: 24 }}>
+            <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: colors.card, justifyContent: 'center', alignItems: 'center', marginBottom: 24 }} aria-hidden>
               <Lock size={48} color={colors.text} />
             </View>
-            <Text style={{ fontSize: 24, fontWeight: 'bold', color: colors.text, marginBottom: 12 }}>App Bloccata</Text>
+            <Text style={{ fontSize: 24, fontWeight: '700', color: colors.text, marginBottom: 12 }} role="heading">App bloccata</Text>
             <Text style={{ fontSize: 16, color: colors.textSecondary, marginBottom: 32, textAlign: 'center', paddingHorizontal: 32 }}>
-              Usa la biometria per sbloccare l&apos;app e accedere ai tuoi dati finanziari.
+              {Platform.OS === 'web'
+                ? 'Usa la passkey di questo dispositivo per vedere il tuo portafoglio.'
+                : 'Usa Face ID, impronta o il codice del dispositivo per vedere il tuo portafoglio.'}
             </Text>
-            <TouchableOpacity 
-              style={{ backgroundColor: colors.positive, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 28 }}
-              onPress={async () => {
-                const success = await authenticate();
-                if (success) {
-                  setIsUnlocked(true);
-                }
-              }}
-            >
-              <Text style={{ color: colors.onAccent, fontSize: 18, fontWeight: 'bold' }}>Sblocca App</Text>
-            </TouchableOpacity>
+            <View style={{ width: '100%', maxWidth: 420, paddingHorizontal: 24, gap: 12 }}>
+              <TouchableOpacity
+                style={{ backgroundColor: colors.positive, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', opacity: unlocking ? 0.7 : 1 }}
+                onPress={() => void unlock()}
+                disabled={unlocking}
+                accessibilityRole="button"
+                aria-busy={unlocking}
+              >
+                {unlocking
+                  ? <ActivityIndicator color={colors.onAccent} />
+                  : <Text style={{ color: colors.onAccent, fontSize: 16, fontWeight: '600' }}>Sblocca</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ height: 50, borderRadius: 25, borderWidth: 1, borderColor: colors.inputBorder, justifyContent: 'center', alignItems: 'center' }}
+                onPress={() => void signOutFromLock()}
+                disabled={unlocking}
+                accessibilityRole="button"
+              >
+                <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>Esci dall&apos;account</Text>
+              </TouchableOpacity>
+              {unlockError && (
+                <Text style={{ color: colors.negative, fontSize: 14, textAlign: 'center' }} role="alert">{unlockError}</Text>
+              )}
+            </View>
           </View>
         </ExpoThemeProvider>
       </SafeAreaProvider>
