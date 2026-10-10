@@ -352,7 +352,7 @@ export const AssetDetailsScreen = () => {
                 ]}>
                   <Text style={[
                     styles.alertStatusText,
-                    calc.statusBadge === 'triggered' && { color: colors.positive },
+                    calc.statusBadge === 'triggered' && { color: colors.warning },
                     calc.statusBadge === 'approaching' && { color: colors.warning },
                     calc.statusBadge === 'active' && { color: colors.textSecondary },
                   ]}>
@@ -365,16 +365,16 @@ export const AssetDetailsScreen = () => {
             <View style={styles.alertBodyRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                 {alert.direction === 'BELOW' ? (
-                  <TrendingDown size={15} color={colors.negative} style={{ marginRight: 6 }} />
+                  <TrendingDown size={15} color={colors.textSecondary} style={{ marginRight: 6 }} />
                 ) : (
-                  <TrendingUp size={15} color={colors.positive} style={{ marginRight: 6 }} />
+                  <TrendingUp size={15} color={colors.textSecondary} style={{ marginRight: 6 }} />
                 )}
                 <Text style={styles.alertThresholdText}>
                   {calc.directionLabel}: <Text style={{ fontWeight: '700', color: colors.text }}>{calc.targetPriceFormatted}</Text>
                 </Text>
               </View>
-              <Text style={[styles.alertDistanceText, calc.isTriggered && { color: colors.positive }]}>
-                {calc.isTriggered ? 'Soglia raggiunta!' : `Distanza: ${calc.distanceFormatted}`}
+              <Text style={[styles.alertDistanceText, calc.isTriggered && { color: colors.warning }]}>
+                {calc.distanceDescription}
               </Text>
             </View>
 
@@ -728,7 +728,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 6,
   },
   alertStatusTriggered: {
-    backgroundColor: withAlpha(colors.positive, 0.125),
+    backgroundColor: withAlpha(colors.warning, 0.125),
   },
   alertStatusApproaching: {
     backgroundColor: withAlpha(colors.warning, 0.125),

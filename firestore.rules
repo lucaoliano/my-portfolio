@@ -5,6 +5,11 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    // Le sole preferenze che l'app può scrivere: stato, liquidità e date le scrive solo il server
+    function scalableClientKeys() {
+      return ['autoSync', 'includeCashInTotal', 'interestPlan', 'interestRate'];
+    }
+
     function serverOnlyScalableKeys() {
       return ['apiToken', 'refreshToken', 'idToken', 'sessionId',
               'dpopPrivateKey', 'dpopPublicKeyJwk', 'hasApiToken', 'hasRefreshToken'];
@@ -30,19 +35,22 @@ service cloud.firestore {
     // solo dalle Cloud Functions (Admin SDK). Nessuna regola le espone al client.
     match /portfolios/{userId}/settings/integration_scalable {
       allow read, delete: if isOwner(userId);
-      // Il client può salvare stato e preferenze, ma mai token, chiavi o i flag calcolati dal server.
+      // Il client salva solo preferenze: niente token, niente stato "collegato" simulato.
       // In update si controllano solo i campi modificati, così i documenti non ancora migrati restano scrivibili.
       allow create: if isOwner(userId)
-        && !request.resource.data.keys().hasAny(serverOnlyScalableKeys());
+        && request.resource.data.keys().hasOnly(scalableClientKeys());
       allow update: if isOwner(userId)
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(serverOnlyScalableKeys());
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(scalableClientKeys());
     }
     // Le regole si sommano: integration_scalable va escluso esplicitamente da quella generica
     match /portfolios/{userId}/settings/{docId} {
-      allow read, write: if isOwner(userId) && docId != 'integration_scalable';
+      allow read, write: if isOwner(userId)
+        && docId != 'integration_scalable'
+        // Documento legacy del collegamento: può contenere chiavi, lo gestisce solo il server
+        && docId != 'scalable_device_auth_pending';
     }
     match /portfolios/{userId}/settings/{docId}/{subcollection}/{rest=**} {
-      allow read, write: if isOwner(userId);
+      allow read, write: if isOwner(userId) && docId != 'integration_scalable';
     }
   }
 }

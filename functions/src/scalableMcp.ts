@@ -88,6 +88,8 @@ function scalableCategoryUpdate(
 const SCALABLE_GRAPHQL_ENDPOINT = "https://de.scalable.capital/api/cli/graphql";
 const SCALABLE_CLIENT_ID = "yBM3BrpRgwSTJZRdJllvtD6jJEmyxWfE";
 const SCALABLE_TOKEN_ENDPOINT = "https://secure.scalable.capital/oauth/token";
+// Revoca del token (RFC 7009). Se Scalable non la espone, lo scollegamento lo dice all'utente.
+const SCALABLE_REVOKE_ENDPOINT = "https://secure.scalable.capital/oauth/revoke";
 const SCALABLE_USER_AGENT = "scalable-cli/1.1.0";
 
 interface ScalableKeyPair {
@@ -410,7 +412,7 @@ async function refreshScalableToken(
 
     const retryNonce = res.headers.get("dpop-nonce") || res.headers.get("DPoP-Nonce");
     if (attempt === 0 && (res.status === 400 || res.status === 401) && retryNonce) {
-      console.log(`[Scalable Token Refresh] Retrying with server DPoP nonce: ${retryNonce}`);
+      console.log("[Scalable Token Refresh] Retrying with server DPoP nonce");
       proofNonce = retryNonce;
       continue;
     }
@@ -425,7 +427,7 @@ async function refreshScalableToken(
 
   if (!res?.ok || !data.access_token) {
     const errDesc = data.error_description || data.error || `HTTP ${res?.status || "unknown"}`;
-    console.error(`[Scalable Token Refresh] Failed (HTTP ${res?.status}):`, JSON.stringify(data));
+    console.error(`[Scalable Token Refresh] Failed (HTTP ${res?.status}):`, data.error || "", data.error_description || "");
     const isInvalidGrant = data.error === "invalid_grant" || errDesc.toLowerCase().includes("invalid_grant");
     const error = new Error(`Token refresh fallito: ${errDesc}`);
     (error as unknown as { isInvalidGrant: boolean }).isInvalidGrant = isInvalidGrant;
@@ -645,14 +647,16 @@ async function executeScalableGraphQL(
 
   console.log(`[Scalable GraphQL] ${operationName || "query"} -> HTTP ${res.status}`);
   if (!res.ok || (json?.errors && json.errors.length > 0)) {
-    console.log("[Scalable GraphQL] response errors/body:", rawText);
+    // Solo i messaggi d'errore, troncati: il corpo può contenere dati del portafoglio
+    const messages = (json?.errors || []).map((e) => e.message || "").join(" | ");
+    console.log("[Scalable GraphQL] errors:", (messages || `HTTP ${res.status}`).slice(0, 300));
   }
 
   // If GraphQL response requests a DPoP nonce inside body
   if (rawText.toLowerCase().includes("use_dpop_nonce") || rawText.toLowerCase().includes("invalid_dpop_proof")) {
     retryNonce = res.headers.get("dpop-nonce") || res.headers.get("DPoP-Nonce");
     if (retryNonce) {
-      console.log(`[Scalable GraphQL] Retrying with server requested DPoP nonce: ${retryNonce}`);
+      console.log("[Scalable GraphQL] Retrying with server requested DPoP nonce");
       res = await sendRequest(currentToken, retryNonce);
       rawText = await res.text().catch(() => "");
       try {
@@ -1157,15 +1161,7 @@ async function fetchScalablePortfolioViaGraphQL(
     currentIdToken = res.currentIdToken;
     currentSessionId = res.currentSessionId;
     rawHoldings = res.data?.account?.brokerPortfolio?.inventory?.items || [];
-    console.log(`[Scalable Holdings] Fetched ${rawHoldings.length} raw holdings from GraphQL:`, rawHoldings.map((h) => ({
-      isin: h.isin,
-      name: h.name,
-      filled: h.inventory?.position?.filled,
-      fifoPrice: h.inventory?.position?.fifoPrice,
-      valuation: h.portfolioIsinPerformance?.valuation,
-      midPrice: h.quoteTick?.midPrice,
-      currency: h.quoteTick?.currency || h.portfolioIsinPerformance?.currency,
-    })));
+    console.log(`[Scalable Holdings] Fetched ${rawHoldings.length} holdings`);
   } catch (err) {
     console.warn("Scalable Holdings query warning:", err);
   }
@@ -1539,8 +1535,11 @@ export const testScalableMcp = onCall(async (request: CallableRequest<TestConnec
   const { serverUrl, apiToken } = request.data || {};
   const cleanToken = (apiToken || "").trim();
 
-  // Handle Demo / Sandbox mock token
+  // Handle Demo / Sandbox mock token: solo con l'emulatore, mai in produzione
   if (cleanToken.toLowerCase().startsWith("demo") || cleanToken.toLowerCase().startsWith("mock")) {
+    if (process.env.FUNCTIONS_EMULATOR !== "true") {
+      throw new HttpsError("invalid-argument", "La modalità demo è disponibile solo in sviluppo.");
+    }
     // Il token viene salvato solo lato server: il client non scrive più credenziali in Firestore
     await writeScalableConfig(db, userId, {
       enabled: true,
@@ -3096,7 +3095,7 @@ export const pollScalableDeviceAuth = onCall(async (request: CallableRequest<Rec
         pending.personId,
         pending.mfaSessionId,
       );
-      console.log(`[Scalable 2FA] session ${pending.mfaSessionId} status: ${mfaStatus}`);
+      console.log(`[Scalable 2FA] status: ${mfaStatus}`);
 
       if (mfaStatus === "SUCCESS") {
         const expiresAt = pending.expiresIn ?
@@ -3211,7 +3210,12 @@ export const pollScalableDeviceAuth = onCall(async (request: CallableRequest<Rec
   if (tokenRes.ok && tokenData.access_token) {
     const personId = extractPersonIdFromToken(tokenData.access_token, tokenData.id_token);
     if (!personId) {
-      console.error("[Scalable Device Auth] Impossibile estrarre personId dai token", tokenData);
+      // Mai registrare i token nei log: solo quali campi sono presenti
+      console.error("[Scalable Device Auth] Impossibile estrarre personId dai token", {
+        hasAccessToken: !!tokenData.access_token,
+        hasIdToken: !!tokenData.id_token,
+        hasRefreshToken: !!tokenData.refresh_token,
+      });
       throw new HttpsError("internal", "Impossibile estrarre l'identificativo account dai token Scalable.");
     }
 
@@ -3224,7 +3228,7 @@ export const pollScalableDeviceAuth = onCall(async (request: CallableRequest<Rec
       if (twoFaState.enabled && !twoFaState.hasApprovedSession) {
         requires2fa = true;
         mfaSessionId = await start2faOnLogin(keyPair, tokenData.access_token, personId);
-        console.log("[Scalable Device Auth] Triggered 2FA challenge, mfaSessionId:", mfaSessionId);
+        console.log("[Scalable Device Auth] Triggered 2FA challenge");
       }
     } catch (twoFaErr) {
       console.warn("[Scalable Device Auth] Warning during 2FA state check/start:", twoFaErr);
@@ -3517,6 +3521,34 @@ export const refreshScalableSession = onCall(
 /**
  * Callable Function to disconnect and completely purge Scalable Capital integration configuration.
  */
+/**
+ * Prova a revocare il refresh token presso Scalable. Restituisce true solo se Scalable conferma.
+ */
+async function revokeScalableToken(token: string, keyPair?: ScalableKeyPair): Promise<boolean> {
+  const body = new URLSearchParams({
+    token,
+    token_type_hint: "refresh_token",
+    client_id: SCALABLE_CLIENT_ID,
+  }).toString();
+  let nonce: string | undefined;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": SCALABLE_USER_AGENT,
+    };
+    if (keyPair) headers.DPoP = createDpopProof("POST", SCALABLE_REVOKE_ENDPOINT, keyPair, nonce);
+    const res = await fetch(SCALABLE_REVOKE_ENDPOINT, { method: "POST", headers, body });
+    const retryNonce = res.headers.get("dpop-nonce") || res.headers.get("DPoP-Nonce");
+    if (attempt === 0 && retryNonce && (res.status === 400 || res.status === 401)) {
+      nonce = retryNonce;
+      continue;
+    }
+    // RFC 7009: 200 anche per token già invalidi
+    return res.ok;
+  }
+  return false;
+}
+
 export const disconnectScalableAccount = onCall(
   async (request: CallableRequest<Record<string, never>>) => {
     if (!request.auth) {
@@ -3525,8 +3557,26 @@ export const disconnectScalableAccount = onCall(
     const userId = request.auth.uid;
     const db = getFirestore();
 
-    await Promise.allSettled([
-      scalablePublicConfigRef(db, userId).delete(),
+    // Prima la revoca presso Scalable, poi la cancellazione: senza revoca il token resterebbe valido
+    let revoked = false;
+    try {
+      const configSnap = await readScalableConfig(db, userId);
+      const config = configSnap.data() || {};
+      const refreshToken = typeof config.refreshToken === "string" ? config.refreshToken : "";
+      if (refreshToken) {
+        const keyPair = config.dpopPrivateKey && config.dpopPublicKeyJwk ? {
+          privateKey: config.dpopPrivateKey as string,
+          publicJwk: config.dpopPublicKeyJwk as ScalableKeyPair["publicJwk"],
+        } : undefined;
+        revoked = await revokeScalableToken(refreshToken, keyPair);
+      }
+    } catch (revokeErr) {
+      console.warn("[disconnectScalableAccount] Revoca non riuscita:", revokeErr instanceof Error ? revokeErr.message : "errore");
+    }
+
+    // Le preferenze (tasso, liquidità nel totale) restano: servono se ricolleghi il conto
+    const publicRef = scalablePublicConfigRef(db, userId);
+    const results = await Promise.allSettled([
       scalableSecretsRef(db, userId).delete(),
       scalablePendingAuthRef(db, userId).delete(),
       // Documento pending legacy (prima della migrazione a private/)
@@ -3534,12 +3584,38 @@ export const disconnectScalableAccount = onCall(
       db.doc(`portfolios/${userId}/settings/scalable_savings_plans`).delete(),
       db.doc(`portfolios/${userId}/settings/scalable_price_alerts`).delete(),
       db.doc(`portfolios/${userId}/settings/scalable_tax_report`).delete(),
+      publicRef.get().then((snap) => {
+        if (!snap.exists) return;
+        const keep = ["interestPlan", "interestRate", "includeCashInTotal"];
+        const data = snap.data() || {};
+        const preserved: Record<string, unknown> = { enabled: false, status: "disconnected", disconnectedAt: new Date().toISOString() };
+        for (const k of keep) if (k in data) preserved[k] = data[k];
+        return publicRef.set(preserved);
+      }),
     ]);
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed > 0) {
+      throw new HttpsError("internal", "Scollegamento incompleto: riprova tra qualche istante.");
+    }
 
     return {
       success: true,
-      message: "Integrazione Scalable Capital disconnessa con successo.",
+      revoked,
+      message: revoked ?
+        "Conto scollegato e accesso revocato presso Scalable." :
+        "Conto scollegato. Per revocare l'accesso anche presso Scalable, rimuovilo dalle impostazioni di sicurezza del tuo account Scalable.",
     };
   },
 );
 
+/**
+ * Sposta nel documento privato eventuali credenziali rimaste in quello pubblico (account creati prima
+ * della migrazione). L'app la chiama appena vede un documento legacy: così i token non restano leggibili dal client.
+ */
+export const secureScalableConfig = onCall(async (request: CallableRequest<Record<string, never>>) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Devi essere autenticato.");
+  }
+  await readScalableConfig(getFirestore(), request.auth.uid);
+  return { success: true };
+});

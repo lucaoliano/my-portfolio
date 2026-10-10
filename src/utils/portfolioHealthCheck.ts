@@ -1,6 +1,6 @@
 import { formatDecimal } from './formatters';
 import { AggregatedAsset, ScalableSavingsPlan } from '../types';
-import { ScalableInterestPlanId, calculateCashYield } from './cashInterest';
+import { ScalableInterestPlanId, calculateCashYield, interestCapFor } from './cashInterest';
 
 /** 'incomplete' = troppi indicatori senza dati per dare un giudizio complessivo */
 export type HealthCheckLevel = 'excellent' | 'good' | 'warning' | 'critical' | 'incomplete';
@@ -222,7 +222,7 @@ export function calculatePortfolioHealthCheck(
   const cashRatio = cashBalance / totalNetWorth;
   const cashPercent = cashRatio * 100;
   const rateKnown = interestRate !== null;
-  const yieldEst = calculateCashYield(cashBalance, interestRate ?? 0);
+  const yieldEst = calculateCashYield(cashBalance, interestRate ?? 0, undefined, interestCapFor(interestPlan));
 
   let cashScore = 100;
   let cashStatus: RuleStatus = 'PASS';

@@ -1,13 +1,17 @@
 import { ScalablePriceAlert } from '../types';
 import { YahooQuote } from '../services/yahooFinance';
+import { formatNumber, getCurrencySymbol } from './formatters';
 
-export type AlertBadgeStatus = 'triggered' | 'approaching' | 'active';
+export type AlertBadgeStatus = 'triggered' | 'approaching' | 'active' | 'disabled' | 'unknown';
 
 export interface AlertCalculation {
   isTriggered: boolean;
   isApproaching: boolean;
   distancePercent: number;
+  /** Distanza dalla soglia senza segno ("5,0%"), "-" se il prezzo non è noto */
   distanceFormatted: string;
+  /** Frase con la direzione: "serve un calo del 5,0%" */
+  distanceDescription: string;
   statusBadge: AlertBadgeStatus;
   statusLabel: string;
   directionLabel: string;
@@ -21,77 +25,65 @@ export interface AlertCalculation {
  */
 export function calculateAlertStatus(
   alert: ScalablePriceAlert,
-  currentPrice?: number
+  currentPrice?: number,
+  currency = 'EUR'
 ): AlertCalculation {
   const target = alert.targetPrice;
   const isBelow = alert.direction === 'BELOW';
-  const directionLabel = isBelow ? 'Al ribasso (≤)' : 'Al rialzo (≥)';
-  const targetPriceFormatted = `€${target.toFixed(2)}`;
+  const symbol = getCurrencySymbol(currency);
+  const directionLabel = isBelow ? 'Se scende a' : 'Se sale a';
+  const targetPriceFormatted = `${symbol}${formatNumber(target)}`;
+  const base = { directionLabel, targetPriceFormatted };
 
-  if (currentPrice === undefined || currentPrice === null || currentPrice <= 0) {
+  // Un avviso disattivato non è mai "raggiunto", qualunque sia il prezzo
+  if (alert.status === 'DISABLED') {
+    return {
+      ...base,
+      isTriggered: false,
+      isApproaching: false,
+      distancePercent: 0,
+      distanceFormatted: '-',
+      distanceDescription: 'Avviso disattivato',
+      statusBadge: 'disabled',
+      statusLabel: 'Disattivato',
+      currentPriceFormatted: currentPrice ? `${symbol}${formatNumber(currentPrice)}` : 'n/d',
+    };
+  }
+
+  if (currentPrice === undefined || currentPrice === null || !(currentPrice > 0)) {
     const isTriggered = alert.status === 'TRIGGERED';
     return {
+      ...base,
       isTriggered,
       isApproaching: false,
       distancePercent: 0,
       distanceFormatted: '-',
-      statusBadge: isTriggered ? 'triggered' : 'active',
-      statusLabel: isTriggered ? 'Target Raggiunto' : 'In Monitoraggio',
-      directionLabel,
-      targetPriceFormatted,
-      currentPriceFormatted: 'N/D',
+      distanceDescription: isTriggered ? 'Soglia raggiunta (dato Scalable)' : 'Prezzo attuale non disponibile',
+      statusBadge: isTriggered ? 'triggered' : 'unknown',
+      statusLabel: isTriggered ? 'Raggiunto' : 'Prezzo n/d',
+      currentPriceFormatted: 'n/d',
     };
   }
 
-  const currentPriceFormatted = `€${currentPrice.toFixed(2)}`;
-
-  let isTriggered = alert.status === 'TRIGGERED';
-  let distancePercent = 0;
-
-  if (isBelow) {
-    // Alert triggers when market price drops to or below target
-    if (currentPrice <= target) {
-      isTriggered = true;
-      distancePercent = ((currentPrice - target) / target) * 100; // negative or 0
-    } else {
-      distancePercent = ((currentPrice - target) / currentPrice) * 100; // positive (% drop needed)
-    }
-  } else {
-    // Alert triggers when market price rises to or above target
-    if (currentPrice >= target) {
-      isTriggered = true;
-      distancePercent = ((currentPrice - target) / target) * 100; // positive or 0
-    } else {
-      distancePercent = ((target - currentPrice) / currentPrice) * 100; // positive (% rise needed)
-    }
-  }
-
-  const isApproaching = !isTriggered && Math.abs(distancePercent) <= 2.5;
-
-  let statusBadge: AlertBadgeStatus = 'active';
-  let statusLabel = 'In Monitoraggio';
-
-  if (isTriggered) {
-    statusBadge = 'triggered';
-    statusLabel = 'Target Raggiunto';
-  } else if (isApproaching) {
-    statusBadge = 'approaching';
-    statusLabel = 'In Avvicinamento';
-  }
-
-  const sign = distancePercent > 0 ? '+' : '';
-  const distanceFormatted = `${sign}${distancePercent.toFixed(1)}%`;
+  // Distanza sempre in percentuale del prezzo attuale: quanto deve muoversi il prezzo da qui
+  const isTriggered = alert.status === 'TRIGGERED' || (isBelow ? currentPrice <= target : currentPrice >= target);
+  const distancePercent = Math.abs((target - currentPrice) / currentPrice) * 100;
+  const isApproaching = !isTriggered && distancePercent <= 2.5;
+  const distanceFormatted = `${formatNumber(distancePercent)}%`;
+  const distanceDescription = isTriggered
+    ? 'Soglia raggiunta'
+    : `Serve ${isBelow ? 'un calo' : 'un rialzo'} del ${distanceFormatted}`;
 
   return {
+    ...base,
     isTriggered,
     isApproaching,
     distancePercent,
     distanceFormatted,
-    statusBadge,
-    statusLabel,
-    directionLabel,
-    targetPriceFormatted,
-    currentPriceFormatted,
+    distanceDescription,
+    statusBadge: isTriggered ? 'triggered' : isApproaching ? 'approaching' : 'active',
+    statusLabel: isTriggered ? 'Raggiunto' : isApproaching ? 'Vicino alla soglia' : 'Attivo',
+    currentPriceFormatted: `${symbol}${formatNumber(currentPrice)}`,
   };
 }
 
@@ -129,7 +121,7 @@ export function evaluateAllAlerts(
       (q) => q.symbol.toLowerCase() === alert.symbol.toLowerCase()
     );
     const currentPrice = quote?.regularMarketPrice;
-    const calculation = calculateAlertStatus(alert, currentPrice);
+    const calculation = calculateAlertStatus(alert, currentPrice, quote?.currency);
 
     return {
       alert,

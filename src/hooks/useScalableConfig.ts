@@ -24,7 +24,7 @@ export const useScalableConfig = (userId: string | undefined) => {
       if (
         cfg &&
         cfg.enabled &&
-        (cfg.hasRefreshToken || 'refreshToken' in cfg) && // 'refreshToken' = documento legacy: il refresh lato server lo migra
+        cfg.hasRefreshToken &&
         (cfg.status === 'connected' || cfg.status === 'expired')
       ) {
         const expiresAtMs = cfg.tokenExpiresAt ? new Date(cfg.tokenExpiresAt).getTime() : 0;

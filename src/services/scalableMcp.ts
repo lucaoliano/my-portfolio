@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../config/firebase';
 import { getUserIntegrationPath } from '../constants/collections';
@@ -50,23 +50,7 @@ export async function testScalableMcpConnection(
     const result = await testCallable({ serverUrl: cleanUrl, apiToken: cleanToken });
     return result.data;
   } catch (fnErr: unknown) {
-    console.warn('Cloud Function testScalableMcp error, attempting client fallback:', fnErr);
-
-    // Fallback for Sandbox / Demo tokens if cloud functions emulator isn't active
-    if (cleanToken.toLowerCase().startsWith('demo') || cleanToken.toLowerCase().startsWith('mock')) {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      return {
-        success: true,
-        mode: 'sandbox',
-        message: 'Connessione stabilita con successo in modalità Sandbox/Demo!',
-        serverInfo: {
-          name: 'Scalable Capital Agentic Investing (Demo/Sandbox)',
-          version: '1.0.0'
-        },
-        tools: ['broker_overview', 'get_holdings', 'get_transactions', 'get_cash_balance']
-      };
-    }
-
+    // Nessun esito simulato lato app: se il server non risponde, il collegamento non è avvenuto
     const error = fnErr as Error;
     return {
       success: false,
@@ -107,7 +91,7 @@ export async function getScalableConfig(userId: string): Promise<ScalableMcpConf
     const docRef = doc(db, getUserIntegrationPath(userId, 'scalable'));
     const snap = await getDoc(docRef);
     if (snap.exists()) {
-      return snap.data() as ScalableMcpConfig;
+      return sanitizeConfig(snap.data());
     }
     return null;
   } catch (e) {
@@ -116,62 +100,64 @@ export async function getScalableConfig(userId: string): Promise<ScalableMcpConf
   }
 }
 
+/** Preferenze che l'app può salvare; stato, liquidità e credenziali li scrive solo il server. */
+export type ScalablePreferences = Pick<ScalableMcpConfig, 'autoSync' | 'includeCashInTotal' | 'interestPlan' | 'interestRate'>;
+
 /**
- * Saves or updates the Scalable Capital MCP configuration in Firestore.
+ * Salva solo le preferenze indicate, senza rileggere e rimandare il resto del documento
+ * (che nei documenti legacy può contenere credenziali).
  */
-export async function saveScalableConfig(
-  userId: string,
-  config: Partial<ScalableMcpConfig>
-): Promise<void> {
-  const docRef = doc(db, getUserIntegrationPath(userId, 'scalable'));
-  const snap = await getDoc(docRef);
-
-  const rawConfig: Record<string, unknown> = {
-    enabled: config.enabled ?? true,
-    serverUrl: config.serverUrl || DEFAULT_SCALABLE_MCP_URL,
-    readOnly: config.readOnly ?? true,
-    status: config.status || 'disconnected',
-    autoSync: config.autoSync ?? true,
-    ...(snap.exists() ? snap.data() : {}),
-    ...config
-  };
-
-  const cleanConfig: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(rawConfig)) {
-    if (v !== undefined) {
-      cleanConfig[k] = v;
-    }
+export async function saveScalableConfig(userId: string, prefs: Partial<ScalablePreferences>): Promise<void> {
+  const allowed: (keyof ScalablePreferences)[] = ['autoSync', 'includeCashInTotal', 'interestPlan', 'interestRate'];
+  const clean: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (prefs[key] !== undefined) clean[key] = prefs[key];
   }
+  if (Object.keys(clean).length === 0) return;
+  await setDoc(doc(db, getUserIntegrationPath(userId, 'scalable')), clean, { merge: true });
+}
 
-  await setDoc(docRef, cleanConfig, { merge: true });
+export interface DisconnectResult {
+  success: boolean;
+  /** true = Scalable ha confermato la revoca dell'accesso */
+  revoked: boolean;
+  message: string;
 }
 
 /**
- * Disconnects and removes Scalable Capital MCP integration and cached settings.
+ * Scollega il conto: revoca e cancellazione avvengono sul server. Un errore viene rilanciato,
+ * così la schermata non dichiara un successo che non c'è stato.
  */
-export async function disconnectScalable(userId: string): Promise<void> {
-  const docRef = doc(db, getUserIntegrationPath(userId, 'scalable'));
-  const spDocRef = doc(db, `portfolios/${userId}/settings/scalable_savings_plans`);
-  const alertsDocRef = doc(db, `portfolios/${userId}/settings/scalable_price_alerts`);
-  const taxDocRef = doc(db, `portfolios/${userId}/settings/scalable_tax_report`);
-
-  await Promise.allSettled([
-    deleteDoc(docRef),
-    deleteDoc(spDocRef),
-    deleteDoc(alertsDocRef),
-    deleteDoc(taxDocRef),
-  ]);
-
-  try {
-    const disconnectCallable = httpsCallable<Record<string, never>, { success: boolean }>(
-      functions,
-      'disconnectScalableAccount'
-    );
-    await disconnectCallable({});
-  } catch (backendErr) {
-    console.warn('Backend disconnectScalableAccount warning (client delete already attempted):', backendErr);
-  }
+export async function disconnectScalable(): Promise<DisconnectResult> {
+  const disconnectCallable = httpsCallable<Record<string, never>, DisconnectResult>(functions, 'disconnectScalableAccount');
+  const res = await disconnectCallable({});
+  return res.data;
 }
+
+const SECRET_KEYS = ['apiToken', 'refreshToken', 'idToken', 'sessionId', 'dpopPrivateKey', 'dpopPublicKeyJwk'];
+let secureRequested = false;
+
+/** Chiede al server di spostare le credenziali di un documento legacy nel documento privato. */
+const requestSecureConfig = () => {
+  if (secureRequested) return;
+  secureRequested = true;
+  httpsCallable(functions, 'secureScalableConfig')({}).catch(err => {
+    secureRequested = false;
+    console.warn('Migrazione credenziali Scalable non riuscita:', err);
+  });
+};
+
+/** Toglie dal documento le credenziali legacy prima di passarlo all'interfaccia. */
+const sanitizeConfig = (data: Record<string, unknown>): ScalableMcpConfig => {
+  const clean: Record<string, unknown> = {};
+  let hadSecrets = false;
+  for (const [k, v] of Object.entries(data)) {
+    if (SECRET_KEYS.includes(k)) hadSecrets = true;
+    else clean[k] = v;
+  }
+  if (hadSecrets) requestSecureConfig();
+  return clean as unknown as ScalableMcpConfig;
+};
 
 /**
  * Subscribes to real-time changes of the Scalable configuration in Firestore.
@@ -183,7 +169,7 @@ export function subscribeScalableConfig(
   const docRef = doc(db, getUserIntegrationPath(userId, 'scalable'));
   return onSnapshot(docRef, snap => {
     if (snap.exists()) {
-      callback(snap.data() as ScalableMcpConfig);
+      callback(sanitizeConfig(snap.data()));
     } else {
       callback(null);
     }
@@ -269,20 +255,6 @@ export function subscribeScalableTaxReport(
   );
 }
 
-export interface ScalableAuthUrlResult {
-  authUrl: string;
-  state: string;
-  codeVerifier: string;
-  clientId: string;
-  redirectUri: string;
-}
-
-export interface ScalableExchangeResult {
-  success: boolean;
-  message: string;
-  expiresIn?: number;
-}
-
 export interface ScalableDeviceAuthSession {
   userCode: string;
   verificationUri: string;
@@ -322,75 +294,3 @@ export async function pollScalableDeviceAuth(): Promise<ScalableDevicePollResult
   const res = await pollCallable({});
   return res.data;
 }
-
-/**
- * Initiates 1-click OAuth 2.0 PKCE flow with Scalable Capital (Legacy/Localhost).
- */
-export async function startScalableOAuth(redirectUri: string): Promise<void> {
-  const getUrlCallable = httpsCallable<{ redirectUri: string }, ScalableAuthUrlResult>(
-    functions,
-    'getScalableAuthUrl'
-  );
-
-  const res = await getUrlCallable({ redirectUri });
-  const { authUrl, state, codeVerifier, clientId, redirectUri: cleanRedirect } = res.data;
-
-  // Persist session parameters for callback exchange
-  if (typeof window !== 'undefined' && window.sessionStorage) {
-    window.sessionStorage.setItem('sc_oauth_state', state);
-    window.sessionStorage.setItem('sc_oauth_verifier', codeVerifier);
-    window.sessionStorage.setItem('sc_oauth_client_id', clientId);
-    window.sessionStorage.setItem('sc_oauth_redirect_uri', cleanRedirect);
-    window.location.href = authUrl;
-  }
-}
-
-/**
- * Handles OAuth 2.0 PKCE callback after user approved access on Scalable Capital.
- */
-export async function completeScalableOAuth(code: string, state: string): Promise<ScalableExchangeResult> {
-  let savedState: string | null = null;
-  let codeVerifier: string | null = null;
-  let clientId: string | null = null;
-  let redirectUri: string | null = null;
-
-  if (typeof window !== 'undefined' && window.sessionStorage) {
-    savedState = window.sessionStorage.getItem('sc_oauth_state');
-    codeVerifier = window.sessionStorage.getItem('sc_oauth_verifier');
-    clientId = window.sessionStorage.getItem('sc_oauth_client_id');
-    redirectUri = window.sessionStorage.getItem('sc_oauth_redirect_uri');
-  }
-
-  if (savedState && savedState !== state) {
-    throw new Error('Validazione di sicurezza fallita (stato OAuth non corrispondente). Riprova il login.');
-  }
-
-  if (!codeVerifier || !clientId || !redirectUri) {
-    throw new Error('Parametri di sessione OAuth mancanti. Riavvia la procedura di connessione.');
-  }
-
-  const exchangeCallable = httpsCallable<
-    { code: string; codeVerifier: string; clientId: string; redirectUri: string },
-    ScalableExchangeResult
-  >(functions, 'exchangeScalableAuthCode');
-
-  const res = await exchangeCallable({
-    code,
-    codeVerifier,
-    clientId,
-    redirectUri,
-  });
-
-  // Clean up session storage
-  if (typeof window !== 'undefined' && window.sessionStorage) {
-    window.sessionStorage.removeItem('sc_oauth_state');
-    window.sessionStorage.removeItem('sc_oauth_verifier');
-    window.sessionStorage.removeItem('sc_oauth_client_id');
-    window.sessionStorage.removeItem('sc_oauth_redirect_uri');
-  }
-
-  return res.data;
-}
-
-
-
