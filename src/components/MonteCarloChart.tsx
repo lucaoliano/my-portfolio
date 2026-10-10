@@ -1,10 +1,12 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, PanResponder, useWindowDimensions, GestureResponderEvent } from 'react-native';
 import Svg, { Path, Line, Text as SvgText, G, Circle } from 'react-native-svg';
-import { ThemeColors } from '../theme/colors';
+import { ThemeColors, withAlpha } from '../theme/colors';
 import { useAppTheme } from '../theme/ThemeContext';
-import { formatNumber } from '../utils/formatters';
+import { formatNumber, formatDecimal } from '../utils/formatters';
 import { MonteCarloYearPoint } from '../utils/pacCalculator';
+
+const SVG_FONT = 'system-ui, -apple-system, sans-serif';
 
 interface MonteCarloChartProps {
   data: MonteCarloYearPoint[];
@@ -14,7 +16,7 @@ interface MonteCarloChartProps {
 
 const formatCompactK = (num: number): string => {
   if (num >= 1000000) {
-    return `${(num / 1000000).toFixed(1).replace('.0', '')}M`;
+    return `${formatDecimal(num / 1000000, 1).replace(/[,.]0$/, '')}M`;
   }
   if (num >= 1000) {
     return `${Math.round(num / 1000)}k`;
@@ -24,6 +26,7 @@ const formatCompactK = (num: number): string => {
 
 export const MonteCarloChart: React.FC<MonteCarloChartProps> = ({
   data,
+  totalInvested,
   height = 280,
 }) => {
   const { colors } = useAppTheme();
@@ -52,7 +55,7 @@ export const MonteCarloChart: React.FC<MonteCarloChartProps> = ({
 
     const pTop = 20;
     const pBottom = 35;
-    const pLeft = 45;
+    const pLeft = 48;
     const pRight = 15;
 
     const innerWidth = width - pLeft - pRight;
@@ -146,36 +149,35 @@ export const MonteCarloChart: React.FC<MonteCarloChartProps> = ({
       ? chartLayout.points[selectedIndex]
       : chartLayout.points[chartLayout.points.length - 1];
 
+  const last = chartLayout.points[chartLayout.points.length - 1];
+  const summary =
+    `Grafico Monte Carlo: dopo ${last.year} anni il capitale stimato è €${formatNumber(last.p50)} come mediana, ` +
+    `tra €${formatNumber(last.p10)} (10° percentile) e €${formatNumber(last.p90)} (90° percentile); versato €${formatNumber(totalInvested)}.`;
+
   return (
     <View style={styles.container}>
       {selectedPoint && (
         <View style={styles.tooltipContainer}>
-          <Text style={styles.tooltipYear}>Anno {selectedPoint.year} (Fasce di Probabilità)</Text>
+          <Text style={styles.tooltipYear}>Anno {selectedPoint.year}</Text>
           <View style={styles.tooltipRow}>
-            <View style={[styles.legendDot, { backgroundColor: colors.positive }]} />
-            <Text style={styles.tooltipLabel}>90° percentile (Ottimistico):</Text>
-            <Text style={[styles.tooltipValue, { color: colors.positive }]}>
-              € {formatNumber(selectedPoint.p90)}
-            </Text>
+            <View style={[styles.legendLine, styles.legendLineDashed, { borderColor: colors.chartContributions }]} />
+            <Text style={styles.tooltipLabel}>90° percentile</Text>
+            <Text style={styles.tooltipValue}>€{formatNumber(selectedPoint.p90)}</Text>
           </View>
           <View style={styles.tooltipRow}>
-            <View style={[styles.legendDot, { backgroundColor: colors.info }]} />
-            <Text style={styles.tooltipLabel}>50° percentile (Mediana):</Text>
-            <Text style={[styles.tooltipValue, { color: colors.info }]}>
-              € {formatNumber(selectedPoint.p50)}
-            </Text>
+            <View style={[styles.legendLine, { backgroundColor: colors.info }]} />
+            <Text style={styles.tooltipLabel}>Mediana</Text>
+            <Text style={[styles.tooltipValue, { fontWeight: 'bold' }]}>€{formatNumber(selectedPoint.p50)}</Text>
           </View>
           <View style={styles.tooltipRow}>
-            <View style={[styles.legendDot, { backgroundColor: colors.negative }]} />
-            <Text style={styles.tooltipLabel}>10° percentile (Pessimistico):</Text>
-            <Text style={[styles.tooltipValue, { color: colors.negative }]}>
-              € {formatNumber(selectedPoint.p10)}
-            </Text>
+            <View style={[styles.legendLine, styles.legendLineDashed, { borderColor: colors.chartContributions }]} />
+            <Text style={styles.tooltipLabel}>10° percentile</Text>
+            <Text style={styles.tooltipValue}>€{formatNumber(selectedPoint.p10)}</Text>
           </View>
         </View>
       )}
 
-      <View {...panResponder.panHandlers} style={{ width, height }}>
+      <View {...panResponder.panHandlers} style={{ width, height }} role="img" aria-label={summary}>
         <Svg width={width} height={height}>
           {/* Grid lines */}
           {chartLayout.gridTicks.map((tick, idx) => (
@@ -192,7 +194,8 @@ export const MonteCarloChart: React.FC<MonteCarloChartProps> = ({
                 x={chartLayout.pLeft - 8}
                 y={tick.y + 4}
                 fill={colors.textSecondary}
-                fontSize="11"
+                fontSize="12"
+                fontFamily={SVG_FONT}
                 textAnchor="end"
               >
                 {formatCompactK(tick.val)}
@@ -201,12 +204,12 @@ export const MonteCarloChart: React.FC<MonteCarloChartProps> = ({
           ))}
 
           {/* Fan area (between P10 and P90) */}
-          <Path d={chartLayout.fanAreaPath} fill="rgba(59, 130, 246, 0.12)" />
+          <Path d={chartLayout.fanAreaPath} fill={withAlpha(colors.info, 0.12)} />
 
-          {/* Lines */}
-          <Path d={chartLayout.pathP90} fill="none" stroke={colors.positive} strokeWidth="2.5" />
+          {/* Lines: bordi della fascia tratteggiati, mediana piena */}
+          <Path d={chartLayout.pathP90} fill="none" stroke={colors.chartContributions} strokeWidth="2" strokeDasharray="5 4" />
           <Path d={chartLayout.pathP50} fill="none" stroke={colors.info} strokeWidth="3" />
-          <Path d={chartLayout.pathP10} fill="none" stroke={colors.negative} strokeWidth="2" strokeDasharray="3 3" />
+          <Path d={chartLayout.pathP10} fill="none" stroke={colors.chartContributions} strokeWidth="2" strokeDasharray="5 4" />
 
           {/* Selected Indicator */}
           {selectedPoint && (
@@ -220,9 +223,9 @@ export const MonteCarloChart: React.FC<MonteCarloChartProps> = ({
                 strokeWidth="1"
                 strokeDasharray="2 2"
               />
-              <Circle cx={selectedPoint.x} cy={selectedPoint.yP90} r="4" fill={colors.positive} />
-              <Circle cx={selectedPoint.x} cy={selectedPoint.yP50} r="5" fill={colors.info} stroke={colors.onStrong} strokeWidth="1.5" />
-              <Circle cx={selectedPoint.x} cy={selectedPoint.yP10} r="4" fill={colors.negative} />
+              <Circle cx={selectedPoint.x} cy={selectedPoint.yP90} r="4" fill={colors.chartContributions} />
+              <Circle cx={selectedPoint.x} cy={selectedPoint.yP50} r="5" fill={colors.info} stroke={colors.card} strokeWidth="1.5" />
+              <Circle cx={selectedPoint.x} cy={selectedPoint.yP10} r="4" fill={colors.chartContributions} />
             </G>
           )}
 
@@ -243,7 +246,8 @@ export const MonteCarloChart: React.FC<MonteCarloChartProps> = ({
                 x={chartLayout.pLeft}
                 y={height - 12}
                 fill={colors.textSecondary}
-                fontSize="11"
+                fontSize="12"
+                fontFamily={SVG_FONT}
                 textAnchor="start"
               >
                 Anno 1
@@ -252,7 +256,8 @@ export const MonteCarloChart: React.FC<MonteCarloChartProps> = ({
                 x={width - chartLayout.pRight}
                 y={height - 12}
                 fill={colors.textSecondary}
-                fontSize="11"
+                fontSize="12"
+                fontFamily={SVG_FONT}
                 textAnchor="end"
               >
                 Anno {chartLayout.points[chartLayout.points.length - 1].year}
@@ -311,20 +316,27 @@ const getStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       marginBottom: 3,
     },
-    legendDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
+    legendLine: {
+      width: 14,
+      height: 3,
+      borderRadius: 2,
       marginRight: 6,
+    },
+    legendLineDashed: {
+      height: 0,
+      borderTopWidth: 2,
+      borderStyle: 'dashed',
     },
     tooltipLabel: {
       color: colors.tooltipTextSecondary,
-      fontSize: 11,
+      fontSize: 12,
       flex: 1,
+      marginRight: 8,
     },
     tooltipValue: {
       color: colors.tooltipText,
       fontSize: 12,
       fontWeight: '600',
+      fontVariant: ['tabular-nums'],
     },
   });
