@@ -2,55 +2,60 @@ import { Transaction, GroupedPortfolio, UserSettings, AggregatedAsset, Coverage 
 import { YahooQuote } from '../services/yahooFinance';
 import { calculateTransactionsXIRR } from './xirr';
 
-export interface PositionLot {
-  quantity: number;
-  purchasePrice: number;
-}
-
-export const calculateFifo = (transactions: Transaction[]): {
+export interface PositionSummary {
   totalQuantity: number;
+  /** Costo della posizione aperta (costo medio ponderato × quantità), nella valuta delle transazioni */
   totalInvested: number;
   averagePrice: number;
-} => {
+  /** Costo in euro della posizione aperta, se tutti gli acquisti in valuta hanno il cambio del giorno; altrimenti null */
+  totalInvestedEur: number | null;
+}
+
+/**
+ * Posizione aperta con il **costo medio ponderato** (come Scalable e come il calcolo fiscale italiano):
+ * una vendita riduce quantità e costo in proporzione, senza cambiare il prezzo medio.
+ */
+export const calculatePosition = (transactions: Transaction[]): PositionSummary => {
   const sortedTx = [...transactions].sort((a, b) => {
-    if (a.date < b.date) return -1;
-    if (a.date > b.date) return 1;
-    if (a.type === 'BUY' && b.type === 'SELL') return -1;
-    if (a.type === 'SELL' && b.type === 'BUY') return 1;
-    return 0;
+    const byDate = a.date.slice(0, 10).localeCompare(b.date.slice(0, 10));
+    if (byDate !== 0) return byDate;
+    if ((a.type || 'BUY') === 'BUY' && b.type === 'SELL') return -1;
+    if (a.type === 'SELL' && (b.type || 'BUY') === 'BUY') return 1;
+    return a.date.localeCompare(b.date);
   });
 
-  const lots: PositionLot[] = [];
+  let quantity = 0;
+  let cost = 0;
+  let costEur: number | null = 0;
 
   sortedTx.forEach(tx => {
-    const txType = tx.type || 'BUY';
-    const quantity = Number(tx.quantity) || 0;
-    const purchasePrice = Number(tx.purchasePrice) || 0;
-
-    if (quantity <= 0) return;
-
-    if (txType === 'BUY') {
-      lots.push({ quantity, purchasePrice });
-    } else {
-      let remainingToSell = quantity;
-      while (remainingToSell > 0 && lots.length > 0) {
-        if (lots[0].quantity <= remainingToSell) {
-          remainingToSell -= lots[0].quantity;
-          lots.shift();
-        } else {
-          lots[0].quantity -= remainingToSell;
-          remainingToSell = 0;
-        }
+    const qty = Number(tx.quantity) || 0;
+    const price = Number(tx.purchasePrice) || 0;
+    if (qty <= 0) return;
+    const isForeign = !!tx.currency && tx.currency.toUpperCase() !== 'EUR';
+    if ((tx.type || 'BUY') === 'BUY') {
+      quantity += qty;
+      cost += qty * price;
+      if (costEur !== null) {
+        if (!isForeign) costEur += qty * price;
+        else if (tx.fxRate && tx.fxRate > 0) costEur += qty * price * tx.fxRate;
+        else costEur = null;
       }
+    } else if (quantity > 0) {
+      const sold = Math.min(qty, quantity);
+      const share = sold / quantity;
+      cost -= cost * share;
+      if (costEur !== null) costEur -= costEur * share;
+      quantity -= sold;
     }
   });
 
-  const totalQuantity = lots.reduce((acc, lot) => acc + lot.quantity, 0);
-  const totalInvested = lots.reduce((acc, lot) => acc + lot.quantity * lot.purchasePrice, 0);
-  const averagePrice = totalQuantity > 0 ? totalInvested / totalQuantity : 0;
-
-  return { totalQuantity, totalInvested, averagePrice };
+  if (quantity <= 1e-9) return { totalQuantity: 0, totalInvested: 0, averagePrice: 0, totalInvestedEur: costEur === null ? null : 0 };
+  return { totalQuantity: quantity, totalInvested: cost, averagePrice: cost / quantity, totalInvestedEur: costEur };
 };
+
+/** @deprecated nome storico: il calcolo è a costo medio ponderato, non FIFO */
+export const calculateFifo = calculatePosition;
 
 /** Le quotazioni Scalable non hanno la variazione giornaliera: uno 0 lì non è un dato reale. */
 const isDailyChangeReliable = (quote: YahooQuote | undefined): boolean =>
@@ -102,7 +107,7 @@ const valuePosition = (
   assetCategories: Record<string, string>,
   fxRates: FxRates
 ): PositionValuation => {
-  const { totalQuantity, totalInvested, averagePrice } = calculateFifo(txList);
+  const { totalQuantity, totalInvested, averagePrice, totalInvestedEur } = calculatePosition(txList);
   const isin = txList.find(t => t.isin)?.isin;
   const quote = quotes[symbol] || (isin ? quotes[isin] : undefined);
   const latestNamedTx = [...txList].reverse().find(t => t.name);
@@ -142,7 +147,32 @@ const valuePosition = (
       dailyChangeEstimated: hasDailyChange && quote?.source === 'scalable',
       marketTime: quote?.marketTime,
       valueInBase: rate !== null ? currentTotalValue * rate : null,
+      ...fxBreakdown(currency, rate, hasPrice, totalQuantity, currentPrice, averagePrice, totalInvestedEur),
     },
+  };
+};
+
+/**
+ * Titoli in valuta estera: guadagno in euro diviso tra effetto prezzo ed effetto cambio.
+ * Serve il cambio del giorno di ogni acquisto; senza, non si inventa nulla (null).
+ */
+const fxBreakdown = (
+  currency: string,
+  rate: number | null,
+  hasPrice: boolean,
+  quantity: number,
+  price: number,
+  averagePrice: number,
+  costEur: number | null
+): { profitOrLossEur?: number | null; fxEffectEur?: number | null } => {
+  if (currency === BASE_CURRENCY) return {};
+  if (rate === null || !hasPrice || costEur === null || quantity <= 0 || averagePrice <= 0) {
+    return { profitOrLossEur: null, fxEffectEur: null };
+  }
+  const avgFx = costEur / (quantity * averagePrice);
+  return {
+    profitOrLossEur: quantity * price * rate - costEur,
+    fxEffectEur: quantity * price * (rate - avgFx),
   };
 };
 

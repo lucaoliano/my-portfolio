@@ -42,6 +42,10 @@ export interface AggregatedAsset {
   hasDailyChange: boolean;
   /** Valore della posizione in euro; null se la valuta è estera e manca il cambio */
   valueInBase?: number | null;
+  /** Solo valute estere: guadagno in euro (null se manca il cambio degli acquisti) */
+  profitOrLossEur?: number | null;
+  /** Solo valute estere: parte del guadagno in euro dovuta al cambio */
+  fxEffectEur?: number | null;
   /** Variazione di oggi stimata (percentuale Yahoo applicata al prezzo Scalable) */
   dailyChangeEstimated?: boolean;
   /** Ora di mercato dell'ultimo prezzo, se nota (ISO) */

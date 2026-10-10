@@ -56,7 +56,7 @@ import { auth } from '../config/firebase';
 import { useTransactions } from '../hooks/useTransactions';
 import { useScalableSavingsPlans } from '../hooks/useScalableSavingsPlans';
 import { calculatePacRebalancing } from '../utils/savingsPlansRebalance';
-import { calculateFifo } from '../utils/portfolioAggregator';
+import { calculatePosition } from '../utils/portfolioAggregator';
 
 const FREQUENCIES: { label: string; value: ContributionFrequency }[] = [
   { label: 'Mensile', value: 'monthly' },
@@ -87,7 +87,7 @@ export default function PacCalculatorScreen() {
     });
 
     Object.entries(symbolTxs).forEach(([symbol, txList]) => {
-      const { totalQuantity, averagePrice } = calculateFifo(txList);
+      const { totalQuantity, averagePrice } = calculatePosition(txList);
       const val = totalQuantity * averagePrice;
       holdings[symbol] = { currentTotalValue: val };
     });
