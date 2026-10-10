@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { collection, doc, limit, onSnapshot, orderBy, query, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, setDoc, writeBatch } from 'firebase/firestore';
+import { Transaction } from '../types';
+import { getWeeklyCloses } from '../services/yahooFinance';
+import { backfillSymbols, buildBackfill } from '../utils/historyBackfill';
 import { db } from '../config/firebase';
 
 /** Una fotografia giornaliera del portafoglio, in euro. */
@@ -14,6 +17,8 @@ export interface HistoryPoint {
   cash: number;
   /** false = quel giorno c'erano titoli senza prezzo o senza cambio */
   complete: boolean;
+  /** true = punto ricostruito dalle chiusure settimanali, non registrato quel giorno */
+  backfilled?: boolean;
 }
 
 export interface HistorySnapshot {
@@ -35,9 +40,15 @@ const localDateKey = (d = new Date()) => {
  * con l'ultimo valore visto. `snapshot` va passato solo quando i prezzi sono freschi (nessun errore):
  * meglio un giorno mancante che un punto sbagliato nel grafico.
  */
-export const usePortfolioHistory = (userId: string | undefined, snapshot: HistorySnapshot | null) => {
+export const usePortfolioHistory = (
+  userId: string | undefined,
+  snapshot: HistorySnapshot | null,
+  transactions: Transaction[] = []
+) => {
   const [points, setPoints] = useState<HistoryPoint[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const lastWrittenRef = useRef<string | null>(null);
+  const backfillStartedRef = useRef(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -47,6 +58,7 @@ export const usePortfolioHistory = (userId: string | undefined, snapshot: Histor
       snap => {
         const list = snap.docs.map(d => d.data() as HistoryPoint).filter(p => typeof p.invested === 'number');
         setPoints(list.reverse());
+        setLoaded(true);
       },
       err => console.warn('Storico non disponibile:', err)
     );
@@ -73,6 +85,37 @@ export const usePortfolioHistory = (userId: string | undefined, snapshot: Histor
     }, 2000);
     return () => clearTimeout(timeoutId);
   }, [userId, snapshot]);
+
+  // Una sola volta per utente: ricostruisce le settimane tra il primo acquisto e il primo giorno registrato
+  useEffect(() => {
+    if (!userId || !loaded || transactions.length === 0 || backfillStartedRef.current) return;
+    const first = transactions.map(t => t.date.slice(0, 10)).sort()[0];
+    const until = points[0]?.date ?? localDateKey();
+    if (first >= until || (new Date(until).getTime() - new Date(first).getTime()) < 10 * 86400000) return;
+    backfillStartedRef.current = true;
+    const metaRef = doc(db, 'portfolios', userId, 'settings', 'history_meta');
+    (async () => {
+      try {
+        const meta = await getDoc(metaRef);
+        if (meta.exists() && meta.data().backfilledFrom && meta.data().backfilledFrom <= first) return;
+        const series = await getWeeklyCloses(backfillSymbols(transactions), first);
+        const existing = new Set(points.map(p => p.date));
+        const rebuilt = buildBackfill(transactions, series, until).filter(p => !existing.has(p.date));
+        for (let i = 0; i < rebuilt.length; i += 400) {
+          const batch = writeBatch(db);
+          rebuilt.slice(i, i + 400).forEach(p => {
+            batch.set(doc(db, 'portfolios', userId, 'history', p.date), { ...p, cash: 0, backfilled: true, updatedAt: new Date().toISOString() });
+          });
+          await batch.commit();
+        }
+        await setDoc(metaRef, { backfilledFrom: first, backfilledAt: new Date().toISOString(), weeks: rebuilt.length }, { merge: true });
+      } catch (err) {
+        // Riproverà alla prossima apertura
+        backfillStartedRef.current = false;
+        console.warn('Ricostruzione dello storico non riuscita:', err);
+      }
+    })();
+  }, [userId, loaded, transactions, points]);
 
   return points;
 };

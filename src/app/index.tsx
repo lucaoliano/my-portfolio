@@ -95,7 +95,7 @@ export const PortfolioScreen = () => {
       complete: aggregation.missingPriceSymbols.length === 0 && aggregation.fxMissingSymbols.length === 0,
     };
   }, [isInitialLoading, quotesError, quotesUpdatedAt, aggregation, scalableCash]);
-  const historyPoints = usePortfolioHistory(userId, historySnapshot);
+  const historyPoints = usePortfolioHistory(userId, historySnapshot, transactions);
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   // I gruppi con gli stessi titoli di un altro partono chiusi: si aprono solo se l'utente lo chiede

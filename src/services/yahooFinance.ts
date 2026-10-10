@@ -109,3 +109,15 @@ export const getHistoricalQuote = async (symbol: string, date: string): Promise<
     fxRateToEur: typeof data.fxRateToEur === 'number' && data.fxRateToEur > 0 ? data.fxRateToEur : null,
   };
 };
+
+export interface WeeklySeries {
+  currency: string | null;
+  points: { date: string; close: number }[];
+}
+
+/** Chiusure settimanali dal giorno indicato (ticker, ISIN o cambi "USDEUR=X"). */
+export const getWeeklyCloses = async (symbols: string[], from: string): Promise<Record<string, WeeklySeries>> => {
+  const fn = httpsCallable(functions, 'getWeeklyCloses');
+  const res = await fn({ symbols, from });
+  return ((res.data as { series?: Record<string, WeeklySeries> })?.series) ?? {};
+};
