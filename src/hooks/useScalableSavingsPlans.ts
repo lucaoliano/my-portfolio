@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { activeMonthlyTotal } from '../utils/savingsPlans';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ScalableSavingsPlan, ScalableSavingsPlansDoc } from '../types';
@@ -25,7 +26,8 @@ export const useScalableSavingsPlans = (userId: string | undefined) => {
       if (snap.exists()) {
         const data = snap.data() as ScalableSavingsPlansDoc;
         setPlans(data.plans || []);
-        setTotalMonthlyAmount(data.totalMonthlyAmount || 0);
+        // Totale ricalcolato qui: solo piani attivi, ogni frequenza riportata al mese
+        setTotalMonthlyAmount(activeMonthlyTotal(data.plans || []));
         setUpdatedAt(data.updatedAt || null);
       } else {
         setPlans([]);

@@ -23,6 +23,7 @@ export {
   exchangeScalableAuthCode,
   disconnectScalableAccount,
   refreshScalableSession,
+  secureScalableConfig,
 } from "./scalableMcp.js";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });

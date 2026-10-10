@@ -1,7 +1,10 @@
 // Verifiche del calcolo fiscale e dei numeri: npm run test:calc
-import { parseLocalNumber, formatInputNumber } from '../src/utils/formatters';
+import { parseLocalNumber, formatInputNumber, formatNumber } from '../src/utils/formatters';
 import { computeTaxReportFromTransactions as c, classifyTaxTreatment as k, computeTaxReportsByBroker as b } from '../src/utils/taxLossTracker';
-import { Transaction } from '../src/types';
+import { Transaction, ScalablePriceAlert } from '../src/types';
+import { calculateAlertStatus } from '../src/utils/priceAlerts';
+import { activeMonthlyTotal, monthlyEquivalent } from '../src/utils/savingsPlans';
+import { calculateCashYield } from '../src/utils/cashInterest';
 let fails = 0;
 const eq = (label: string, got: unknown, exp: unknown) => { const ok = JSON.stringify(got) === JSON.stringify(exp); if (!ok) fails++; console.log(ok ? 'OK  ' : 'FAIL', label, ok ? '' : `got ${JSON.stringify(got)} exp ${JSON.stringify(exp)}`); };
 const tx = (o: Partial<Transaction>): Transaction => ({ symbol: 'X', name: 'Acme SpA', quantity: 1, purchasePrice: 1, date: '2025-01-01', type: 'BUY', ...o });
@@ -56,5 +59,22 @@ eq('BTP loss at 48.08%', r.totalActiveLosses, 48.08);
 const numberCases: [string, number][] = [["1.234,56",1234.56],["150,5",150.5],["150.50",150.5],["1 234,56",1234.56],["1.234.567",1234567],["12abc",NaN],["1,2,3",NaN],["0,4567",0.4567],["",NaN]];
 for (const [i, e] of numberCases) { const r = parseLocalNumber(i); eq(`parse ${JSON.stringify(i)}`, Number.isNaN(e) ? Number.isNaN(r) : r === e, true); }
 eq('formatInputNumber keeps decimals', [formatInputNumber(0.4567), formatInputNumber(10), formatInputNumber(0.0049)], ['0,4567', '10', '0,0049']);
+
+// Avvisi di prezzo
+const alert = (o: Partial<ScalablePriceAlert>): ScalablePriceAlert => ({ id: 'a', symbol: 'X', name: 'X', targetPrice: 95, direction: 'BELOW', status: 'ACTIVE', ...o });
+eq('alert BELOW distance', calculateAlertStatus(alert({}), 100).distanceDescription, `Serve un calo del ${formatNumber(5)}%`);
+eq('alert ABOVE distance', calculateAlertStatus(alert({ direction: 'ABOVE', targetPrice: 105 }), 100).distanceDescription, `Serve un rialzo del ${formatNumber(5)}%`);
+eq('alert disabled never triggered', calculateAlertStatus(alert({ status: 'DISABLED', direction: 'ABOVE', targetPrice: 100 }), 120).isTriggered, false);
+eq('alert triggered below', calculateAlertStatus(alert({}), 90).isTriggered, true);
+eq('alert price formatting', calculateAlertStatus(alert({ targetPrice: 115 }), 100).targetPriceFormatted, `€${formatNumber(115)}`);
+// Piani di accumulo
+eq('quarterly monthly equivalent', monthlyEquivalent({ amount: 300, frequency: 'quarterly' }), 100);
+eq('active total skips paused', activeMonthlyTotal([
+  { id: '1', symbol: 'A', name: 'A', amount: 100, frequency: 'monthly', dayOfMonth: 1, nextExecutionDate: '', status: 'ACTIVE' },
+  { id: '2', symbol: 'B', name: 'B', amount: 300, frequency: 'quarterly', dayOfMonth: 1, nextExecutionDate: '', status: 'ACTIVE' },
+  { id: '3', symbol: 'C', name: 'C', amount: 50, frequency: 'monthly', dayOfMonth: 1, nextExecutionDate: '', status: 'PAUSED' },
+]), 200);
+// Liquidità con tetto Prime+
+eq('cash cap applied', Math.round(calculateCashYield(150000, 4, 0.26, 100000).annualGross), 4000);
 console.log(fails ? `${fails} FAIL` : 'ALL OK');
 if (fails) process.exit(1);

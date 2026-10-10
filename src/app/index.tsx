@@ -22,7 +22,7 @@ import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
 import { usePortfolioHistory, HistorySnapshot } from '../hooks/usePortfolioHistory';
 import { PortfolioTrendChart } from '../components/PortfolioTrendChart';
 import { useScalablePriceAlerts } from '../hooks/useScalablePriceAlerts';
-import { calculateCashYield } from '../utils/cashInterest';
+import { calculateCashYield, interestCapFor } from '../utils/cashInterest';
 import { getTriggeredAlerts, getApproachingAlerts } from '../utils/priceAlerts';
 import { syncScalablePortfolio, saveScalableConfig } from '../services/scalableMcp';
 
@@ -342,8 +342,8 @@ export const PortfolioScreen = () => {
   ];
 
   const scalableYield = useMemo(() => {
-    return calculateCashYield(scalableCash, configuredInterestRate ?? 0);
-  }, [scalableCash, configuredInterestRate]);
+    return calculateCashYield(scalableCash, configuredInterestRate ?? 0, undefined, interestCapFor(scalableConfig?.interestPlan));
+  }, [scalableCash, configuredInterestRate, scalableConfig?.interestPlan]);
 
   // Sorting Sections based on settings
   const sections = [...groupedData].sort((a, b) => {
