@@ -283,6 +283,7 @@ export const PortfolioScreen = () => {
     hasExtrapolatedAnnualized,
     globalDailyEstimated,
     latestMarketTime,
+    oldestMarketTime,
   } = aggregation;
 
   const displayTotalValue = (includeCashInTotal && scalableCash > 0)
@@ -296,19 +297,27 @@ export const PortfolioScreen = () => {
       : `${prefix.other} ${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} alle ${timeStr}`;
   };
 
+  const isToday = (d: Date) => d.toDateString() === new Date().toDateString();
+  const shortDate = (d: Date) => d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
   const lastSyncDate = scalableConfig?.lastSyncedAt ? new Date(scalableConfig.lastSyncedAt) : null;
   const lastSyncLabel = lastSyncDate && !isNaN(lastSyncDate.getTime())
     ? formatWhen(lastSyncDate, { today: 'Scalable sincronizzato alle', other: 'Scalable sincronizzato il' })
     : null;
   // Meglio l'ora di mercato (quando il prezzo è nato) che l'ora in cui l'app l'ha scaricato
   const marketDate = latestMarketTime ? new Date(latestMarketTime) : null;
+  const oldestMarketDate = oldestMarketTime ? new Date(oldestMarketTime) : null;
+  // L'ora più recente può venire da Wall Street: se qualche borsa è ferma a un giorno prima, lo diciamo
+  const staleVenueNote = marketDate && oldestMarketDate && !isNaN(oldestMarketDate.getTime())
+    && oldestMarketDate.toDateString() !== marketDate.toDateString()
+    ? `, alcuni del ${shortDate(oldestMarketDate)}`
+    : '';
   const quotesStatusLabel = marketDate && !isNaN(marketDate.getTime())
-    ? formatWhen(marketDate, { today: 'Prezzi di mercato delle', other: 'Prezzi di mercato del' })
+    ? `${formatWhen(marketDate, { today: 'Prezzi delle', other: 'Prezzi del' })}${staleVenueNote}`
     : quotesUpdatedAt
       ? formatWhen(quotesUpdatedAt, { today: 'Prezzi aggiornati alle', other: 'Prezzi aggiornati il' })
       : null;
   // Se l'ultimo prezzo di mercato non è di oggi (sera tardi, weekend) "Oggi" sarebbe falso: diciamo quale chiusura è
-  const dailyLabel = marketDate && marketDate.toDateString() !== new Date().toDateString()
+  const dailyLabel = marketDate && !isToday(marketDate)
     ? `Chiusura ${marketDate.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })}`
     : 'Oggi';
 
@@ -319,12 +328,16 @@ export const PortfolioScreen = () => {
     ...fxMissingSymbols.map(sym => ({
       symbol: sym,
       name: assetNames[sym]?.name ?? sym,
-      reason: `Cambio ${assetNames[sym]?.currency ?? ''}→EUR non disponibile: escluso dai totali`,
+      reason: quotesError
+        ? 'Prezzo e cambio non aggiornati (servizio prezzi non raggiungibile): escluso dai totali'
+        : `Cambio ${assetNames[sym]?.currency ?? ''}→EUR non disponibile: escluso dai totali`,
     })),
     ...missingPriceSymbols.map(sym => ({
       symbol: sym,
       name: assetNames[sym]?.name ?? sym,
-      reason: 'Prezzo non disponibile: valutato al prezzo medio di carico',
+      reason: quotesError
+        ? 'Prezzo non aggiornato (servizio prezzi non raggiungibile): valutato al prezzo medio di carico'
+        : 'Prezzo non disponibile: valutato al prezzo medio di carico',
     })),
   ];
 
@@ -388,7 +401,7 @@ export const PortfolioScreen = () => {
         <Text style={styles.metricSeparator}>{dailyLabel} </Text>
         {hasDaily ? (
           <Text style={{ color: opts.daily >= 0 ? colors.positive : colors.negative }}>
-            {opts.estimated ? '≈' : ''}{formatSignedCurrency(opts.daily)} ({signedPercent(opts.dailyPercent)})
+            {opts.estimated ? '≈ ' : ''}{formatSignedCurrency(opts.daily)} ({signedPercent(opts.dailyPercent)})
           </Text>
         ) : (
           <Text style={styles.metricSeparator}>n/d</Text>
@@ -411,10 +424,13 @@ export const PortfolioScreen = () => {
   const syncIconOnly = showCompactTitle && transactions.length > 0;
   const alertCount = hasTriggeredAlerts ? triggeredAlerts.length : approachingAlerts.length;
 
-  // Una sola riga di stato sotto il bilancio: quando sono nati i dati
+  // Una sola riga di stato: l'ora dei prezzi. La sync Scalable compare solo se non è di oggi
   const statusParts: string[] = [];
   if (quotesStatusLabel) statusParts.push(quotesStatusLabel);
-  if (isScalableConnected && lastSyncLabel) statusParts.push(lastSyncLabel);
+  if (isScalableConnected && lastSyncLabel && lastSyncDate && !isToday(lastSyncDate)) statusParts.push(lastSyncLabel);
+  const cashExcluded = scalableCash > 0 && !includeCashInTotal;
+  const heroLabel = cashExcluded ? 'Valore dei titoli' : 'Bilancio totale';
+  const unreachable = quotesError ? 'servizio prezzi non raggiungibile' : 'cambio non disponibile';
 
   /** Un solo dato per gruppo, scelto dal selettore Totale / Oggi / Annuo. */
   const renderGroupMetric = (group: GroupedPortfolio) => {
@@ -424,7 +440,7 @@ export const PortfolioScreen = () => {
       return (
         <>
           <MetricChip value={group.dailyChange} style={{ alignSelf: 'flex-start' }}>
-            {dailyLabel} {group.dailyEstimated ? '≈' : ''}{formatSignedCurrency(group.dailyChange)} ({signedPercent(group.dailyChangePercent)})
+            {dailyLabel} {group.dailyEstimated ? '≈ ' : ''}{formatSignedCurrency(group.dailyChange)} ({signedPercent(group.dailyChangePercent)})
           </MetricChip>
           {withData < total && <Text style={styles.footnote}>su {withData} di {total} titoli</Text>}
         </>
@@ -447,31 +463,59 @@ export const PortfolioScreen = () => {
     );
   };
 
+  // Il selettore sta sulla stessa riga del titolo "Gruppi": si vede subito che comanda le righe sotto
   const metricSelector = (
-    <View style={styles.metricSelector} accessibilityRole="tablist" accessibilityLabel="Dato mostrato per gruppi e titoli">
+    <View style={styles.groupsHeader}>
+      <Text style={styles.groupsHeading} accessibilityRole="header">Gruppi</Text>
+      <View style={styles.metricSelector} accessibilityRole="tablist" aria-label="Dato mostrato per gruppi e titoli">
       {ROW_METRICS.map(m => (
         <TouchableOpacity
           key={m.key}
           style={[styles.metricOption, rowMetric === m.key && styles.metricOptionActive]}
           onPress={() => changeRowMetric(m.key)}
+          hitSlop={{ top: 4, bottom: 4 }}
           accessibilityRole="tab"
-          accessibilityState={{ selected: rowMetric === m.key }}
+          aria-selected={rowMetric === m.key}
         >
           <Text style={[styles.metricOptionText, rowMetric === m.key && styles.metricOptionTextActive]}>
             {m.key === 'daily' ? dailyLabel : m.label}
           </Text>
         </TouchableOpacity>
       ))}
+      </View>
     </View>
   );
 
+  // Prezzi non aggiornati: lo diciamo subito sotto il numero che ne dipende, con il rimedio a portata di dito
+  const quotesErrorLine = quotesError ? (
+    <View style={styles.inlineAlert} accessibilityRole="alert">
+      <AlertCircle size={16} color={colors.warning} style={{ marginRight: 8 }} />
+      <Text style={styles.inlineAlertText}>
+        {quotesError}
+        {quotesStatusLabel
+          ? ` ${quotesStatusLabel}.`
+          : lastSyncLabel
+            ? ` Mostro i prezzi dell'ultima sincronizzazione (${lastSyncLabel.replace(/^Scalable sincronizzato /, '')}).`
+            : ' Mostro gli ultimi prezzi disponibili.'}
+      </Text>
+      <TouchableOpacity
+        style={styles.inlineAlertAction}
+        onPress={() => refreshQuotes(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Riprova ad aggiornare i prezzi"
+      >
+        <Text style={styles.inlineAlertActionText}>Riprova</Text>
+      </TouchableOpacity>
+    </View>
+  ) : null;
+
   const listHeader = (
     <View style={styles.header}>
-      <Text style={styles.headerSubtitle}>{scalableCash > 0 && !includeCashInTotal ? 'Valore investito' : 'Bilancio totale'}</Text>
+      <Text style={styles.headerSubtitle}>{heroLabel}</Text>
       <CopyableText
         style={styles.headerTitle}
         valueToCopy={displayTotalValue.toString()}
-        accessibilityLabel={`${scalableCash > 0 && !includeCashInTotal ? 'Valore investito' : 'Bilancio totale'} €${formatNumber(displayTotalValue)}`}
+        accessibilityLabel={`${heroLabel} €${formatNumber(displayTotalValue)}`}
       >
         €{formatNumber(displayTotalValue)}
       </CopyableText>
@@ -479,21 +523,22 @@ export const PortfolioScreen = () => {
         <View style={styles.cashToggleRow}>
           <Text style={styles.headerNote}>
             {includeCashInTotal
-              ? `Investito €${formatNumber(globalTotalValue)} + liquidità €${formatNumber(scalableCash)}`
+              ? `Titoli €${formatNumber(globalTotalValue)} + liquidità €${formatNumber(scalableCash)}`
               : `Liquidità Scalable esclusa (€${formatNumber(scalableCash)})`}
           </Text>
           {/* La stessa scelta vale per pesi e Salute del portafoglio: un solo "patrimonio" ovunque */}
           <TouchableOpacity
             onPress={toggleIncludeCash}
-            hitSlop={10}
+            style={styles.cashToggle}
             accessibilityRole="switch"
-            accessibilityState={{ checked: includeCashInTotal }}
+            aria-checked={includeCashInTotal}
             accessibilityLabel="Includi la liquidità nel totale"
           >
             <Text style={styles.cashToggleText}>{includeCashInTotal ? 'Escludi' : 'Includi'}</Text>
           </TouchableOpacity>
         </View>
       )}
+      {quotesErrorLine}
 
       {transactions.length > 0 && (
         <View style={styles.headerMetrics}>
@@ -513,7 +558,7 @@ export const PortfolioScreen = () => {
             estimated: globalDailyEstimated,
             large: true,
           })}
-          {statusParts.length > 0 && <Text style={styles.footnote}>{statusParts.join(' · ')}</Text>}
+          {!quotesError && statusParts.length > 0 && <Text style={styles.footnote}>{statusParts.join(' · ')}</Text>}
           {incompleteItems.length > 0 && (
             <TouchableOpacity
               style={styles.incompleteRow}
@@ -528,29 +573,7 @@ export const PortfolioScreen = () => {
               <ChevronRight size={14} color={colors.warning} />
             </TouchableOpacity>
           )}
-          <PortfolioTrendChart points={historyPoints} includeCash={includeCashInTotal} />
-        </View>
-      )}
-
-      {quotesError && (
-        <View style={styles.inlineAlert} accessibilityRole="alert">
-          <AlertCircle size={16} color={colors.warning} style={{ marginRight: 8 }} />
-          <Text style={styles.inlineAlertText}>
-            {quotesError}
-            {quotesStatusLabel
-              ? ` ${quotesStatusLabel}.`
-              : lastSyncLabel
-                ? ` Mostro i prezzi dell'ultima sincronizzazione (${lastSyncLabel.replace(/^Scalable sincronizzato /, '')}).`
-                : ' Mostro gli ultimi prezzi disponibili.'}
-          </Text>
-          <TouchableOpacity
-            style={styles.inlineAlertAction}
-            onPress={() => refreshQuotes(true)}
-            hitSlop={8}
-            accessibilityRole="button"
-          >
-            <Text style={styles.inlineAlertActionText}>Riprova</Text>
-          </TouchableOpacity>
+          <PortfolioTrendChart points={historyPoints} live={historySnapshot} />
         </View>
       )}
 
@@ -604,7 +627,7 @@ export const PortfolioScreen = () => {
                 styles.priceAlertBannerIcon,
                 hasTriggeredAlerts ? styles.priceAlertBannerIconTriggered : styles.priceAlertBannerIconApproaching
               ]}>
-                <Bell size={14} color={hasTriggeredAlerts ? colors.scalable : colors.warning} />
+                <Bell size={14} color={hasTriggeredAlerts ? colors.warning : colors.scalable} />
               </View>
               <Text style={styles.priceAlertBannerTitle}>
                 {hasTriggeredAlerts
@@ -630,8 +653,13 @@ export const PortfolioScreen = () => {
   const listFooter = allAssets.length > 0 ? (
     <View style={styles.listFooter}>
       <HealthCheckSummaryRow healthCheck={healthCheck} onPress={() => router.push('/health-check')} />
-      {hasExtrapolatedAnnualized && (
+      {globalDailyEstimated && (
         <Text style={[styles.footnote, { marginTop: 16 }]}>
+          ≈ Variazione giornaliera stimata: Scalable non la fornisce, quindi applichiamo al prezzo Scalable la variazione percentuale di Yahoo Finance per lo stesso titolo.
+        </Text>
+      )}
+      {hasExtrapolatedAnnualized && (
+        <Text style={[styles.footnote, { marginTop: globalDailyEstimated ? 8 : 16 }]}>
           *Rendimento annuo (XIRR) stimato: le posizioni hanno meno di un anno di storico, quindi il dato è proiettato su base annua.
         </Text>
       )}
@@ -699,7 +727,8 @@ export const PortfolioScreen = () => {
                   ? 'Sessione Scalable scaduta, ricollega il conto'
                   : 'Sincronizza con Scalable'
               }
-              accessibilityState={{ busy: scalableSyncing, disabled: scalableSyncing }}
+              aria-busy={scalableSyncing}
+              aria-disabled={scalableSyncing}
             >
               {scalableSyncing ? (
                 <ActivityIndicator size={12} color={colors.scalable} style={{ marginRight: syncIconOnly ? 0 : 6 }} />
@@ -781,7 +810,7 @@ export const PortfolioScreen = () => {
                       activeOpacity={0.7}
                       accessibilityRole="button"
                       accessibilityLabel={`Gruppo ${group.groupName}, ${groupValueUnknown ? 'valore non disponibile' : `€${formatNumber(group.currentTotalValue)}`}, ${plural(group.assets.length, 'titolo', 'titoli')}${isDuplicate ? `, stessi titoli di ${duplicateOf[group.groupName]}` : ''}`}
-                      accessibilityState={{ expanded: !isCollapsed }}
+                      aria-expanded={!isCollapsed}
                     >
                       {isCollapsed ? (
                         <ChevronRight size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
@@ -806,11 +835,13 @@ export const PortfolioScreen = () => {
                         <PieChartIcon size={20} color={colors.textSecondary} />
                       </TouchableOpacity>
                     )}
+                    {/* Il valore è già nell'etichetta del controllo apri/chiudi: qui solo tocco e copia, niente doppia lettura */}
                     <CopyableText
                       style={styles.sectionValue}
+                      touchableStyle={styles.sectionValueTouch}
+                      hiddenFromAccessibility
                       valueToCopy={groupValueUnknown ? '' : group.currentTotalValue.toString()}
                       onPress={onToggle}
-                      accessibilityLabel={`Valore del gruppo ${group.groupName}: ${groupValueUnknown ? 'non disponibile' : `€${formatNumber(group.currentTotalValue)}`}`}
                     >
                       {groupValueUnknown ? 'n/d' : `€${formatNumber(group.currentTotalValue)}`}
                     </CopyableText>
@@ -824,7 +855,7 @@ export const PortfolioScreen = () => {
                     {allUnpriced ? (
                       <Text style={styles.footnote}>
                         {group.fxMissingCount === group.dailyCoverage.total
-                          ? 'Escluso dal totale: cambio non disponibile'
+                          ? `Escluso dal totale: ${unreachable}`
                           : 'Prezzi non disponibili: valutato al costo'}
                       </Text>
                     ) : (
@@ -837,7 +868,7 @@ export const PortfolioScreen = () => {
                         )}
                         {group.fxMissingCount > 0 && (
                           <Text style={styles.footnote}>
-                            {plural(group.fxMissingCount, 'titolo escluso', 'titoli esclusi')} dal totale: cambio non disponibile
+                            {plural(group.fxMissingCount, 'titolo escluso', 'titoli esclusi')} dal totale: {unreachable}
                           </Text>
                         )}
                       </>
@@ -1189,18 +1220,20 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
   },
+  // Bottone a contorno: il testo chiaro su rosso pieno non arrivava a 3:1 nel tema scuro
   syncRetryBtn: {
     minHeight: 32,
     justifyContent: 'center',
     paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: colors.negative,
+    borderWidth: 1,
+    borderColor: colors.negative,
     marginLeft: 8,
   },
   syncRetryBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.onStrong,
+    color: colors.text,
   },
   bannerClose: {
     width: 44,
@@ -1245,16 +1278,27 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 14,
     marginTop: 6,
   },
+  groupsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 24,
+  },
+  groupsHeading: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+  },
   metricSelector: {
     flexDirection: 'row',
-    alignSelf: 'flex-start',
-    marginTop: 20,
     padding: 3,
     borderRadius: 10,
     backgroundColor: colors.inputBackground,
   },
   metricOption: {
-    minHeight: 32,
+    minHeight: 36,
     paddingHorizontal: 14,
     justifyContent: 'center',
     borderRadius: 8,
@@ -1279,8 +1323,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    minHeight: 32,
-    marginTop: 6,
+    minHeight: 44,
+    marginTop: 2,
   },
   incompleteText: {
     fontSize: 13,
@@ -1308,14 +1352,17 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    marginTop: 4,
+  },
+  cashToggle: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
   cashToggleText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     color: colors.text,
     textDecorationLine: 'underline',
-    marginLeft: 8,
   },
   heroReturn: {
     fontSize: 18,
@@ -1389,7 +1436,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.text,
   },
   inlineAlertAction: {
-    minHeight: 40,
+    minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: 12,
   },
@@ -1480,10 +1527,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     minWidth: 0,
     minHeight: 44,
   },
+  // Il nome del gruppo non deve pesare più del suo valore
   sectionTitle: {
     color: colors.text,
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '600',
     flexShrink: 1,
   },
   sectionValue: {
@@ -1491,6 +1539,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
+  },
+  sectionValueTouch: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingLeft: 8,
   },
   sectionMetrics: {
     paddingLeft: 28,
@@ -1577,11 +1630,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 12,
     borderWidth: 1,
   },
+  // Soglia raggiunta: ambra, più evidente; in avvicinamento: il teal calmo dell'integrazione
   priceAlertBannerTriggeredBorder: {
-    borderColor: withAlpha(colors.scalable, 0.314),
+    borderColor: withAlpha(colors.warning, 0.6),
   },
   priceAlertBannerApproachingBorder: {
-    borderColor: withAlpha(colors.warning, 0.314),
+    borderColor: withAlpha(colors.scalable, 0.314),
   },
   priceAlertBannerHeader: {
     flexDirection: 'row',
@@ -1598,10 +1652,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginRight: 8,
   },
   priceAlertBannerIconTriggered: {
-    backgroundColor: withAlpha(colors.scalable, 0.125),
+    backgroundColor: withAlpha(colors.warning, 0.125),
   },
   priceAlertBannerIconApproaching: {
-    backgroundColor: withAlpha(colors.warning, 0.125),
+    backgroundColor: withAlpha(colors.scalable, 0.125),
   },
   priceAlertBannerTitle: {
     flex: 1,

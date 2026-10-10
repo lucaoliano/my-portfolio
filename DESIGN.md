@@ -150,7 +150,7 @@ Un canvas neutro e scuro su cui solo i numeri accendono il colore.
 
 ### Tertiary
 - **Scalable Teal** (scalable-teal, chiaro: scalable-teal-light): esclusivamente l'integrazione Scalable Capital: pulsante "Sincronizza", badge SCALABLE sulle transazioni, card della liquidità, chip "Scalable" nell'header. Su superficie piena usa scalable-surface.
-- **Signal Amber** (signal-amber, chiaro: signal-amber-light): price alert in avvicinamento e avvisi non bloccanti; superficie amber-surface.
+- **Signal Amber** (signal-amber, chiaro: signal-amber-light): price alert con soglia raggiunta (il più urgente) e avvisi non bloccanti; superficie amber-surface. Gli alert solo in avvicinamento restano nel teal Scalable, più calmo.
 - **Info Blue** (info-blue, chiaro: info-blue-light): note e suggerimenti neutri; superficie info-surface.
 - **Selection Navy** (selection-navy): segmento selezionato nei controlli del calcolatore PAC, con testo bianco.
 
@@ -260,7 +260,7 @@ Sotto il rendimento (o il chip di gruppo): "Oggi +€12,30 (+0,42%) · Annuo +11
 La liquidità Scalable è una riga da 56px: icona monete teal, "Liquidità Scalable" con tasso e rendimento sotto, saldo a destra e chevron. Nessun pulsante dentro: la sincronizzazione sta solo nella barra in alto e nel trascina-per-aggiornare.
 
 ### Trend Chart
-Sotto le metriche del bilancio: linea sottile da 2px alta 64px, colorata solo dal segno della variazione nel periodo, sopra una linea di base smoke-line. Selettore 7G / 1M / 1A / Tutto in pillole tonali. Didascalia: "+€X (+Y%) rispetto a un mese fa · valore, versamenti inclusi". Il valore segue la scelta "Includi liquidità". Con meno di due giorni di storico dice come si riempirà, senza linee finte. Lo storico è un documento al giorno in `portfolios/{uid}/history/{YYYY-MM-DD}`.
+Sotto le metriche del bilancio: linea sottile da 2px alta 64px che disegna il **guadagno** (valore meno capitale versato), così i versamenti del PAC non sembrano rendimento e verde/rosso restano guadagno/perdita. L'ultimo punto è il valore live. Scala minima pari al 2% del capitale versato, perché pochi euro non devono sembrare un crollo; linea tratteggiata del pareggio solo se il periodo la attraversa. Selettore 7G / 1M / 1A / Tutto in pillole tonali; i periodi più lunghi dello storico disponibile sono spenti. Didascalia: "+€X di guadagno rispetto a un mese fa · versamenti esclusi". Con meno di due giorni di storico dice come si riempirà, senza linee finte. Se il servizio prezzi non risponde, l'avviso con "Riprova" sta subito sotto il bilancio, al posto della riga con l'ora dei prezzi. Lo storico è un documento al giorno in `portfolios/{uid}/history/{YYYY-MM-DD}`.
 
 ### Metric Selector
 Controllo segmentato tonale (Totale / Oggi / Annuo) sopra il primo gruppo: decide l'unico dato mostrato in ogni gruppo e in ogni riga titolo. "Oggi" diventa "Chiusura ven 9 ott" quando l'ultimo prezzo di mercato non è di oggi. Un dato assente si scrive "n/d" in Ash Text, mai come chip a zero.

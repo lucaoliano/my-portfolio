@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Text, TextProps, TouchableOpacity, Modal, View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { Text, TextProps, TouchableOpacity, Modal, View, Pressable, StyleSheet, useWindowDimensions, Platform, StyleProp, ViewStyle } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Copy } from 'lucide-react-native';
 import { useAppTheme } from '../theme/ThemeContext';
@@ -7,9 +7,22 @@ import { ThemeColors } from '../theme/colors';
 
 interface CopyableTextProps extends TextProps {
   valueToCopy: string;
+  /** Stile del contenitore toccabile (es. altezza minima del bersaglio) */
+  touchableStyle?: StyleProp<ViewStyle>;
+  /** true = il valore è già annunciato da un controllo vicino: niente doppia lettura */
+  hiddenFromAccessibility?: boolean;
 }
 
-export const CopyableText: React.FC<CopyableTextProps> = ({ valueToCopy, children, style, onPress, accessibilityLabel, ...props }) => {
+export const CopyableText: React.FC<CopyableTextProps> = ({
+  valueToCopy,
+  children,
+  style,
+  onPress,
+  accessibilityLabel,
+  touchableStyle,
+  hiddenFromAccessibility = false,
+  ...props
+}) => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const { width: screenWidth } = useWindowDimensions();
@@ -42,12 +55,19 @@ export const CopyableText: React.FC<CopyableTextProps> = ({ valueToCopy, childre
     <>
       <TouchableOpacity 
         ref={touchableRef}
+        style={touchableStyle}
         onLongPress={handleLongPress} 
         // Senza onPress il tocco veniva "mangiato": ora passa all'azione del contenitore (es. aprire il gruppo)
         onPress={onPress}
         activeOpacity={0.6}
         delayLongPress={300}
-        accessibilityHint="Tieni premuto per copiare il valore"
+        // Senza un'azione al tocco non è un controllo: sul web non deve diventare una tappa vuota del Tab
+        focusable={!hiddenFromAccessibility && !!onPress}
+        accessible={!hiddenFromAccessibility}
+        aria-hidden={hiddenFromAccessibility || undefined}
+        accessibilityRole={onPress ? 'button' : 'text'}
+        // Il suggerimento vale dove la pressione lunga è raggiungibile con lo screen reader (iOS/Android)
+        accessibilityHint={Platform.OS === 'web' ? undefined : 'Tieni premuto per copiare il valore'}
         accessibilityLabel={accessibilityLabel}
       >
         <Text style={style} selectable={false} {...props}>

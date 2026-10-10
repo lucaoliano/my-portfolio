@@ -51,6 +51,9 @@ export default function HealthCheckScreen() {
                 ? ` (investito €${formatNumber(investedValue)} + liquidità €${formatNumber(scalableCash)}), come nella panoramica`
                 : ' (solo investito, liquidità esclusa come nella panoramica)'
               : ''}
+            {healthCheck.incompleteAssets > 0
+              ? `. ${healthCheck.incompleteAssets === 1 ? '1 titolo senza prezzo o cambio aggiornato non è pesato correttamente' : `${healthCheck.incompleteAssets} titoli senza prezzo o cambio aggiornato non sono pesati correttamente`}: i pesi sono provvisori.`
+              : ''}
           </Text>
           <PortfolioHealthCheckCard healthCheck={healthCheck} hasCashData={isScalableConnected} />
         </ScrollView>

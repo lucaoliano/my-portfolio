@@ -31,6 +31,10 @@ export interface PortfolioHealthCheckResult {
   coverage: { withData: number; total: number };
   /** Base su cui sono calcolati i pesi (investito, più la liquidità se inclusa) */
   weightBase: number;
+  /** Titoli senza prezzo o cambio aggiornato: i pesi sono calcolati senza di loro (o al costo) */
+  incompleteAssets: number;
+  /** true = i pesi includono la liquidità (stessa base della quota di liquidità) */
+  weightsIncludeCash: boolean;
   rules: HealthCheckRuleResult[];
   hhiIndex: number; // Herfindahl-Hirschman Index (0 - 1)
   topAsset: {
@@ -92,23 +96,29 @@ export function calculatePortfolioHealthCheck(
     scalableConnected?: boolean;
     /** Stessa scelta della dashboard: la liquidità entra nel denominatore dei pesi? */
     includeCashInWeights?: boolean;
+    /** Titoli senza prezzo o cambio aggiornato (es. servizio prezzi non raggiungibile) */
+    incompleteAssets?: number;
   } = {}
 ): PortfolioHealthCheckResult {
   const scalableConnected = options.scalableConnected ?? true;
   const includeCashInWeights = options.includeCashInWeights ?? true;
+  const incompleteAssets = options.incompleteAssets ?? 0;
   const validAssets = assets.filter((a) => a.currentTotalValue > 0);
   const totalInvestedValue = validAssets.reduce((sum, a) => sum + a.currentTotalValue, 0);
   const totalNetWorth = totalInvestedValue + Math.max(0, cashBalance);
   // Stesso denominatore della dashboard: i pesi devono coincidere tra le schermate
   const weightBase = includeCashInWeights ? totalNetWorth : totalInvestedValue;
 
+  // Niente da analizzare: nessun punteggio, non un 100 regalato
   if (totalNetWorth <= 0) {
     return {
-      overallScore: 100,
-      overallLevel: 'excellent',
+      overallScore: 0,
+      overallLevel: 'incomplete',
       overallSummary: 'Il portafoglio non ha posizioni aperte o liquidità.',
-      coverage: { withData: 0, total: 0 },
+      coverage: { withData: 0, total: 5 },
       weightBase: 0,
+      incompleteAssets,
+      weightsIncludeCash: includeCashInWeights,
       rules: [],
       hhiIndex: 0,
       topAsset: null,
@@ -483,7 +493,8 @@ export function calculatePortfolioHealthCheck(
 
   let overallLevel: HealthCheckLevel;
   if (coverage.withData < 3) overallLevel = 'incomplete';
-  else if (clampedScore >= 85) overallLevel = 'excellent';
+  // Con titoli senza prezzo aggiornato i pesi sono provvisori: "Eccellente" sarebbe una rassicurazione falsa
+  else if (clampedScore >= 85 && incompleteAssets === 0) overallLevel = 'excellent';
   else if (clampedScore >= 70) overallLevel = 'good';
   else if (clampedScore >= 50) overallLevel = 'warning';
   else overallLevel = 'critical';
@@ -495,6 +506,9 @@ export function calculatePortfolioHealthCheck(
   const warnings = titlesWith('WARNING');
   const missing = rules.filter(rule => !rule.hasData).map(rule => inSentence(rule.title));
   const parts: string[] = [];
+  if (incompleteAssets > 0) {
+    parts.push(`${incompleteAssets === 1 ? '1 titolo è' : `${incompleteAssets} titoli sono`} senza prezzo o cambio aggiornato: pesi provvisori.`);
+  }
   if (alerts.length > 0) parts.push(`Da rivedere: ${alerts.join(', ')}.`);
   if (warnings.length > 0) parts.push(`Da valutare: ${warnings.join(', ')}.`);
   if (alerts.length === 0 && warnings.length === 0 && scoredRules.length > 0) {
@@ -509,6 +523,8 @@ export function calculatePortfolioHealthCheck(
     overallSummary,
     coverage,
     weightBase,
+    incompleteAssets,
+    weightsIncludeCash: includeCashInWeights,
     rules,
     hhiIndex: Number(hhi.toFixed(3)),
     topAsset: topAssetObj,

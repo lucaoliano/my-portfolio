@@ -175,6 +175,8 @@ export const calculatePortfolioAggregation = (
   globalDailyEstimated: boolean;
   /** Ora di mercato più recente tra le quotazioni con variazione giornaliera */
   latestMarketTime: string | null;
+  /** Ora di mercato più vecchia: se è di un altro giorno, alcune borse non hanno ancora un prezzo di oggi */
+  oldestMarketTime: string | null;
 } => {
   const groupsMap: Record<string, GroupedPortfolio> = {};
   settings?.groups?.forEach(g => {
@@ -310,6 +312,10 @@ export const calculatePortfolioAggregation = (
     globalDailyEstimated,
     latestMarketTime: globalAssets.reduce<string | null>(
       (latest, a) => (a.hasDailyChange && a.marketTime && (!latest || a.marketTime > latest) ? a.marketTime : latest),
+      null
+    ),
+    oldestMarketTime: globalAssets.reduce<string | null>(
+      (oldest, a) => (a.hasDailyChange && a.marketTime && (!oldest || a.marketTime < oldest) ? a.marketTime : oldest),
       null
     ),
   };

@@ -7,116 +7,161 @@ import { formatDate, formatNumber, formatSignedCurrency } from '../utils/formatt
 import { HistoryPoint } from '../hooks/usePortfolioHistory';
 
 type Range = '7G' | '1M' | '1A' | 'Tutto';
-const RANGES: { key: Range; days: number | null; label: string }[] = [
-  { key: '7G', days: 7, label: '7 giorni fa' },
-  { key: '1M', days: 30, label: 'un mese fa' },
-  { key: '1A', days: 365, label: 'un anno fa' },
-  { key: 'Tutto', days: null, label: "l'inizio dello storico" },
+const RANGES: { key: Range; days: number | null; label: string; spoken: string }[] = [
+  { key: '7G', days: 7, label: '7 giorni fa', spoken: 'Ultimi 7 giorni' },
+  { key: '1M', days: 30, label: 'un mese fa', spoken: 'Ultimo mese' },
+  { key: '1A', days: 365, label: 'un anno fa', spoken: 'Ultimo anno' },
+  { key: 'Tutto', days: null, label: "l'inizio dello storico", spoken: 'Tutto lo storico' },
 ];
 
 const CHART_HEIGHT = 64;
+const PAD = 4;
+
+export interface LiveHistoryPoint {
+  invested: number;
+  costBasis: number;
+}
 
 interface PortfolioTrendChartProps {
   points: HistoryPoint[];
-  /** Stessa scelta del bilancio: la liquidità entra nel valore? */
-  includeCash: boolean;
+  /** Valori di adesso: l'ultimo punto è quello live, non la fotografia salvata */
+  live: LiveHistoryPoint | null;
 }
+
+const dateKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 const daysAgoKey = (days: number) => {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return dateKey(d);
 };
 
 /**
- * Andamento del valore nel tempo: una linea sottile, colorata solo dal segno della variazione nel periodo.
- * Il valore include i versamenti, quindi lo diciamo: non è un rendimento.
+ * Andamento del guadagno (valore meno capitale versato): i versamenti del PAC non sembrano rendimento,
+ * quindi verde e rosso tornano a voler dire guadagno e perdita, come nel resto dell'app.
  */
-export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({ points, includeCash }) => {
+export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({ points, live }) => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const [range, setRange] = useState<Range>('1M');
   const [width, setWidth] = useState(0);
 
+  // Il punto di oggi viene dai numeri live
+  const allPoints = useMemo(() => {
+    const today = dateKey(new Date());
+    const past = points.filter(p => p.date !== today);
+    const stored = points.find(p => p.date === today);
+    const todayPoint = live
+      ? { date: today, gain: live.invested - live.costBasis, costBasis: live.costBasis, complete: true }
+      : stored
+        ? { date: today, gain: stored.invested - stored.costBasis, costBasis: stored.costBasis, complete: stored.complete }
+        : null;
+    const mapped = past.map(p => ({ date: p.date, gain: p.invested - p.costBasis, costBasis: p.costBasis, complete: p.complete }));
+    return todayPoint ? [...mapped, todayPoint] : mapped;
+  }, [points, live]);
+
+  // Un periodo più lungo dello storico disponibile disegnerebbe lo stesso grafico di quello prima: lo spegniamo
+  const oldest = allPoints[0]?.date;
+  const isRangeAvailable = (r: typeof RANGES[number], index: number) => {
+    if (!oldest || r.days === null || index === 0) return true;
+    const previous = RANGES[index - 1].days!;
+    return oldest < daysAgoKey(previous);
+  };
+  const activeRange = RANGES.find((r, i) => r.key === range && isRangeAvailable(r, i)) ? range : '7G';
+
   const series = useMemo(() => {
-    const selected = RANGES.find(r => r.key === range)!;
+    const selected = RANGES.find(r => r.key === activeRange)!;
     const from = selected.days ? daysAgoKey(selected.days) : null;
-    return points
-      .filter(p => !from || p.date >= from)
-      .map(p => ({ date: p.date, value: p.invested + (includeCash ? p.cash : 0), complete: p.complete }));
-  }, [points, range, includeCash]);
+    return allPoints.filter(p => !from || p.date >= from);
+  }, [allPoints, activeRange]);
 
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
   const first = series[0];
   const last = series[series.length - 1];
-  const delta = first && last ? last.value - first.value : 0;
-  const deltaPercent = first && first.value > 0 ? (delta / first.value) * 100 : 0;
+  const delta = first && last ? last.gain - first.gain : 0;
   const tone = delta >= 0 ? colors.positive : colors.negative;
-  const rangeLabel = RANGES.find(r => r.key === range)!.label;
+  const rangeLabel = RANGES.find(r => r.key === activeRange)!.label;
   const hasIncomplete = series.some(p => !p.complete);
 
-  const path = useMemo(() => {
+  const chart = useMemo(() => {
     if (series.length < 2 || width === 0) return null;
-    const values = series.map(p => p.value);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const span = max - min || 1;
-    const pad = 4;
-    return series
+    const values = series.map(p => p.gain);
+    let min = Math.min(...values);
+    let max = Math.max(...values);
+    // Scala minima pari al 2% del capitale versato: un movimento di pochi euro non deve sembrare un crollo
+    const minSpan = Math.max(1, Math.abs(series[series.length - 1].costBasis) * 0.02);
+    if (max - min < minSpan) {
+      const mid = (max + min) / 2;
+      min = mid - minSpan / 2;
+      max = mid + minSpan / 2;
+    }
+    const span = max - min;
+    const toY = (v: number) => PAD + (1 - (v - min) / span) * (CHART_HEIGHT - PAD * 2);
+    const path = series
       .map((p, i) => {
         const x = (i / (series.length - 1)) * width;
-        const y = pad + (1 - (p.value - min) / span) * (CHART_HEIGHT - pad * 2);
-        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${toY(p.gain).toFixed(1)}`;
       })
       .join(' ');
+    // Linea del pareggio solo se il periodo la attraversa: sopra si guadagna, sotto si perde
+    const zeroY = min < 0 && max > 0 ? toY(0) : null;
+    return { path, zeroY };
   }, [series, width]);
 
   return (
     <View style={styles.container}>
-      <View style={styles.rangeRow} accessibilityRole="tablist">
-        {RANGES.map(r => (
-          <TouchableOpacity
-            key={r.key}
-            onPress={() => setRange(r.key)}
-            style={[styles.rangeButton, range === r.key && styles.rangeButtonActive]}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: range === r.key }}
-            accessibilityLabel={r.key === 'Tutto' ? 'Tutto lo storico' : `Ultimi ${r.label.replace(' fa', '')}`}
-            hitSlop={{ top: 8, bottom: 8 }}
-          >
-            <Text style={[styles.rangeText, range === r.key && styles.rangeTextActive]}>{r.key}</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.rangeRow} accessibilityRole="tablist" aria-label="Periodo del grafico">
+        {RANGES.map((r, index) => {
+          const available = isRangeAvailable(r, index);
+          const selected = activeRange === r.key;
+          return (
+            <TouchableOpacity
+              key={r.key}
+              onPress={() => setRange(r.key)}
+              disabled={!available}
+              style={[styles.rangeButton, selected && styles.rangeButtonActive, !available && styles.rangeButtonDisabled]}
+              accessibilityRole="tab"
+              aria-selected={selected}
+              aria-disabled={!available}
+              accessibilityLabel={available ? r.spoken : `${r.spoken}: storico non ancora sufficiente`}
+              hitSlop={{ top: 8, bottom: 8, left: 3, right: 3 }}
+            >
+              <Text style={[styles.rangeText, selected && styles.rangeTextActive]}>{r.key}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <View style={styles.chart} onLayout={onLayout}>
-        {path ? (
-          // Il grafico è decorativo per gli screen reader: il dato è nella didascalia qui sotto
-          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        {chart ? (
+          // Decorativo per gli screen reader (anche sul web): il dato è nella didascalia
+          <View aria-hidden importantForAccessibility="no-hide-descendants">
             <Svg width={width} height={CHART_HEIGHT}>
+              {chart.zeroY !== null && (
+                <Line x1={0} y1={chart.zeroY} x2={width} y2={chart.zeroY} stroke={colors.border} strokeWidth={1} strokeDasharray="4 4" />
+              )}
               <Line x1={0} y1={CHART_HEIGHT - 1} x2={width} y2={CHART_HEIGHT - 1} stroke={colors.border} strokeWidth={1} />
-              <Path d={path} stroke={tone} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+              <Path d={chart.path} stroke={tone} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
             </Svg>
           </View>
         ) : (
           <Text style={styles.empty}>
-            {points.length === 0
-              ? "L'andamento si costruisce da oggi: ogni giorno in cui apri l'app aggiunge un punto."
+            {allPoints.length === 0
+              ? "L'andamento del guadagno si costruisce da oggi: ogni giorno in cui apri l'app aggiunge un punto."
               : 'Serve almeno un altro giorno di storico per disegnare il grafico.'}
           </Text>
         )}
       </View>
 
-      {path && (
+      {chart && (
         <Text
           style={styles.caption}
-          accessibilityLabel={`Valore ${delta >= 0 ? 'aumentato' : 'diminuito'} di ${formatNumber(Math.abs(delta))} euro rispetto a ${rangeLabel}, versamenti inclusi`}
+          accessibilityLabel={`Guadagno ${delta >= 0 ? 'aumentato' : 'diminuito'} di ${formatNumber(Math.abs(delta))} euro rispetto a ${activeRange === 'Tutto' ? formatDate(first.date) : rangeLabel}, versamenti esclusi`}
         >
-          <Text style={{ color: tone, fontWeight: '700' }}>
-            {formatSignedCurrency(delta)} ({delta >= 0 ? '+' : ''}{formatNumber(deltaPercent)}%)
-          </Text>
-          {` rispetto ${range === 'Tutto' ? `al ${formatDate(first.date)}` : `a ${rangeLabel}`} · valore, versamenti inclusi`}
+          <Text style={{ color: tone, fontWeight: '700' }}>{formatSignedCurrency(delta)}</Text>
+          {` di guadagno rispetto ${activeRange === 'Tutto' ? `al ${formatDate(first.date)}` : `a ${rangeLabel}`} · versamenti esclusi`}
           {hasIncomplete ? ' · alcuni giorni con dati incompleti' : ''}
         </Text>
       )}
@@ -135,12 +180,17 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   rangeButton: {
     minHeight: 28,
+    minWidth: 40,
+    alignItems: 'center',
     paddingHorizontal: 10,
     justifyContent: 'center',
     borderRadius: 14,
   },
   rangeButtonActive: {
     backgroundColor: colors.inputBackground,
+  },
+  rangeButtonDisabled: {
+    opacity: 0.4,
   },
   rangeText: {
     fontSize: 12,

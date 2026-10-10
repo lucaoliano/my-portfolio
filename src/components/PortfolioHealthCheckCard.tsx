@@ -102,6 +102,8 @@ export const HealthCheckSummaryRow: React.FC<{ healthCheck: PortfolioHealthCheck
   const label = LEVEL_LABELS[healthCheck.overallLevel];
   const incomplete = healthCheck.overallLevel === 'incomplete';
   const { withData, total } = healthCheck.coverage;
+  const pending = healthCheck.incompleteAssets;
+  const pendingLabel = pending > 0 ? `${pending} ${pending === 1 ? 'titolo' : 'titoli'} senza prezzo` : null;
 
   return (
     <TouchableOpacity
@@ -111,7 +113,7 @@ export const HealthCheckSummaryRow: React.FC<{ healthCheck: PortfolioHealthCheck
       accessibilityRole="button"
       accessibilityLabel={incomplete
         ? `Salute del portafoglio: analisi incompleta, ${withData} indicatori su ${total} con dati`
-        : `Salute del portafoglio: ${healthCheck.overallScore} su 100, ${label}`}
+        : `Salute del portafoglio: ${healthCheck.overallScore} su 100, ${label}${pendingLabel ? `, provvisoria: ${pendingLabel}` : ''}`}
       accessibilityHint="Apre l'analisi dettagliata"
     >
       <ShieldCheck size={18} color={colors.textSecondary} style={{ marginRight: 10 }} />
@@ -122,7 +124,7 @@ export const HealthCheckSummaryRow: React.FC<{ healthCheck: PortfolioHealthCheck
         <>
           <Text style={[styles.summaryRowScore, { color }]}>{healthCheck.overallScore}</Text>
           <Text style={styles.summaryRowLevel}>
-            {' · '}{label}{withData < total ? ` (${withData} di ${total})` : ''}
+            {' · '}{pendingLabel ? 'Provvisoria' : label}{!pendingLabel && withData < total ? ` (${withData} di ${total})` : ''}
           </Text>
         </>
       )}
@@ -180,12 +182,12 @@ export const PortfolioHealthCheckCard: React.FC<PortfolioHealthCheckCardProps> =
           </View>
           <View style={styles.kpiDivider} />
           <View style={styles.kpiItem}>
-            <Text style={styles.kpiLabel}>Liquidità</Text>
+            <Text style={styles.kpiLabel}>Liquidità sul patrimonio</Text>
             <Text style={styles.kpiValue}>{hasCashData ? `${formatNumber(healthCheck.cashAllocationPercent)}%` : 'N/D'}</Text>
           </View>
           <View style={styles.kpiDivider} />
           <View style={styles.kpiItem}>
-            <Text style={styles.kpiLabel}>Primo titolo</Text>
+            <Text style={styles.kpiLabel}>Primo titolo {healthCheck.weightsIncludeCash ? 'sul patrimonio' : "sull'investito"}</Text>
             <Text style={styles.kpiValue}>
               {healthCheck.topAsset ? `${formatNumber(healthCheck.topAsset.percentage)}%` : 'N/D'}
             </Text>
