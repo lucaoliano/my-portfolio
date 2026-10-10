@@ -53,11 +53,11 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({ points
     const past = points.filter(p => p.date !== today);
     const stored = points.find(p => p.date === today);
     const todayPoint = live
-      ? { date: today, gain: live.invested - live.costBasis, costBasis: live.costBasis, complete: true }
+      ? { date: today, gain: live.invested - live.costBasis, costBasis: live.costBasis, complete: true, backfilled: false }
       : stored
-        ? { date: today, gain: stored.invested - stored.costBasis, costBasis: stored.costBasis, complete: stored.complete }
+        ? { date: today, gain: stored.invested - stored.costBasis, costBasis: stored.costBasis, complete: stored.complete, backfilled: false }
         : null;
-    const mapped = past.map(p => ({ date: p.date, gain: p.invested - p.costBasis, costBasis: p.costBasis, complete: p.complete }));
+    const mapped = past.map(p => ({ date: p.date, gain: p.invested - p.costBasis, costBasis: p.costBasis, complete: p.complete, backfilled: !!p.backfilled }));
     return todayPoint ? [...mapped, todayPoint] : mapped;
   }, [points, live]);
 
@@ -84,6 +84,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({ points
   const tone = delta >= 0 ? colors.positive : colors.negative;
   const rangeLabel = RANGES.find(r => r.key === activeRange)!.label;
   const hasIncomplete = series.some(p => !p.complete);
+  const hasBackfill = series.some(p => p.backfilled);
 
   const chart = useMemo(() => {
     if (series.length < 2 || width === 0) return null;
@@ -162,6 +163,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({ points
         >
           <Text style={{ color: tone, fontWeight: '700' }}>{formatSignedCurrency(delta)}</Text>
           {` di guadagno rispetto ${activeRange === 'Tutto' ? `al ${formatDate(first.date)}` : `a ${rangeLabel}`} · versamenti esclusi`}
+          {hasBackfill ? ' · settimane passate ricostruite dai prezzi di chiusura' : ''}
           {hasIncomplete ? ' · alcuni giorni con dati incompleti' : ''}
         </Text>
       )}

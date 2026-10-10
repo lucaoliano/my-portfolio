@@ -8,6 +8,7 @@ import { calculateCashYield } from '../src/utils/cashInterest';
 import { calculatePosition, calculatePortfolioAggregation } from '../src/utils/portfolioAggregator';
 import { calculateTransactionsXIRR, calculateXIRR } from '../src/utils/xirr';
 import { YahooQuote } from '../src/services/yahooFinance';
+import { buildBackfill, backfillSymbols } from '../src/utils/historyBackfill';
 let fails = 0;
 const eq = (label: string, got: unknown, exp: unknown) => { const ok = JSON.stringify(got) === JSON.stringify(exp); if (!ok) fails++; console.log(ok ? 'OK  ' : 'FAIL', label, ok ? '' : `got ${JSON.stringify(got)} exp ${JSON.stringify(exp)}`); };
 const tx = (o: Partial<Transaction>): Transaction => ({ symbol: 'X', name: 'Acme SpA', quantity: 1, purchasePrice: 1, date: '2025-01-01', type: 'BUY', ...o });
@@ -114,5 +115,17 @@ eq('foreign value in EUR', apple.valueInBase, 960);
 eq('foreign P/L in EUR and FX effect', [Math.round(apple.profitOrLossEur! * 100) / 100, Math.round(apple.fxEffectEur! * 100) / 100], [60, -120]);
 eq('missing price flagged', agg.missingPriceSymbols, ['NOP']);
 eq('global total in EUR', Math.round(agg.globalTotalValue * 100) / 100, 960 + 1200 + 50);
+
+// Ricostruzione dello storico
+const bfTx = [tx({symbol:'ENI',quantity:10,purchasePrice:10,date:'2025-01-02'}), tx({symbol:'AAPL',currency:'USD',fxRate:0.9,quantity:1,purchasePrice:100,date:'2025-01-02'})];
+eq('backfill symbols include fx', backfillSymbols(bfTx).sort(), ['AAPL','ENI','USDEUR=X']);
+const bf = buildBackfill(bfTx, {
+  ENI: { currency: 'EUR', points: [{ date: '2025-01-06', close: 11 }, { date: '2025-01-13', close: 12 }] },
+  AAPL: { currency: 'USD', points: [{ date: '2025-01-06', close: 110 }] },
+  'USDEUR=X': { currency: 'EUR', points: [{ date: '2025-01-06', close: 0.8 }] },
+}, '2025-01-20');
+eq('backfill weekly dates (no point before the first close)', bf.map(p => p.date), ['2025-01-10', '2025-01-17']);
+const lastBf = bf[bf.length - 1];
+eq('backfill last point value', lastBf ? [lastBf.invested, lastBf.costBasis, lastBf.complete] : null, [10 * 12 + 110 * 0.8, 100 + 90, true]);
 console.log(fails ? `${fails} FAIL` : 'ALL OK');
 if (fails) process.exit(1);

@@ -343,3 +343,50 @@ export const getDailyChanges = onCall(async (request: CallableRequest<{ symbols?
     throw new HttpsError("unavailable", "Variazioni giornaliere non disponibili");
   }
 });
+
+/**
+ * Chiusure settimanali per ricostruire lo storico del portafoglio prima che l'app lo registrasse.
+ * Accetta ticker, ISIN (tradotti nel simbolo Yahoo) e cambi ("USDEUR=X"). Prezzi in pence convertiti in sterline.
+ */
+export const getWeeklyCloses = onCall(async (request: CallableRequest<{ symbols?: string[]; from?: string }>) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Devi essere autenticato.");
+  }
+  const symbols = Array.from(new Set((request.data.symbols ?? []).filter((s) => typeof s === "string" && s.length <= 20))).slice(0, 40);
+  const from = request.data.from ?? "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || symbols.length === 0) {
+    throw new HttpsError("invalid-argument", "Servono simboli e una data di inizio (AAAA-MM-GG).");
+  }
+  // Al massimo dieci anni indietro
+  const minFrom = new Date();
+  minFrom.setUTCFullYear(minFrom.getUTCFullYear() - 10);
+  const period1 = from < minFrom.toISOString().slice(0, 10) ? minFrom.toISOString().slice(0, 10) : from;
+
+  const series: Record<string, { currency: string | null; points: { date: string; close: number }[] }> = {};
+  await Promise.all(symbols.map(async (sym) => {
+    try {
+      const yahooSymbol = ISIN_PATTERN.test(sym) ? await resolveYahooSymbol(sym) : sym;
+      if (!yahooSymbol) return;
+      const rows = await yf.historical(yahooSymbol, { period1, interval: "1wk" });
+      let currency: string | null = sym.endsWith("=X") ? "EUR" : null;
+      if (!currency) {
+        try {
+          const q = await yf.quote(yahooSymbol);
+          currency = (q as { currency?: string } | undefined)?.currency ?? null;
+        } catch {
+          currency = null;
+        }
+      }
+      const pence = currency === "GBp" || currency === "GBX";
+      series[sym] = {
+        currency: pence ? "GBP" : currency ? currency.toUpperCase() : null,
+        points: (rows || [])
+          .filter((r) => typeof r.close === "number" && r.close > 0)
+          .map((r) => ({ date: new Date(r.date).toISOString().slice(0, 10), close: pence ? r.close / 100 : r.close })),
+      };
+    } catch (err) {
+      console.warn(`Weekly closes failed for ${sym}:`, err instanceof Error ? err.message : String(err));
+    }
+  }));
+  return { series };
+});
