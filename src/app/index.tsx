@@ -1171,7 +1171,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   scalableTopBarBtnActive: {
     borderColor: colors.scalable,
-    backgroundColor: withAlpha(colors.scalable, 0.2),
+    backgroundColor: withAlpha(colors.scalable, 0.12),
   },
   scalableTopBarBtnExpired: {
     borderColor: withAlpha(colors.negative, 0.4),
@@ -1306,6 +1306,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   metricOptionActive: {
     backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   metricOptionText: {
     fontSize: 13,
@@ -1633,7 +1635,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   // Soglia raggiunta: ambra, più evidente; in avvicinamento: il teal calmo dell'integrazione
   priceAlertBannerTriggeredBorder: {
-    borderColor: withAlpha(colors.warning, 0.6),
+    borderColor: colors.warning,
   },
   priceAlertBannerApproachingBorder: {
     borderColor: withAlpha(colors.scalable, 0.314),

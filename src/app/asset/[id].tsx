@@ -544,6 +544,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 13,
   },
   categoryRow: {
+    borderWidth: 1,
+    borderColor: colors.border,
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 56,
@@ -598,6 +600,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: 24,
   },
   metricCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
     flex: 1,
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -616,6 +620,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
   },
   changeGroupButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
@@ -643,6 +649,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingBottom: 20,
   },
   transactionCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
     flexDirection: 'row',
     justifyContent: 'space-between',
     backgroundColor: colors.card,

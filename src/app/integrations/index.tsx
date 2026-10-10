@@ -99,6 +99,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     minHeight: 72,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   title: { fontSize: 17, fontWeight: '700', color: colors.text },
   status: { fontSize: 14, fontWeight: '600', marginTop: 2 },
