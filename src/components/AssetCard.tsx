@@ -25,6 +25,8 @@ interface AssetCardProps {
   hasDailyChange?: boolean;
   /** Valore in euro per i titoli in valuta estera; null = cambio non disponibile */
   valueInBase?: number | null;
+  /** Classe di attivo (Azioni, Obbligazioni…); assente se non impostata */
+  category?: string;
   /** Peso della posizione sul totale investito, in percentuale */
   weightPercent?: number | null;
   /** Unico dato di rendimento mostrato nella riga, scelto in alto nella panoramica */
@@ -55,6 +57,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({
   hasDailyChange = true,
   valueInBase,
   weightPercent,
+  category,
   metric = 'total',
   dailyLabel = 'Oggi',
   dailyEstimated = false,
@@ -86,6 +89,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({
   const fxMissing = isForeign && valueInBase === null;
   const accessibilityParts = [
     name,
+    category ?? null,
     `${quantity} ${quantity === 1 ? 'quota' : 'quote'}`,
     `valore ${currencySymbol}${formatNumber(totalValue)}`,
     isForeign && valueInBase ? `circa ${formatNumber(valueInBase)} euro` : null,
@@ -163,7 +167,10 @@ export const AssetCard: React.FC<AssetCardProps> = ({
       {/* Righe a due colonne: il nome usa tutto lo spazio che il valore non occupa */}
       <View style={styles.body}>
         <View style={styles.row}>
-          <Text style={styles.name} numberOfLines={2}>{name}</Text>
+          <View style={styles.nameColumn}>
+            <Text style={styles.name} numberOfLines={2}>{name}</Text>
+            {category && <Text style={styles.categoryText} numberOfLines={1}>{category}</Text>}
+          </View>
           <View style={styles.valueColumn}>
             <Text style={[styles.price, !hasPrice && styles.priceUnknown]}>
               {copied ? 'Copiato' : `${currencySymbol}${totalValue ? formatNumber(totalValue) : '---'}`}
@@ -264,8 +271,16 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'flex-end',
     marginLeft: 12,
   },
-  name: {
+  nameColumn: {
     flex: 1,
+    minWidth: 0,
+  },
+  categoryText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  name: {
     color: colors.text,
     fontSize: 15,
     fontWeight: '600',

@@ -17,6 +17,7 @@ import { calculateTransactionsXIRR } from '../../utils/xirr';
 import { getQuotes, YahooQuote } from '../../services/yahooFinance';
 import { useScalablePriceAlerts } from '../../hooks/useScalablePriceAlerts';
 import { calculateAlertStatus, getAlertsForSymbol } from '../../utils/priceAlerts';
+import { ASSET_CLASSES, AssetCategoryInfo, resolveAssetCategory } from '../../constants/assetClasses';
 
 export const AssetDetailsScreen = () => {
   const { colors } = useAppTheme();
@@ -56,7 +57,7 @@ export const AssetDetailsScreen = () => {
   const userId = auth.currentUser?.uid;
   const { alerts: allScalableAlerts } = useScalablePriceAlerts(userId);
   const assetAlerts = getAlertsForSymbol(allScalableAlerts, effectiveSymbol);
-  const [customCategory, setCustomCategory] = useState<string | null>(null);
+  const [categoryInfo, setCategoryInfo] = useState<AssetCategoryInfo | null>(null);
   const [scalableAssetData, setScalableAssetData] = useState<{ currentPrice?: number; currency?: string; fromQuotes?: boolean } | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
 
@@ -82,7 +83,7 @@ export const AssetDetailsScreen = () => {
     const unsubscribeAsset = onSnapshot(doc(db, 'portfolios', userId, 'assets', effectiveSymbol), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        if (data.category) setCustomCategory(data.category);
+        setCategoryInfo(resolveAssetCategory(data));
         if (data.currentPrice || data.regularMarketPrice) {
           // scalable_quotes è la stessa fonte usata dalla dashboard: se c'è, ha la precedenza,
           // altrimenti dashboard e dettaglio mostrano valori diversi a seconda di quale snapshot arriva per ultimo.
@@ -92,7 +93,7 @@ export const AssetDetailsScreen = () => {
           });
         }
       } else {
-        setCustomCategory(null);
+        setCategoryInfo(null);
       }
     });
 
@@ -126,15 +127,6 @@ export const AssetDetailsScreen = () => {
     };
   }, [effectiveSymbol, transactions]);
 
-  const ASSET_CATEGORIES = [
-    'Azioni',
-    'Obbligazioni',
-    'Materie prime',
-    'Criptovalute',
-    'Liquidità',
-    'Altro'
-  ];
-
   const displayName = initialName || liveQuote?.longName || liveQuote?.shortName || transactions.find(t => t.name)?.name || effectiveSymbol;
 
   const handleSelectCategory = async (cat: string) => {
@@ -143,6 +135,8 @@ export const AssetDetailsScreen = () => {
     try {
       await setDoc(doc(db, 'portfolios', userId, 'assets', effectiveSymbol), {
         category: cat,
+        // Scelta dell'utente: la sincronizzazione Scalable non la sovrascrive più
+        categorySource: 'user',
         symbol: effectiveSymbol,
         name: displayName
       }, { merge: true });
@@ -261,9 +255,6 @@ export const AssetDetailsScreen = () => {
             <TouchableOpacity onPress={handleCopy} style={{ marginLeft: 6, padding: 4 }}>
               <Copy size={14} color={colors.textSecondary} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowCategoryModal(true)}>
-              <Text style={styles.headerCategory}> • {customCategory || 'Imposta Categoria'}</Text>
-            </TouchableOpacity>
           </View>
         </View>
         <TouchableOpacity 
@@ -321,6 +312,26 @@ export const AssetDetailsScreen = () => {
           <CopyableText style={styles.metricValue} valueToCopy={numericCurrentPrice.toString()}>{currencySymbol}{formatNumber(numericCurrentPrice)}</CopyableText>
         </View>
       </View>
+
+      {/* Classe di attivo: una riga ben visibile, non un link nascosto nell'intestazione */}
+      <TouchableOpacity
+        style={styles.categoryRow}
+        onPress={() => setShowCategoryModal(true)}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`Classe di attivo: ${categoryInfo ? `${categoryInfo.category}${categoryInfo.source === 'scalable' ? ', proposta da Scalable' : ''}` : 'da impostare'}. Cambia`}
+      >
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.categoryLabel}>Classe di attivo</Text>
+          {categoryInfo?.source === 'scalable' && (
+            <Text style={styles.categoryHint}>Proposta da Scalable: tocca per confermare o cambiare</Text>
+          )}
+        </View>
+        <Text style={[styles.categoryValue, !categoryInfo && styles.categoryValueMissing]}>
+          {categoryInfo?.category ?? 'Da impostare'}
+        </Text>
+        <ChevronRight size={16} color={colors.textSecondary} style={{ marginLeft: 4 }} />
+      </TouchableOpacity>
 
       {/* Scalable Price Alerts (Punto 4: Price Alert Sincronizzati) */}
       {assetAlerts.map(alert => {
@@ -452,14 +463,16 @@ export const AssetDetailsScreen = () => {
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowCategoryModal(false)}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Seleziona Categoria</Text>
-            {ASSET_CATEGORIES.map(cat => (
+            <Text style={styles.modalTitle} accessibilityRole="header">Classe di attivo</Text>
+            {ASSET_CLASSES.map(cat => (
               <TouchableOpacity
                 key={cat}
-                style={[styles.modalOption, customCategory === cat && styles.modalOptionSelected]}
+                style={[styles.modalOption, categoryInfo?.category === cat && styles.modalOptionSelected]}
                 onPress={() => handleSelectCategory(cat)}
+                accessibilityRole="radio"
+                aria-checked={categoryInfo?.category === cat}
               >
-                <Text style={[styles.modalOptionText, customCategory === cat && styles.modalOptionTextSelected]}>
+                <Text style={[styles.modalOptionText, categoryInfo?.category === cat && styles.modalOptionTextSelected]}>
                   {cat}
                 </Text>
               </TouchableOpacity>
@@ -508,11 +521,36 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 13,
   },
-  headerCategory: {
-    color: colors.primary,
-    fontSize: 13,
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 56,
+    marginHorizontal: 20,
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+  },
+  categoryLabel: {
+    fontSize: 15,
     fontWeight: '600',
-    paddingHorizontal: 4,
+    color: colors.text,
+  },
+  categoryHint: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  categoryValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginLeft: 12,
+  },
+  categoryValueMissing: {
+    color: colors.warning,
   },
   overview: {
     alignItems: 'center',

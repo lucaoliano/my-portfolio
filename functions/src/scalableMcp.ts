@@ -35,6 +35,56 @@ interface ScalableTransactionPayload {
   category?: string;
 }
 
+// ==========================================
+// Classe di attivo (Azioni, Obbligazioni, Materie prime…) proposta da Scalable
+// ==========================================
+
+/** Valori scritti dalle sync precedenti come "categoria": tipi di strumento, non classi di attivo */
+const LEGACY_SYNC_CATEGORIES = new Set(["ETF", "Cripto", "Azioni"]);
+
+/**
+ * Deduce la classe di attivo dal tipo di strumento Scalable e dal nome.
+ * Un ETF può essere azionario, obbligazionario o monetario: il tipo da solo non basta.
+ * null = non si capisce: meglio lasciare il campo vuoto che indovinare.
+ */
+export function deriveAssetClass(type: unknown, name: unknown): string | null {
+  const t = String(type || "").toUpperCase();
+  const n = String(name || "").toUpperCase();
+  if (t.includes("CRYPTO")) return "Criptovalute";
+  if (t.includes("BOND")) return "Obbligazioni";
+  if (/MONEY MARKET|OVERNIGHT|€STR|\bESTR\b|ULTRA ?SHORT|\bCASH\b|MONETAR/.test(n)) return "Liquidità";
+  if (t.includes("ETC") || t.includes("COMMODIT") ||
+    /\bGOLD\b|\bSILVER\b|\bPLATINUM\b|PHYSICAL|COMMODIT|PRECIOUS|\bORO\b/.test(n)) {
+    return "Materie prime";
+  }
+  if (/\bBONDS?\b|TREASURY|\bGOVT\b|GOVERNMENT|AGGREGATE|CORPORATE|\bCORP\b|INFLATION|OBBLIGAZ/.test(n)) {
+    return "Obbligazioni";
+  }
+  if (t.includes("ETF") || t.includes("FUND") || t.includes("STOCK") || t.includes("EQUITY") || t.includes("SHARE")) {
+    return "Azioni";
+  }
+  return null;
+}
+
+/**
+ * La proposta di Scalable riempie solo un campo vuoto (o una sua proposta precedente):
+ * una scelta fatta dall'utente non viene mai sovrascritta.
+ */
+function scalableCategoryUpdate(
+  existing: FirebaseFirestore.DocumentData | undefined,
+  derived: string | null,
+): { category: string; categorySource: "scalable" } | Record<string, never> {
+  if (!derived) return {};
+  const current = existing?.category as string | undefined;
+  const source = existing?.categorySource as string | undefined;
+  if (source === "user") return {};
+  const replaceable = !current ||
+    source === "scalable" ||
+    (!source && LEGACY_SYNC_CATEGORIES.has(current));
+  if (!replaceable || (current === derived && source === "scalable")) return {};
+  return { category: derived, categorySource: "scalable" };
+}
+
 const SCALABLE_GRAPHQL_ENDPOINT = "https://de.scalable.capital/api/cli/graphql";
 const SCALABLE_CLIENT_ID = "yBM3BrpRgwSTJZRdJllvtD6jJEmyxWfE";
 const SCALABLE_TOKEN_ENDPOINT = "https://secure.scalable.capital/oauth/token";
@@ -989,6 +1039,7 @@ async function fetchScalablePortfolioViaGraphQL(
     valuation: number;
     currency: string;
     category: string;
+    instrumentType: string | null;
   }>;
   accountId: string;
   portfolioId: string;
@@ -1239,6 +1290,8 @@ async function fetchScalablePortfolioViaGraphQL(
     valuation: number;
     currency: string;
     category: string;
+    /** Tipo di strumento così come lo chiama Scalable (ETF, BOND, …) */
+    instrumentType: string | null;
   }> = [];
 
   for (const item of rawHoldings) {
@@ -1264,6 +1317,7 @@ async function fetchScalablePortfolioViaGraphQL(
         valuation: Math.round(finalValuation * 100) / 100,
         currency: curr,
         category: cat,
+        instrumentType: item.type ? String(item.type) : null,
       });
 
       // If no transactions were returned, synthesize initial BUY transactions for non-zero holdings
@@ -1959,6 +2013,8 @@ export const syncScalablePortfolio = onCall(async (request: CallableRequest<Sync
   const isDemo = apiToken.toLowerCase().startsWith("demo") || apiToken.toLowerCase().startsWith("mock");
 
   let fetchedTransactions: ScalableTransactionPayload[] = [];
+  // Titoli con posizione aperta: la loro classe di attivo arriva dal tipo di strumento Scalable
+  const heldIsins: string[] = [];
   let fetchedSavingsPlans: ScalableSavingsPlanPayload[] = [];
   let fetchedPriceAlerts: ScalablePriceAlertPayload[] = [];
   let fetchedTaxReport: ScalableTaxReportPayload | null = null;
@@ -2007,11 +2063,17 @@ export const syncScalablePortfolio = onCall(async (request: CallableRequest<Sync
       for (const h of graphResult.holdings) {
         if (h.isin) {
           const assetRef = db.doc(`portfolios/${userId}/assets/${h.isin}`);
+          heldIsins.push(h.isin);
+          const existingAsset = (await assetRef.get()).data();
+          const derivedClass = deriveAssetClass(h.instrumentType, h.name);
           await assetRef.set(
             {
               symbol: h.isin,
               name: h.name,
-              category: h.category,
+              // La classe proposta da Scalable resta sempre visibile; "category" solo se il campo è libero
+              scalableInstrumentType: h.instrumentType,
+              scalableAssetClass: derivedClass,
+              ...scalableCategoryUpdate(existingAsset, derivedClass),
               currentPrice: h.currentPrice,
               regularMarketPrice: h.currentPrice,
               averagePrice: h.averagePrice,
@@ -2263,6 +2325,11 @@ export const syncScalablePortfolio = onCall(async (request: CallableRequest<Sync
     ...(d.data() as Omit<ExistingTxItem, "id">),
   }));
 
+  // Categorie già presenti (dopo l'aggiornamento delle posizioni): servono per non sovrascrivere le scelte dell'utente
+  const assetsSnap = await db.collection(`portfolios/${userId}/assets`).get();
+  const existingAssets = new Map<string, FirebaseFirestore.DocumentData>(assetsSnap.docs.map((d) => [d.id, d.data()]));
+  const holdingSymbols = new Set(heldIsins);
+
   const matchedDocIds = new Set<string>();
   const batch = db.batch();
   let importedCount = 0;
@@ -2388,19 +2455,18 @@ export const syncScalablePortfolio = onCall(async (request: CallableRequest<Sync
       importedCount++;
     }
 
-    // Auto-save category in assets if provided
-    if (item.category) {
-      const assetRef = db.doc(`portfolios/${userId}/assets/${item.symbol}`);
-      batch.set(
-        assetRef,
-        {
-          symbol: item.symbol,
-          name: item.name,
-          category: item.category,
-          currency: item.currency || "EUR",
-        },
-        { merge: true },
-      );
+    // Classe di attivo per i titoli senza posizione aperta (es. venduti): dal nome, solo se il campo è libero
+    if (!holdingSymbols.has(item.symbol)) {
+      const derivedClass = deriveAssetClass(undefined, item.name);
+      const update = scalableCategoryUpdate(existingAssets.get(item.symbol), derivedClass);
+      if ("category" in update) {
+        existingAssets.set(item.symbol, { ...existingAssets.get(item.symbol), ...update });
+        batch.set(
+          db.doc(`portfolios/${userId}/assets/${item.symbol}`),
+          { symbol: item.symbol, name: item.name, currency: item.currency || "EUR", ...update },
+          { merge: true },
+        );
+      }
     }
   }
 
