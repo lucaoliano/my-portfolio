@@ -5,6 +5,9 @@ import { Transaction, ScalablePriceAlert } from '../src/types';
 import { calculateAlertStatus } from '../src/utils/priceAlerts';
 import { activeMonthlyTotal, monthlyEquivalent } from '../src/utils/savingsPlans';
 import { calculateCashYield } from '../src/utils/cashInterest';
+import { calculatePosition, calculatePortfolioAggregation } from '../src/utils/portfolioAggregator';
+import { calculateTransactionsXIRR, calculateXIRR } from '../src/utils/xirr';
+import { YahooQuote } from '../src/services/yahooFinance';
 let fails = 0;
 const eq = (label: string, got: unknown, exp: unknown) => { const ok = JSON.stringify(got) === JSON.stringify(exp); if (!ok) fails++; console.log(ok ? 'OK  ' : 'FAIL', label, ok ? '' : `got ${JSON.stringify(got)} exp ${JSON.stringify(exp)}`); };
 const tx = (o: Partial<Transaction>): Transaction => ({ symbol: 'X', name: 'Acme SpA', quantity: 1, purchasePrice: 1, date: '2025-01-01', type: 'BUY', ...o });
@@ -76,5 +79,40 @@ eq('active total skips paused', activeMonthlyTotal([
 ]), 200);
 // Liquidità con tetto Prime+
 eq('cash cap applied', Math.round(calculateCashYield(150000, 4, 0.26, 100000).annualGross), 4000);
+
+// Posizione a costo medio ponderato
+let pos = calculatePosition([tx({quantity:10,purchasePrice:100,date:'2025-01-01'}),tx({quantity:10,purchasePrice:200,date:'2025-02-01'}),tx({type:'SELL',quantity:10,purchasePrice:150,date:'2025-03-01'})]);
+eq('position avg price after partial sell', [pos.totalQuantity, pos.averagePrice, pos.totalInvested], [10, 150, 1500]);
+pos = calculatePosition([tx({quantity:5,purchasePrice:10}),tx({type:'SELL',quantity:5,purchasePrice:12,date:'2025-02-01'})]);
+eq('position closed', [pos.totalQuantity, pos.totalInvested], [0, 0]);
+pos = calculatePosition([tx({currency:'USD',fxRate:0.9,quantity:10,purchasePrice:100})]);
+eq('position cost in EUR with fx', pos.totalInvestedEur, 900);
+eq('position cost in EUR unknown without fx', calculatePosition([tx({currency:'USD',quantity:1,purchasePrice:100})]).totalInvestedEur, null);
+
+// XIRR: +10% in esattamente un anno
+const x = calculateXIRR([{ date: '2024-01-01', amount: -1000 }, { date: '2024-12-31', amount: 1100 }]);
+eq('xirr 10% one year', x !== null ? Math.round(x * 1000) / 10 : null, 10);
+const xt = calculateTransactionsXIRR([tx({quantity:10,purchasePrice:100,date:'2024-01-01'})], 1100, new Date('2024-12-31T00:00:00Z'));
+eq('transactions xirr', xt.annualizedPercent !== null ? Math.round(xt.annualizedPercent) : null, 10);
+eq('xirr no transactions', calculateTransactionsXIRR([], 0).annualizedPercent, null);
+
+// Valutazione del portafoglio: cambio, prezzo mancante, effetto cambio
+const q = (symbol: string, price: number, currency = 'EUR'): YahooQuote => ({ symbol, shortName: symbol, longName: symbol, regularMarketPrice: price, regularMarketChange: 0, regularMarketChangePercent: 0, currency, source: 'yahoo', hasDailyChange: false });
+const agg = calculatePortfolioAggregation(
+  [
+    tx({symbol:'AAPL',name:'Apple',currency:'USD',fxRate:0.9,quantity:10,purchasePrice:100,groups:['G']}),
+    tx({symbol:'ENI',name:'Eni',quantity:100,purchasePrice:10,groups:['G']}),
+    tx({symbol:'NOP',name:'Senza prezzo',quantity:1,purchasePrice:50,groups:['G']}),
+  ],
+  { AAPL: q('AAPL', 120, 'USD'), ENI: q('ENI', 12) },
+  {},
+  { groups: ['G'], defaultGroup: 'G' } as never,
+  { USD: 0.8 }
+);
+const apple = agg.globalAssets.find(a => a.symbol === 'AAPL')!;
+eq('foreign value in EUR', apple.valueInBase, 960);
+eq('foreign P/L in EUR and FX effect', [Math.round(apple.profitOrLossEur! * 100) / 100, Math.round(apple.fxEffectEur! * 100) / 100], [60, -120]);
+eq('missing price flagged', agg.missingPriceSymbols, ['NOP']);
+eq('global total in EUR', Math.round(agg.globalTotalValue * 100) / 100, 960 + 1200 + 50);
 console.log(fails ? `${fails} FAIL` : 'ALL OK');
 if (fails) process.exit(1);

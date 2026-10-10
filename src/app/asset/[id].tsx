@@ -12,7 +12,8 @@ import { Transaction } from '../../types';
 import { formatNumber, formatDate, formatSignedCurrency, getCurrencySymbol } from '../../utils/formatters';
 import { CopyableText } from '../../components/CopyableText';
 import { MetricChip } from '../../components/MetricChip';
-import { calculateFifo } from '../../utils/portfolioAggregator';
+import { calculatePosition } from '../../utils/portfolioAggregator';
+import { usePortfolioOverview } from '../../hooks/usePortfolioOverview';
 import { calculateTransactionsXIRR } from '../../utils/xirr';
 import { getQuotes, YahooQuote } from '../../services/yahooFinance';
 import { useScalablePriceAlerts } from '../../hooks/useScalablePriceAlerts';
@@ -202,7 +203,7 @@ export const AssetDetailsScreen = () => {
   }, [effectiveSymbol, groupName]);
 
   const { totalQuantity, totalInvested, averagePrice } = React.useMemo(() => {
-    return calculateFifo(transactions);
+    return calculatePosition(transactions);
   }, [transactions]);
 
   const displayCurrency = scalableAssetData?.currency ||
@@ -230,6 +231,11 @@ export const AssetDetailsScreen = () => {
   const assetXirr = React.useMemo(() => {
     return calculateTransactionsXIRR(transactions, currentValue);
   }, [transactions, currentValue]);
+
+  // Titoli in valuta estera: guadagno in euro e quanto ne dipende dal cambio (serve il cambio degli acquisti)
+  const { aggregation } = usePortfolioOverview(auth.currentUser?.uid);
+  const overviewAsset = aggregation.globalAssets.find(a => a.symbol === effectiveSymbol);
+  const isForeignAsset = !!overviewAsset && overviewAsset.currency !== 'EUR';
 
   const isPositive = profitOrLoss >= 0;
   const changeSign = isPositive ? '+' : '';
@@ -291,6 +297,13 @@ export const AssetDetailsScreen = () => {
             <Text style={styles.unpricedNote}>Prezzo non disponibile: valore calcolato al prezzo medio di carico</Text>
           )}
         </View>
+        {hasRealPrice && isForeignAsset && (
+          <Text style={styles.fxNote}>
+            {overviewAsset!.profitOrLossEur !== null && overviewAsset!.profitOrLossEur !== undefined && overviewAsset!.fxEffectEur !== null && overviewAsset!.fxEffectEur !== undefined
+              ? `In euro ${formatSignedCurrency(overviewAsset!.profitOrLossEur)}, di cui ${formatSignedCurrency(overviewAsset!.fxEffectEur)} dovuti al cambio`
+              : 'Guadagno in euro non calcolabile: aggiungi il cambio del giorno agli acquisti in valuta'}
+          </Text>
+        )}
         {hasRealPrice && assetXirr.isExtrapolated && assetXirr.annualizedPercent !== null && (
           <Text style={{ fontSize: 12, color: colors.textSecondary, textAlign: 'center', marginTop: 2, marginBottom: 8 }}>
             *Stima annua (XIRR) su {assetXirr.holdingDays} {assetXirr.holdingDays === 1 ? 'giorno' : 'giorni'} di storico, meno di un anno
@@ -511,6 +524,15 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     paddingHorizontal: 12,
+  },
+  fxNote: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 2,
+    marginBottom: 6,
+    fontVariant: ['tabular-nums'],
   },
   headerTitle: {
     color: colors.text,
