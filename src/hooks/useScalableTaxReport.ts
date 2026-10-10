@@ -1,36 +1,39 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { ScalableTaxReport, Transaction, AggregatedAsset, TaxOptimizationTip } from '../types';
+import { BrokerTaxReport, ScalableTaxReport, Transaction, TaxOptimizationTip } from '../types';
 import { fetchScalableTaxReport } from '../services/scalableMcp';
-import {
-  computeTaxReportFromTransactions,
-  mergeTaxReport,
-  generateTaxOptimizationTips,
-} from '../utils/taxLossTracker';
+import { computeTaxReportsByBroker, generateTaxOptimizationTips, TaxAssetMeta } from '../utils/taxLossTracker';
 
 export interface UseScalableTaxReportResult {
+  /** Uno zainetto per intermediario, calcolato dalle transazioni */
+  brokers: BrokerTaxReport[];
+  /** Zainetto Scalable (per la schermata dell'integrazione) */
   taxReport: ScalableTaxReport | null;
+  /** Dato ufficiale comunicato da Scalable, se il broker lo espone: fa fede rispetto alla stima */
+  officialScalable: ScalableTaxReport | null;
   tips: TaxOptimizationTip[];
   loading: boolean;
   refreshing: boolean;
+  refreshError: string | null;
   refreshTaxReport: () => Promise<void>;
 }
 
 export const useScalableTaxReport = (
   userId: string | undefined,
   transactions: Transaction[] = [],
-  assets: AggregatedAsset[] = []
+  options: { transactionsLoading?: boolean; assetMeta?: Record<string, TaxAssetMeta> } = {}
 ): UseScalableTaxReportResult => {
-  const [mcpTaxReport, setMcpTaxReport] = useState<ScalableTaxReport | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [brokerReport, setBrokerReport] = useState<ScalableTaxReport | null>(null);
+  const [snapshotLoading, setSnapshotLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) {
       const timeoutId = setTimeout(() => {
-        setMcpTaxReport(null);
-        setLoading(false);
+        setBrokerReport(null);
+        setSnapshotLoading(false);
       }, 0);
       return () => clearTimeout(timeoutId);
     }
@@ -39,55 +42,47 @@ export const useScalableTaxReport = (
     const unsubscribe = onSnapshot(
       docRef,
       (snap) => {
-        if (snap.exists()) {
-          setMcpTaxReport(snap.data() as ScalableTaxReport);
-        } else {
-          setMcpTaxReport(null);
-        }
-        setLoading(false);
+        setBrokerReport(snap.exists() ? (snap.data() as ScalableTaxReport) : null);
+        setSnapshotLoading(false);
       },
       (err) => {
         console.error('Error listening to Scalable tax report:', err);
-        setLoading(false);
+        setSnapshotLoading(false);
       }
     );
-
-    return () => {
-      unsubscribe();
-    };
+    return unsubscribe;
   }, [userId]);
 
   const refreshTaxReport = useCallback(async () => {
     if (!userId) return;
     setRefreshing(true);
+    setRefreshError(null);
     try {
       const res = await fetchScalableTaxReport();
-      if (res.success && res.report) {
-        setMcpTaxReport(res.report);
-      }
+      if (res.success && res.report) setBrokerReport(res.report);
     } catch (e) {
       console.warn('Could not refresh Scalable tax report on-demand:', e);
+      setRefreshError('Aggiornamento da Scalable non riuscito: la stima qui sotto usa le transazioni già sincronizzate.');
     } finally {
       setRefreshing(false);
     }
   }, [userId]);
 
-  // Compute calculated report from transactions
-  const calculatedReport = computeTaxReportFromTransactions(transactions);
-
-  // Merge broker MCP report (if present) with calculated trades
-  const taxReport = mcpTaxReport
-    ? mergeTaxReport(mcpTaxReport, calculatedReport)
-    : calculatedReport;
-
-  // Generate deterministic optimization tips
-  const tips = generateTaxOptimizationTips(taxReport, assets);
+  const assetMeta = options.assetMeta;
+  const brokers = useMemo(() => computeTaxReportsByBroker(transactions, assetMeta ?? {}), [transactions, assetMeta]);
+  // Solo un dato che arriva davvero dal broker conta come ufficiale; i vecchi calcoli del server no
+  const officialScalable = brokerReport && brokerReport.source === 'mcp' ? brokerReport : null;
+  const scalable = brokers.find(b => b.brokerId === 'scalable')?.report ?? null;
+  const tips = useMemo(() => generateTaxOptimizationTips(scalable ?? brokers[0]?.report ?? null), [scalable, brokers]);
 
   return {
-    taxReport,
+    brokers,
+    taxReport: scalable,
+    officialScalable,
     tips,
-    loading,
+    loading: snapshotLoading || !!options.transactionsLoading,
     refreshing,
+    refreshError,
     refreshTaxReport,
   };
 };

@@ -12,8 +12,11 @@ export interface Transaction {
   externalId?: string;
   currency?: string;
   isin?: string;
+  /** Commissioni in euro */
   fee?: number;
   taxes?: number;
+  /** Euro per 1 unità della valuta della transazione, al giorno dell'operazione (solo valute estere) */
+  fxRate?: number;
   lastSyncedAt?: string;
 }
 
@@ -165,6 +168,14 @@ export interface TaxLossBucket {
   status: 'ACTIVE' | 'EXPIRED' | 'COMPENSATED';
 }
 
+/**
+ * Come si comporta un guadagno ai fini fiscali:
+ * - diversi: azioni, ETC/ETN, certificati… compensa le minusvalenze
+ * - capitale: ETF e fondi; il guadagno non compensa (le perdite invece entrano nello zainetto)
+ * - stato: titoli di Stato, contano per il 48,08%
+ */
+export type TaxTreatment = 'diversi' | 'capitale' | 'stato';
+
 export interface RealizedTrade {
   id: string;
   symbol: string;
@@ -172,23 +183,49 @@ export interface RealizedTrade {
   date: string;
   quantity: number;
   salePrice: number;
+  /** Costo fiscale totale in euro (costo medio ponderato × quantità, commissioni incluse) */
   costBasis: number;
+  /** Incasso netto in euro (commissioni di vendita escluse) */
+  proceeds?: number;
   realizedGainOrLoss: number;
   isLoss: boolean;
   category?: string;
+  treatment?: TaxTreatment;
+  currency?: string;
+}
+
+/** Vendita lasciata fuori dal calcolo, con il motivo */
+export interface ExcludedTrade {
+  id: string;
+  symbol: string;
+  name: string;
+  date: string;
+  quantity: number;
+  reason: 'fx' | 'uncovered';
 }
 
 export interface ScalableTaxReport {
   totalActiveLosses: number;
   potentialTaxSavings: number;
   lossesExpiringThisYear: number;
+  /** Plusvalenze dell'anno che possono usare lo zainetto (redditi diversi) */
   realizedGainsCurrentYear: number;
   realizedLossesCurrentYear: number;
   netRealizedCurrentYear: number;
+  /** Guadagni dell'anno da ETF e fondi: redditi di capitale, non compensano */
+  fundGainsCurrentYear?: number;
   buckets: TaxLossBucket[];
   realizedTrades: RealizedTrade[];
+  excludedTrades?: ExcludedTrade[];
   lastCalculatedAt: string;
   source: 'mcp' | 'calculated' | 'hybrid';
+}
+
+/** Zainetto di un intermediario: nel regime amministrato le minusvalenze restano presso chi le ha generate */
+export interface BrokerTaxReport {
+  brokerId: 'scalable' | 'manual';
+  label: string;
+  report: ScalableTaxReport;
 }
 
 export interface TaxOptimizationTip {

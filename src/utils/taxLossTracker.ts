@@ -1,302 +1,311 @@
-import { Transaction, AggregatedAsset, TaxLossBucket, RealizedTrade, ScalableTaxReport, TaxOptimizationTip } from '../types';
+import {
+  Transaction,
+  TaxLossBucket,
+  RealizedTrade,
+  ScalableTaxReport,
+  TaxOptimizationTip,
+  TaxTreatment,
+  ExcludedTrade,
+  BrokerTaxReport,
+} from '../types';
 
 export const ITALIAN_CAPITAL_GAINS_TAX_RATE = 0.26; // 26% aliquota standard
+/** Titoli di Stato: plusvalenze e minusvalenze contano per il 48,08% (12,5% / 26%) */
+export const GOVERNMENT_BOND_WEIGHT = 0.4808;
+
+const EPS = 0.000001;
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Informazioni sul titolo dal documento `assets` (tipo di strumento Scalable, classe di attivo) */
+export interface TaxAssetMeta {
+  instrumentType?: string;
+  category?: string;
+}
+
+const yearOf = (date: string) => Number(date.slice(0, 4));
 
 /**
- * Calculates realized trades (plusvalenze/minusvalenze) from transaction history using strict FIFO matching.
+ * Natura fiscale del titolo. Prima il tipo di strumento (dato del broker), poi la classe di attivo,
+ * poi il nome come ultima risorsa e solo per parole intere ("Netflix" non è un ETF).
  */
-export function calculateRealizedTrades(transactions: Transaction[]): RealizedTrade[] {
-  // Sort chronologically ascending
-  const sorted = [...transactions].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+export function classifyTaxTreatment(
+  tx: Pick<Transaction, 'name' | 'symbol' | 'isin'>,
+  meta: TaxAssetMeta = {}
+): TaxTreatment {
+  const name = (tx.name || '').toUpperCase();
+  const type = (meta.instrumentType || '').toUpperCase();
+  const isin = (tx.isin || tx.symbol || '').toUpperCase();
+  const category = meta.category || '';
 
-  const inventory = new Map<string, { quantity: number; price: number; date: string }[]>();
-  const realizedTrades: RealizedTrade[] = [];
+  // ETC/ETN (es. oro fisico): redditi diversi, anche se quotati come fondi
+  if (/\bET[CN]\b/.test(type) || /\bET[CN]S?\b/.test(name)) return 'diversi';
+  if (type.includes('ETF') || type.includes('FUND') || /\b(ETF|UCITS|SICAV|OICR)\b/.test(name)) return 'capitale';
+  // ISIN irlandesi e lussemburghesi senza altre indicazioni: quasi sempre fondi, salvo le materie prime
+  if (/^(IE|LU)[A-Z0-9]{10}$/.test(isin) && category !== 'Materie prime') return 'capitale';
+  if (
+    category === 'Obbligazioni' &&
+    /\b(BTP|BOT|CCT|CTZ|BUND|OAT|BONOS|TREASURY|GOVT|GOVERNMENT|REPUBBLICA|REPUBLIC)\b/.test(name)
+  ) {
+    return 'stato';
+  }
+  return 'diversi';
+}
+
+const brokerOf = (tx: Transaction): BrokerTaxReport['brokerId'] =>
+  tx.source === 'scalable_mcp' ? 'scalable' : 'manual';
+
+const securityKey = (tx: Transaction) => (tx.isin || tx.symbol).toUpperCase();
+
+/**
+ * Vendite realizzate con il **costo medio ponderato** (art. 68 TUIR), in euro.
+ * Commissioni: aumentano il costo di acquisto e riducono l'incasso di vendita.
+ * Una vendita in valuta estera senza cambio, o senza acquisti sufficienti, resta fuori dal calcolo
+ * ed è elencata: meglio un buco dichiarato che una plusvalenza inventata.
+ */
+export function calculateRealizedTrades(
+  transactions: Transaction[],
+  assetMeta: Record<string, TaxAssetMeta> = {}
+): { trades: RealizedTrade[]; excluded: ExcludedTrade[] } {
+  // Ordine cronologico; nello stesso giorno gli acquisti prima delle vendite
+  const sorted = [...transactions].sort((a, b) => {
+    const byDate = a.date.slice(0, 10).localeCompare(b.date.slice(0, 10));
+    if (byDate !== 0) return byDate;
+    const rank = (t: Transaction) => ((t.type || 'BUY').toUpperCase() === 'SELL' ? 1 : 0);
+    return rank(a) - rank(b) || a.date.localeCompare(b.date);
+  });
+
+  const positions = new Map<string, { quantity: number; costEur: number; costUnknown: boolean }>();
+  const trades: RealizedTrade[] = [];
+  const excluded: ExcludedTrade[] = [];
 
   for (const tx of sorted) {
-    const sym = tx.symbol.toUpperCase();
-    const type = (tx.type || 'BUY').toUpperCase();
+    const key = securityKey(tx);
+    const qty = Number(tx.quantity) || 0;
+    const price = Number(tx.purchasePrice) || 0;
+    if (qty <= 0) continue;
+    const isForeign = !!tx.currency && tx.currency.toUpperCase() !== 'EUR';
+    const fx = isForeign ? (tx.fxRate && tx.fxRate > 0 ? tx.fxRate : null) : 1;
+    const fee = Number(tx.fee) || 0;
+    const pos = positions.get(key) ?? { quantity: 0, costEur: 0, costUnknown: false };
+    positions.set(key, pos);
 
-    if (!inventory.has(sym)) {
-      inventory.set(sym, []);
+    if ((tx.type || 'BUY').toUpperCase() !== 'SELL') {
+      pos.quantity += qty;
+      if (fx === null) pos.costUnknown = true;
+      else pos.costEur += qty * price * fx + fee;
+      continue;
     }
 
-    const lots = inventory.get(sym)!;
-
-    if (type === 'BUY') {
-      lots.push({
-        quantity: Number(tx.quantity),
-        price: Number(tx.purchasePrice),
-        date: tx.date,
-      });
-    } else if (type === 'SELL') {
-      let remainingToSell = Number(tx.quantity);
-      let totalCostBasis = 0;
-
-      while (remainingToSell > 0.000001 && lots.length > 0) {
-        const oldestLot = lots[0];
-        if (oldestLot.quantity <= remainingToSell + 0.000001) {
-          totalCostBasis += oldestLot.quantity * oldestLot.price;
-          remainingToSell -= oldestLot.quantity;
-          lots.shift();
-        } else {
-          totalCostBasis += remainingToSell * oldestLot.price;
-          oldestLot.quantity -= remainingToSell;
-          remainingToSell = 0;
-        }
-      }
-
-      const saleProceeds = Number(tx.quantity) * Number(tx.purchasePrice);
-      const realizedGainOrLoss = Math.round((saleProceeds - totalCostBasis) * 100) / 100;
-
-      realizedTrades.push({
-        id: tx.id || `trade_${realizedTrades.length + 1}`,
-        symbol: tx.symbol,
-        name: tx.name || tx.symbol,
-        date: tx.date,
-        quantity: Number(tx.quantity),
-        salePrice: Number(tx.purchasePrice),
-        costBasis: Math.round(totalCostBasis * 100) / 100,
-        realizedGainOrLoss,
-        isLoss: realizedGainOrLoss < 0,
-        category: (tx as { category?: string }).category || 'Azioni',
-      });
+    const base = { id: tx.id || `${key}_${tx.date}`, symbol: tx.symbol, name: tx.name || tx.symbol, date: tx.date, quantity: qty };
+    if (qty > pos.quantity + EPS) {
+      excluded.push({ ...base, reason: 'uncovered' });
+      positions.set(key, { quantity: 0, costEur: 0, costUnknown: false });
+      continue;
     }
+    const avgCost = pos.quantity > 0 ? pos.costEur / pos.quantity : 0;
+    const costBasis = avgCost * qty;
+    const unknownCost = pos.costUnknown;
+    pos.quantity -= qty;
+    pos.costEur -= costBasis;
+    if (pos.quantity <= EPS) positions.set(key, { quantity: 0, costEur: 0, costUnknown: false });
+
+    if (fx === null || unknownCost) {
+      excluded.push({ ...base, reason: 'fx' });
+      continue;
+    }
+    const proceeds = qty * price * fx - fee;
+    const gain = round2(proceeds - costBasis);
+    const meta = assetMeta[tx.symbol] || (tx.isin ? assetMeta[tx.isin] : undefined) || {};
+    trades.push({
+      ...base,
+      salePrice: price,
+      costBasis: round2(costBasis),
+      proceeds: round2(proceeds),
+      realizedGainOrLoss: gain,
+      isLoss: gain < 0,
+      category: meta.category,
+      treatment: classifyTaxTreatment(tx, meta),
+      currency: tx.currency || 'EUR',
+    });
   }
 
-  return realizedTrades;
+  return { trades, excluded };
 }
 
 /**
- * Builds chronological tax loss buckets (Zainetto Fiscale) according to Italian tax rules:
- * - Minusvalenze expire at the end of the 4th calendar year after generation (creation + 4).
- * - Only "Redditi Diversi" (azioni, ETC, certificates, etc.) compensate accumulated minusvalenze.
- * - Compensation consumes oldest active buckets first (FIFO).
+ * Zainetto per anno secondo le regole italiane, elaborato in ordine di data:
+ * - una minusvalenza dell'anno N è utilizzabile fino al 31 dicembre di N+4;
+ * - una plusvalenza compensa solo minusvalenze già realizzate, partendo dalle più vecchie;
+ * - i guadagni da ETF/fondi (redditi di capitale) non compensano;
+ * - titoli di Stato al 48,08%.
  */
 export function buildTaxBuckets(
   trades: RealizedTrade[],
   currentYear = new Date().getFullYear()
 ): TaxLossBucket[] {
-  const bucketsMap = new Map<number, TaxLossBucket>();
+  const buckets = new Map<number, TaxLossBucket>();
+  const ordered = [...trades].sort((a, b) => a.date.localeCompare(b.date));
 
-  // 1. Group losses into annual buckets
-  for (const trade of trades) {
-    const tradeYear = new Date(trade.date).getFullYear();
-    const expiresYear = tradeYear + 4;
+  for (const trade of ordered) {
+    const year = yearOf(trade.date);
+    const weight = trade.treatment === 'stato' ? GOVERNMENT_BOND_WEIGHT : 1;
 
-    if (!bucketsMap.has(tradeYear)) {
-      bucketsMap.set(tradeYear, {
-        yearCreated: tradeYear,
-        yearExpires: expiresYear,
+    if (trade.isLoss) {
+      const bucket = buckets.get(year) ?? {
+        yearCreated: year,
+        yearExpires: year + 4,
         initialAmount: 0,
         remainingAmount: 0,
         compensatedAmount: 0,
-        isExpiringThisYear: expiresYear === currentYear,
-        status: expiresYear < currentYear ? 'EXPIRED' : 'ACTIVE',
-      });
+        isExpiringThisYear: false,
+        status: 'ACTIVE' as const,
+      };
+      const amount = Math.abs(trade.realizedGainOrLoss) * weight;
+      bucket.initialAmount = round2(bucket.initialAmount + amount);
+      bucket.remainingAmount = round2(bucket.remainingAmount + amount);
+      buckets.set(year, bucket);
+      continue;
     }
 
-    const bucket = bucketsMap.get(tradeYear)!;
-    if (trade.isLoss) {
-      const lossAmount = Math.abs(trade.realizedGainOrLoss);
-      bucket.initialAmount = Math.round((bucket.initialAmount + lossAmount) * 100) / 100;
-      if (bucket.status === 'ACTIVE') {
-        bucket.remainingAmount = Math.round((bucket.remainingAmount + lossAmount) * 100) / 100;
-      }
-    }
-  }
-
-  // 2. Chronological compensation from Redditi Diversi gains
-  const sortedBucketYears = Array.from(bucketsMap.keys()).sort((a, b) => a - b);
-
-  for (const trade of trades) {
-    if (!trade.isLoss && trade.realizedGainOrLoss > 0) {
-      // UCITS ETF gains ("Redditi di Capitale") DO NOT compensate minusvalenze under Italian fiscal law
-      const isETF = (trade.category || '').toUpperCase().includes('ETF') ||
-                    trade.name.toUpperCase().includes('UCITS') ||
-                    trade.name.toUpperCase().includes('ETF');
-
-      if (isETF) {
-        continue; // Cannot offset minusvalenze
-      }
-
-      let gainRemaining = trade.realizedGainOrLoss;
-      const tradeYear = new Date(trade.date).getFullYear();
-
-      for (const bYear of sortedBucketYears) {
-        if (gainRemaining <= 0.001) break;
-        // Gain can only compensate losses generated on or before the trade date
-        if (bYear > tradeYear) continue;
-
-        const bucket = bucketsMap.get(bYear)!;
-        if (bucket.status !== 'ACTIVE' || bucket.remainingAmount <= 0.001) continue;
-
-        const toCompensate = Math.min(bucket.remainingAmount, gainRemaining);
-        bucket.remainingAmount = Math.round((bucket.remainingAmount - toCompensate) * 100) / 100;
-        bucket.compensatedAmount = Math.round((bucket.compensatedAmount + toCompensate) * 100) / 100;
-        gainRemaining -= toCompensate;
-
-        if (bucket.remainingAmount <= 0.001) {
-          bucket.remainingAmount = 0;
-          bucket.status = 'COMPENSATED';
-        }
-      }
+    if (trade.treatment === 'capitale' || trade.realizedGainOrLoss <= 0) continue;
+    let gainLeft = trade.realizedGainOrLoss * weight;
+    const usable = Array.from(buckets.values())
+      .filter(b => b.yearCreated <= year && b.yearExpires >= year && b.remainingAmount > 0.005)
+      .sort((a, b) => a.yearCreated - b.yearCreated);
+    for (const bucket of usable) {
+      if (gainLeft <= 0.005) break;
+      const used = Math.min(bucket.remainingAmount, gainLeft);
+      bucket.remainingAmount = round2(bucket.remainingAmount - used);
+      bucket.compensatedAmount = round2(bucket.compensatedAmount + used);
+      gainLeft -= used;
     }
   }
 
-  // Filter out empty buckets and sort by year ascending
-  return Array.from(bucketsMap.values())
-    .filter((b) => b.initialAmount > 0)
+  // Lo stato si decide alla fine: un anno scaduto ma usato per intero è "compensato", non "scaduto"
+  return Array.from(buckets.values())
+    .filter(b => b.initialAmount > 0)
+    .map(b => {
+      const status: TaxLossBucket['status'] = b.remainingAmount <= 0.005
+        ? 'COMPENSATED'
+        : b.yearExpires < currentYear ? 'EXPIRED' : 'ACTIVE';
+      return {
+        ...b,
+        remainingAmount: b.remainingAmount <= 0.005 ? 0 : b.remainingAmount,
+        status,
+        isExpiringThisYear: status === 'ACTIVE' && b.yearExpires === currentYear,
+      };
+    })
     .sort((a, b) => a.yearCreated - b.yearCreated);
 }
 
-/**
- * Computes a full ScalableTaxReport deterministically from transaction data.
- */
+/** Zainetto calcolato da un insieme di transazioni (un solo intermediario). */
 export function computeTaxReportFromTransactions(
   transactions: Transaction[],
-  currentYear = new Date().getFullYear()
+  currentYear = new Date().getFullYear(),
+  assetMeta: Record<string, TaxAssetMeta> = {}
 ): ScalableTaxReport {
-  const realizedTrades = calculateRealizedTrades(transactions);
-  const buckets = buildTaxBuckets(realizedTrades, currentYear);
+  const { trades, excluded } = calculateRealizedTrades(transactions, assetMeta);
+  const buckets = buildTaxBuckets(trades, currentYear);
+  const active = buckets.filter(b => b.status === 'ACTIVE');
+  const totalActiveLosses = round2(active.reduce((sum, b) => sum + b.remainingAmount, 0));
+  const lossesExpiringThisYear = round2(active.filter(b => b.isExpiringThisYear).reduce((sum, b) => sum + b.remainingAmount, 0));
 
-  const activeBuckets = buckets.filter((b) => b.status === 'ACTIVE');
-  const totalActiveLosses = Math.round(
-    activeBuckets.reduce((sum, b) => sum + b.remainingAmount, 0) * 100
-  ) / 100;
-
-  const potentialTaxSavings = Math.round(
-    totalActiveLosses * ITALIAN_CAPITAL_GAINS_TAX_RATE * 100
-  ) / 100;
-
-  const lossesExpiringThisYear = Math.round(
-    activeBuckets
-      .filter((b) => b.isExpiringThisYear)
-      .reduce((sum, b) => sum + b.remainingAmount, 0) * 100
-  ) / 100;
-
-  // Current year realized gains & losses
-  const currentYearTrades = realizedTrades.filter(
-    (t) => new Date(t.date).getFullYear() === currentYear
-  );
-
-  const realizedGainsCurrentYear = Math.round(
-    currentYearTrades
-      .filter((t) => !t.isLoss)
-      .reduce((sum, t) => sum + t.realizedGainOrLoss, 0) * 100
-  ) / 100;
-
-  const realizedLossesCurrentYear = Math.round(
-    currentYearTrades
-      .filter((t) => t.isLoss)
-      .reduce((sum, t) => sum + Math.abs(t.realizedGainOrLoss), 0) * 100
-  ) / 100;
-
-  const netRealizedCurrentYear = Math.round(
-    (realizedGainsCurrentYear - realizedLossesCurrentYear) * 100
-  ) / 100;
+  const thisYear = trades.filter(t => yearOf(t.date) === currentYear);
+  const realizedGainsCurrentYear = round2(thisYear.filter(t => !t.isLoss && t.treatment !== 'capitale').reduce((s, t) => s + t.realizedGainOrLoss, 0));
+  const fundGainsCurrentYear = round2(thisYear.filter(t => !t.isLoss && t.treatment === 'capitale').reduce((s, t) => s + t.realizedGainOrLoss, 0));
+  const realizedLossesCurrentYear = round2(thisYear.filter(t => t.isLoss).reduce((s, t) => s + Math.abs(t.realizedGainOrLoss), 0));
 
   return {
     totalActiveLosses,
-    potentialTaxSavings,
+    potentialTaxSavings: round2(totalActiveLosses * ITALIAN_CAPITAL_GAINS_TAX_RATE),
     lossesExpiringThisYear,
     realizedGainsCurrentYear,
     realizedLossesCurrentYear,
-    netRealizedCurrentYear,
+    netRealizedCurrentYear: round2(realizedGainsCurrentYear - realizedLossesCurrentYear),
+    fundGainsCurrentYear,
     buckets,
-    realizedTrades,
+    realizedTrades: trades,
+    excludedTrades: excluded,
     lastCalculatedAt: new Date().toISOString(),
     source: 'calculated',
   };
 }
 
 /**
- * Merges official broker Scalable MCP tax report with locally calculated transactions.
+ * Un zainetto per intermediario: le transazioni Scalable da una parte, quelle inserite a mano dall'altra.
+ * Nel regime amministrato le minusvalenze non passano da un broker all'altro.
  */
-export function mergeTaxReport(
-  mcpReport: ScalableTaxReport | null | undefined,
-  calculatedReport: ScalableTaxReport
-): ScalableTaxReport {
-  if (!mcpReport || mcpReport.buckets.length === 0) {
-    return calculatedReport;
-  }
-
-  // If MCP report is populated from Scalable Capital, use it as baseline
-  // but enrich trades if calculatedReport has more trades
-  const trades = (mcpReport.realizedTrades && mcpReport.realizedTrades.length > 0)
-    ? mcpReport.realizedTrades
-    : calculatedReport.realizedTrades;
-
-  return {
-    ...mcpReport,
-    realizedTrades: trades,
-    source: 'hybrid',
+export function computeTaxReportsByBroker(
+  transactions: Transaction[],
+  assetMeta: Record<string, TaxAssetMeta> = {},
+  currentYear = new Date().getFullYear()
+): BrokerTaxReport[] {
+  const labels: Record<BrokerTaxReport['brokerId'], string> = {
+    scalable: 'Scalable Capital',
+    manual: 'Transazioni inserite a mano',
   };
+  return (['scalable', 'manual'] as const)
+    .map(brokerId => {
+      const txs = transactions.filter(t => brokerOf(t) === brokerId);
+      if (txs.length === 0) return null;
+      return { brokerId, label: labels[brokerId], report: computeTaxReportFromTransactions(txs, currentYear, assetMeta) };
+    })
+    .filter((r): r is BrokerTaxReport => r !== null);
 }
 
 /**
- * Generates actionable, deterministic Italian tax optimization tips.
+ * Regole di riferimento ("cosa compensa cosa") e scadenze: fatti, non inviti a comprare o vendere.
  */
 export function generateTaxOptimizationTips(
-  report: ScalableTaxReport,
-  assets: AggregatedAsset[] = [],
+  report: ScalableTaxReport | null,
   currentYear = new Date().getFullYear()
 ): TaxOptimizationTip[] {
   const tips: TaxOptimizationTip[] = [];
 
-  // Tip 1: Expiring minusvalenze alert (Urgent)
-  if (report.lossesExpiringThisYear > 0) {
-    const savingsLoss = Math.round(report.lossesExpiringThisYear * ITALIAN_CAPITAL_GAINS_TAX_RATE * 100) / 100;
+  if (report && report.lossesExpiringThisYear > 0) {
     tips.push({
       id: 'expiring_losses',
       type: 'EXPIRING_LOSSES',
-      title: `Attenzione: €${report.lossesExpiringThisYear.toFixed(2)} in scadenza nel ${currentYear}`,
-      description: `Hai minusvalenze accumulate nel ${currentYear - 4} che scadranno il 31 dicembre ${currentYear}. Se non realizzi plusvalenze compensabili (azioni singole, ETC oro/materie prime, certificates), perderai definitivamente €${savingsLoss.toFixed(2)} di crediti fiscali.`,
-      impactEur: savingsLoss,
+      title: `Minusvalenze in scadenza il 31 dicembre ${currentYear}`,
+      description: `Le minusvalenze del ${currentYear - 4} non ancora compensate (stimate in ${formatEur(report.lossesExpiringThisYear)}) non saranno più utilizzabili dal 1° gennaio ${currentYear + 1}.`,
+      impactEur: report.lossesExpiringThisYear,
       priority: 'HIGH',
     });
   }
 
-  // Tip 2: Potential tax savings
-  if (report.totalActiveLosses > 0) {
-    tips.push({
-      id: 'potential_savings',
+  tips.push(
+    {
+      id: 'rule_compensates',
       type: 'COMPENSATION_RULE',
-      title: `Zainetto attivo: €${report.totalActiveLosses.toFixed(2)} disponibili`,
-      description: `Il tuo zainetto fiscale ti permette di non pagare imposte su futuri guadagni fino a un risparmio fiscale effettivo di €${report.potentialTaxSavings.toFixed(2)} (aliquota 26%).`,
-      impactEur: report.potentialTaxSavings,
-      priority: 'MEDIUM',
-    });
-  }
-
-  // Tip 3: ETF vs Redditi Diversi Rule (Education)
-  tips.push({
-    id: 'etf_tax_rule',
-    type: 'COMPENSATION_RULE',
-    title: 'Regola Fiscale: ETF UCITS vs Redditi Diversi',
-    description: 'In Italia, i guadagni da ETF armonizzati (UCITS) sono "Redditi di Capitale" e non possono compensare le minusvalenze pregresse. Per recuperare il credito dello zainetto, puoi utilizzare plusvalenze su singole azioni, ETC/ETN (es. oro fisico) o certificati di investimento.',
-    priority: 'LOW',
-  });
-
-  // Tip 4: Tax loss harvesting opportunity
-  const positionsInLoss = assets.filter((a) => a.profitOrLoss < -50);
-  if (positionsInLoss.length > 0) {
-    const totalPotentialHarvest = positionsInLoss.reduce(
-      (sum, a) => sum + Math.abs(a.profitOrLoss),
-      0
-    );
-    const potentialCredit = Math.round(totalPotentialHarvest * ITALIAN_CAPITAL_GAINS_TAX_RATE * 100) / 100;
-
-    tips.push({
-      id: 'loss_harvesting',
-      type: 'HARVESTING_OPPORTUNITY',
-      title: `Tax Loss Harvesting: ${positionsInLoss.length} posizioni in perdita latente`,
-      description: `Hai posizioni con perdite non realizzate per €${totalPotentialHarvest.toFixed(2)}. Chiudere una posizione in perdita genererebbe una minusvalenza valida per 4 anni per compensare future plusvalenze (fino a €${potentialCredit.toFixed(2)} di credito fiscale).`,
-      impactEur: potentialCredit,
-      priority: 'MEDIUM',
-    });
-  }
+      title: 'Compensano le minusvalenze',
+      description: 'Plusvalenze da azioni, ETC/ETN (ad esempio oro fisico), certificati e obbligazioni. Le plusvalenze da titoli di Stato contano per il 48,08%.',
+      priority: 'LOW',
+    },
+    {
+      id: 'rule_not_compensates',
+      type: 'COMPENSATION_RULE',
+      title: 'Non compensano',
+      description: 'I guadagni da ETF e fondi (OICR): sono redditi di capitale, tassati senza usare lo zainetto. Le perdite su ETF e fondi invece entrano nello zainetto.',
+      priority: 'LOW',
+    },
+    {
+      id: 'rule_expiry',
+      type: 'INFO',
+      title: 'Scadenza',
+      description: "Una minusvalenza si può usare nell'anno in cui nasce e nei quattro successivi, fino al 31 dicembre.",
+      priority: 'LOW',
+    },
+    {
+      id: 'rule_broker',
+      type: 'INFO',
+      title: 'Uno zainetto per intermediario',
+      description: "Nel regime amministrato il broker compensa solo le minusvalenze nate presso di lui. Per usarle altrove serve la certificazione del broker e la dichiarazione dei redditi.",
+      priority: 'LOW',
+    }
+  );
 
   return tips;
 }
+
+const formatEur = (value: number) =>
+  `€${new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}`;

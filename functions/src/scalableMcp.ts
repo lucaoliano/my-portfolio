@@ -907,106 +907,103 @@ async function resolveScalableIds(
 function calculateTaxReportFromTransactions(
   transactions: ScalableTransactionPayload[],
 ): ScalableTaxReportPayload {
+  // Stesse regole del calcolo nell'app (src/utils/taxLossTracker.ts): costo medio ponderato,
+  // compensazione in ordine di data, minusvalenze valide fino al 31/12 dell'anno N+4,
+  // guadagni da ETF/fondi (redditi di capitale) che non compensano.
   const currentYear = new Date().getFullYear();
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const sorted = [...transactions].sort((a, b) => {
+    const byDate = a.date.slice(0, 10).localeCompare(b.date.slice(0, 10));
+    if (byDate !== 0) return byDate;
+    return (a.type === "SELL" ? 1 : 0) - (b.type === "SELL" ? 1 : 0);
+  });
+
+  const positions = new Map<string, { quantity: number; cost: number }>();
+  const realizedTrades: RealizedTradePayload[] = [];
+  const buckets = new Map<number, TaxLossBucketPayload>();
   let realizedGainsCurrentYear = 0;
   let realizedLossesCurrentYear = 0;
-  const realizedTrades: RealizedTradePayload[] = [];
 
-  const symbolTxs = new Map<string, ScalableTransactionPayload[]>();
-  for (const tx of transactions) {
-    const list = symbolTxs.get(tx.symbol) || [];
-    list.push(tx);
-    symbolTxs.set(tx.symbol, list);
-  }
+  for (const tx of sorted) {
+    const key = (tx.isin || tx.symbol).toUpperCase();
+    const pos = positions.get(key) || { quantity: 0, cost: 0 };
+    positions.set(key, pos);
+    const fee = Number(tx.fee || 0);
+    if (tx.type !== "SELL") {
+      pos.quantity += tx.quantity;
+      pos.cost += tx.quantity * tx.price + fee;
+      continue;
+    }
+    // Vendita senza acquisti sufficienti: niente plusvalenza inventata
+    if (tx.quantity > pos.quantity + 0.000001) {
+      positions.set(key, { quantity: 0, cost: 0 });
+      continue;
+    }
+    const costBasis = (pos.cost / pos.quantity) * tx.quantity;
+    pos.quantity -= tx.quantity;
+    pos.cost -= costBasis;
+    const gain = round2(tx.quantity * tx.price - fee - costBasis);
+    const year = Number(tx.date.slice(0, 4));
+    const isFund = /\b(ETF|FUND)\b/i.test(tx.category || "") || /\b(ETF|UCITS)\b/i.test(tx.name || "");
 
-  let totalActiveLosses = 0;
-  const bucketMap = new Map<number, number>();
-
-  for (const [symbol, txs] of symbolTxs.entries()) {
-    const sorted = [...txs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const buyQueue: { quantity: number; price: number; date: string }[] = [];
-
-    for (const tx of sorted) {
-      if (tx.type === "BUY") {
-        buyQueue.push({ quantity: tx.quantity, price: tx.price, date: tx.date });
-      } else if (tx.type === "SELL") {
-        let remainingQtyToSell = tx.quantity;
-        let totalCostBasis = 0;
-        let matchedQty = 0;
-
-        while (remainingQtyToSell > 0 && buyQueue.length > 0) {
-          const buy = buyQueue[0];
-          const take = Math.min(buy.quantity, remainingQtyToSell);
-          totalCostBasis += take * buy.price;
-          matchedQty += take;
-          buy.quantity -= take;
-          remainingQtyToSell -= take;
-          if (buy.quantity <= 0) {
-            buyQueue.shift();
-          }
-        }
-
-        const avgCost = matchedQty > 0 ? totalCostBasis / matchedQty : tx.price;
-        const gainOrLoss = (tx.price - avgCost) * tx.quantity;
-        const txYear = new Date(tx.date).getFullYear();
-
-        if (txYear === currentYear) {
-          if (gainOrLoss > 0) {
-            realizedGainsCurrentYear += gainOrLoss;
-          } else {
-            realizedLossesCurrentYear += Math.abs(gainOrLoss);
-          }
-        }
-
-        if (gainOrLoss < 0) {
-          const loss = Math.abs(gainOrLoss);
-          bucketMap.set(txYear, (bucketMap.get(txYear) || 0) + loss);
-          totalActiveLosses += loss;
-        }
-
-        realizedTrades.push({
-          id: `rt_${tx.id}`,
-          symbol,
-          name: tx.name,
-          date: tx.date,
-          quantity: tx.quantity,
-          salePrice: tx.price,
-          costBasis: Math.round(avgCost * 100) / 100,
-          realizedGainOrLoss: Math.round(gainOrLoss * 100) / 100,
-          isLoss: gainOrLoss < 0,
-          category: tx.category || "Azioni",
-        });
+    if (year === currentYear) {
+      if (gain < 0) realizedLossesCurrentYear += -gain;
+      else if (!isFund) realizedGainsCurrentYear += gain;
+    }
+    if (gain < 0) {
+      const bucket = buckets.get(year) || {
+        yearCreated: year, yearExpires: year + 4, initialAmount: 0, remainingAmount: 0,
+        compensatedAmount: 0, isExpiringThisYear: false, status: "ACTIVE" as const,
+      };
+      bucket.initialAmount = round2(bucket.initialAmount - gain);
+      bucket.remainingAmount = round2(bucket.remainingAmount - gain);
+      buckets.set(year, bucket);
+    } else if (gain > 0 && !isFund) {
+      let left = gain;
+      const usable = Array.from(buckets.values())
+        .filter((b) => b.yearCreated <= year && b.yearExpires >= year && b.remainingAmount > 0.005)
+        .sort((a, b) => a.yearCreated - b.yearCreated);
+      for (const b of usable) {
+        if (left <= 0.005) break;
+        const used = Math.min(b.remainingAmount, left);
+        b.remainingAmount = round2(b.remainingAmount - used);
+        b.compensatedAmount = round2(b.compensatedAmount + used);
+        left -= used;
       }
     }
+
+    realizedTrades.push({
+      id: `rt_${tx.id}`,
+      symbol: tx.symbol,
+      name: tx.name,
+      date: tx.date,
+      quantity: tx.quantity,
+      salePrice: tx.price,
+      // Costo totale della quantità venduta (non unitario)
+      costBasis: round2(costBasis),
+      realizedGainOrLoss: gain,
+      isLoss: gain < 0,
+      category: tx.category || "Azioni",
+    });
   }
 
-  const buckets: TaxLossBucketPayload[] = [];
-  for (let y = currentYear - 3; y <= currentYear; y++) {
-    const amount = bucketMap.get(y) || 0;
-    if (amount > 0) {
-      buckets.push({
-        yearCreated: y,
-        yearExpires: y + 4,
-        initialAmount: Math.round(amount * 100) / 100,
-        remainingAmount: Math.round(amount * 100) / 100,
-        compensatedAmount: 0,
-        isExpiringThisYear: y + 4 === currentYear,
-        status: "ACTIVE",
-      });
-    }
-  }
-
-  const potentialTaxSavings = Math.round(totalActiveLosses * 0.26 * 100) / 100;
-  const netRealizedCurrentYear = Math.round((realizedGainsCurrentYear - realizedLossesCurrentYear) * 100) / 100;
+  const bucketList = Array.from(buckets.values()).map((b) => {
+    const status: TaxLossBucketPayload["status"] = b.remainingAmount <= 0.005 ?
+      "COMPENSATED" :
+      (b.yearExpires < currentYear ? "EXPIRED" : "ACTIVE");
+    return { ...b, status, isExpiringThisYear: status === "ACTIVE" && b.yearExpires === currentYear };
+  }).sort((a, b) => a.yearCreated - b.yearCreated);
+  const active = bucketList.filter((b) => b.status === "ACTIVE");
+  const totalActiveLosses = round2(active.reduce((sum, b) => sum + b.remainingAmount, 0));
 
   return {
-    totalActiveLosses: Math.round(totalActiveLosses * 100) / 100,
-    potentialTaxSavings,
-    lossesExpiringThisYear: buckets.filter((b) => b.isExpiringThisYear).reduce((s, b) => s + b.remainingAmount, 0),
-    realizedGainsCurrentYear: Math.round(realizedGainsCurrentYear * 100) / 100,
-    realizedLossesCurrentYear: Math.round(realizedLossesCurrentYear * 100) / 100,
-    netRealizedCurrentYear,
-    buckets,
+    totalActiveLosses,
+    potentialTaxSavings: round2(totalActiveLosses * 0.26),
+    lossesExpiringThisYear: round2(active.filter((b) => b.isExpiringThisYear).reduce((s, b) => s + b.remainingAmount, 0)),
+    realizedGainsCurrentYear: round2(realizedGainsCurrentYear),
+    realizedLossesCurrentYear: round2(realizedLossesCurrentYear),
+    netRealizedCurrentYear: round2(realizedGainsCurrentYear - realizedLossesCurrentYear),
+    buckets: bucketList,
     realizedTrades,
     lastCalculatedAt: new Date().toISOString(),
     source: "calculated",
@@ -2834,11 +2831,7 @@ export const getScalableTaxReport = onCall(async (request: CallableRequest) => {
   const taxSnap = await taxDocRef.get();
 
   if (config.dpopPrivateKey && config.dpopPublicKeyJwk) {
-    if (taxSnap.exists) {
-      return { success: true, report: taxSnap.data() as ScalableTaxReportPayload };
-    }
-
-    // Calculate tax report from synced transactions
+    // Sempre ricalcolato dalle transazioni sincronizzate: una copia salvata non vede le vendite nuove
     const txSnap = await db.collection(`portfolios/${userId}/transactions`)
       .where("source", "==", "scalable_mcp")
       .get();
@@ -2853,6 +2846,8 @@ export const getScalableTaxReport = onCall(async (request: CallableRequest) => {
         date: val.date,
         type: val.type,
         category: val.category,
+        isin: val.isin,
+        fee: val.fee,
       };
     });
 

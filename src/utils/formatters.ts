@@ -56,24 +56,38 @@ export const getCurrencySymbol = (currency?: string): string => {
   }
 };
 
+/**
+ * Valore iniziale di un campo numerico modificabile: tutti i decimali significativi (fino a 8),
+ * niente separatore delle migliaia. Mai arrotondare qui: il campo viene salvato così com'è.
+ */
 export const formatInputNumber = (value: number): string => {
-  if (isNaN(value)) return '';
-  // Formats using local decimal separator but without thousand separators
-  return new Intl.NumberFormat(undefined, {
+  if (!isFinite(value)) return '';
+  return new Intl.NumberFormat('it-IT', {
     useGrouping: false,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 8,
   }).format(value);
 };
 
+/**
+ * Legge un numero scritto all'italiana ("1.234,56", "150,5") o con il punto decimale ("150.50").
+ * Testo non numerico ("12abc", "1,2,3") dà NaN invece di un numero inventato.
+ */
 export const parseLocalNumber = (value: string): number => {
   if (!value) return NaN;
   let normalized = value.trim().replace(/\s/g, '');
-  if (normalized.includes(',')) {
+  if (!/^[+-]?[\d.,]+$/.test(normalized)) return NaN;
+  const commas = (normalized.match(/,/g) || []).length;
+  if (commas > 1) return NaN;
+  if (commas === 1) {
     // Formato italiano "1.234,56": i punti sono separatori delle migliaia
     normalized = normalized.replace(/\./g, '').replace(',', '.');
+  } else if ((normalized.match(/\./g) || []).length > 1) {
+    // "1.234.567": più punti possono essere solo separatori delle migliaia
+    normalized = normalized.replace(/\./g, '');
   }
-  return parseFloat(normalized);
+  const n = Number(normalized);
+  return isFinite(n) ? n : NaN;
 };
 
 /** "+€1.234,56" / "-€1.234,56": il segno va prima del simbolo di valuta, non "€-1.234,56". */
