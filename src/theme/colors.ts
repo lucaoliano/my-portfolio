@@ -11,6 +11,8 @@ export const darkColors = {
   negative: "#FF6961", // Rosso vivo: ≥4.5:1 anche sulla sua tinta al 12,5% sulle card
   border: "#2C2C2C",
   inputBackground: "#2C2C2C",
+  // Contorni che sono l'unico indizio del controllo (campi, interruttori spenti, chip, tracce): ≥3:1
+  inputBorder: "#6B7280",
 
   // Solo per ciò che arriva dall'integrazione Scalable Capital (The Teal Belongs to Scalable Rule)
   scalable: "#28EBCF",
@@ -50,8 +52,9 @@ export const lightColors: ThemeColors = {
   negative: "#B91C1C", // Rosso scuro: ≥4.5:1 anche sulla sua tinta al 12,5%
   border: "#E5E7EB", // Bordi leggeri
   inputBackground: "#F3F4F6", // Sfondo input leggermente scuro
+  inputBorder: "#858D9B", // ≥3:1 su card e sfondo: campi, interruttori spenti, chip
 
-  scalable: "#0F766E",
+  scalable: "#0D6660", // ≥4.5:1 anche sulle sue tinte su sfondo chiaro
   scalableSurface: "#E6F7F4",
   warning: "#A14A0B", // ≥4.5:1 anche sulla sua tinta e su warningSurface
   warningSurface: "#FEF3C7",
@@ -62,10 +65,11 @@ export const lightColors: ThemeColors = {
   onAccent: "#FFFFFF", // i riempimenti del tema chiaro sono scuri
   onStrong: "#FFFFFF",
   overlay: "rgba(15, 23, 42, 0.45)",
-  tooltipBackground: "rgba(18, 18, 18, 0.95)",
-  tooltipBorder: "rgba(255, 255, 255, 0.15)",
-  tooltipText: "#FFFFFF",
-  tooltipTextSecondary: "#AAAAAA",
+  // Tooltip chiaro: i colori delle serie del tema chiaro sono leggibili solo su fondo chiaro
+  tooltipBackground: "rgba(255, 255, 255, 0.98)",
+  tooltipBorder: "#D1D5DB",
+  tooltipText: "#334155",
+  tooltipTextSecondary: "#58677C",
   chartInvested: "#C2410C",
   chartGrowth: "#4D7C0F",
   chartWithdrawal: "#7E22CE",
