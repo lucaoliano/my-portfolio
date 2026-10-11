@@ -5,8 +5,7 @@ import { useRouter } from 'expo-router';
 import { ChevronLeft, ChevronRight, User as UserIcon, LogOut } from 'lucide-react-native';
 import { useAppTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
-import { auth } from '../config/firebase';
-import { signOut } from 'firebase/auth';
+import { auth, signOutAndClearData } from '../config/firebase';
 
 export default function ProfileScreen() {
   const { colors } = useAppTheme();
@@ -17,7 +16,7 @@ export default function ProfileScreen() {
   const handleLogout = async () => {
     setLogoutError(null);
     try {
-      await signOut(auth);
+      await signOutAndClearData();
       router.replace('/login');
     } catch (error) {
       console.warn("Errore logout:", error);

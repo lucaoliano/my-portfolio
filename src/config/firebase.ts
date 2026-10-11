@@ -1,7 +1,16 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  connectFirestoreEmulator,
+  terminate,
+  clearIndexedDbPersistence,
+  Firestore,
+} from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
-import { initializeAuth, getAuth, browserLocalPersistence, browserPopupRedirectResolver, connectAuthEmulator, getReactNativePersistence, Auth } from 'firebase/auth';
+import { initializeAuth, getAuth, browserLocalPersistence, browserPopupRedirectResolver, connectAuthEmulator, getReactNativePersistence, Auth, signOut } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -17,8 +26,22 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Cloud Firestore
-export const db = getFirestore(app);
+// Cloud Firestore con cache persistente sul web (IndexedDB): all'apertura mostra subito gli ultimi dati,
+// anche offline, poi li aggiorna. Si svuota all'uscita dall'account (signOutAndClearData).
+const createFirestore = (): Firestore => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    try {
+      return initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      });
+    } catch (e) {
+      // IndexedDB non disponibile (es. navigazione privata): resta la cache in memoria
+      console.warn('Cache persistente di Firestore non disponibile:', e);
+    }
+  }
+  return getFirestore(app);
+};
+export const db = createFirestore();
 
 // Initialize Cloud Functions
 export const functions = getFunctions(app, 'us-central1');
@@ -50,3 +73,19 @@ if (__DEV__ && process.env.EXPO_PUBLIC_DISABLE_EMULATORS !== 'true') {
     console.warn("Could not connect to Firebase Emulators:", e);
   }
 }
+
+/**
+ * Esce dall'account e cancella i dati del portafoglio salvati sul dispositivo (cache di Firestore),
+ * così su un dispositivo condiviso non resta nulla. Sul web ricarica l'app per ripartire pulita.
+ */
+export const signOutAndClearData = async (): Promise<void> => {
+  await signOut(auth);
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  try {
+    await terminate(db);
+    await clearIndexedDbPersistence(db);
+  } catch (e) {
+    console.warn('Pulizia della cache locale non riuscita:', e);
+  }
+  window.location.replace('/login');
+};
