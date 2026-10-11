@@ -7,8 +7,8 @@ import { Lock } from 'lucide-react-native';
 
 import '../global.css';
 import { ThemeProvider, useAppTheme } from '../theme/ThemeContext';
-import { auth } from '../config/firebase';
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { auth, signOutAndClearData } from '../config/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import { PortfolioSkeleton } from '../components/PortfolioSkeleton';
 import { UpdatePrompt } from '../components/UpdatePrompt';
 import { InstallPrompt } from '../components/InstallPrompt';
@@ -108,7 +108,7 @@ function InnerLayout() {
   const signOutFromLock = async () => {
     setUnlockError(null);
     try {
-      await signOut(auth);
+      await signOutAndClearData();
     } catch (error) {
       console.warn('Errore logout:', error);
       setUnlockError('Uscita non riuscita. Riprova.');

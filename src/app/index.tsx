@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LogOut, Search, ChevronRight, ChevronDown, PieChart as PieChartIcon, Settings, Menu, X, User, Calculator, Cpu, Coins, Bell, Receipt, RefreshCw, CheckCircle2, AlertCircle, FolderCog, Plus, Link2 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { signOut } from 'firebase/auth';
 
 import { useAppTheme } from '../theme/ThemeContext';
 import { formatNumber, formatSignedCurrency } from '../utils/formatters';
@@ -15,7 +14,7 @@ import { PieChartComponent } from '../components/PieChartComponent';
 import { PortfolioSkeleton } from '../components/PortfolioSkeleton';
 import { CopyableText } from '../components/CopyableText';
 import { HealthCheckSummaryRow } from '../components/PortfolioHealthCheckCard';
-import { auth } from '../config/firebase';
+import { auth, signOutAndClearData } from '../config/firebase';
 import { Coverage, GroupedPortfolio } from '../types';
 
 import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
@@ -229,7 +228,7 @@ export const PortfolioScreen = () => {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await signOutAndClearData();
     } catch (error) {
       console.error("Errore logout:", error);
     }
