@@ -162,6 +162,10 @@ eq('missing weekdays', missingWeekdays(new Set(['2025-03-04']), '2025-03-03', '2
 const dbf = buildDailyBackfill([tx({symbol:'IE00X',isin:'IE00X',source:'scalable_mcp',quantity:10,purchasePrice:90,date:'2025-01-01'})],
   { IE00X: ser([['2025-03-03',50],['2025-03-05',55]]) }, ['2025-03-03', '2025-03-04', '2025-03-05'], { IE00X: 110 });
 eq('daily backfill scaled, holiday skipped', dbf.map(p => [p.date, p.invested, p.costBasis]), [['2025-03-03', 1000, 900], ['2025-03-05', 1100, 900]]);
+// Un titolo senza prezzi non cancella il giorno: resta fuori da valore e costo, il punto è incompleto
+const dbf2 = buildDailyBackfill([tx({symbol:'A',quantity:10,purchasePrice:90,date:'2025-01-01'}), tx({symbol:'NOPE',quantity:5,purchasePrice:100,date:'2025-01-01'})],
+  { A: ser([['2025-03-03',100]]) }, ['2025-03-03']);
+eq('daily backfill keeps incomplete day', dbf2.map(p => [p.invested, p.costBasis, p.complete]), [[1000, 900, false]]);
 eq('YTD start', periodStart('YTD', new Date(2026, 9, 12)), '2025-12-31');
 eq('1M start', periodStart('1M', new Date(2026, 9, 12)), '2026-09-12');
 // Bollo / IVAFE: 0,2% sul valore al 31/12, in proporzione ai giorni
