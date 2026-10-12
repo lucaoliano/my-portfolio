@@ -166,6 +166,11 @@ eq('daily backfill scaled, holiday skipped', dbf.map(p => [p.date, p.invested, p
 const dbf2 = buildDailyBackfill([tx({symbol:'A',quantity:10,purchasePrice:90,date:'2025-01-01'}), tx({symbol:'NOPE',quantity:5,purchasePrice:100,date:'2025-01-01'})],
   { A: ser([['2025-03-03',100]]) }, ['2025-03-03']);
 eq('daily backfill keeps incomplete day', dbf2.map(p => [p.invested, p.costBasis, p.complete]), [[1000, 900, false]]);
+// Ancoraggio: Yahoo quota un'altra borsa (50 il giorno dell'acquisto, 60 oggi) che non segue il prezzo del broker
+// (pagato 100, ora 115). Il giorno dell'acquisto il guadagno è zero e oggi coincide con quello reale.
+const anc = buildDailyBackfill([tx({symbol:'IE00Y',isin:'IE00Y',source:'scalable_mcp',quantity:10,purchasePrice:100,date:'2026-01-15'})],
+  { IE00Y: ser([['2026-01-15',50],['2026-10-12',60]]) }, ['2026-01-15', '2026-10-12'], { IE00Y: 115 });
+eq('backfill anchored to purchase and current price', anc.map(p => [p.date, p.invested, p.costBasis]), [['2026-01-15', 1000, 1000], ['2026-10-12', 1150, 1000]]);
 eq('YTD start', periodStart('YTD', new Date(2026, 9, 12)), '2025-12-31');
 eq('1M start', periodStart('1M', new Date(2026, 9, 12)), '2026-09-12');
 // Bollo / IVAFE: 0,2% sul valore al 31/12, in proporzione ai giorni

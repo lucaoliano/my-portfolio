@@ -22,7 +22,12 @@ export interface HistoryPoint {
   backfilled?: boolean;
   /** true = ricostruito dalle chiusure giornaliere e riportato al prezzo attuale */
   daily?: boolean;
+  /** Versione del metodo di ricostruzione: i punti di una versione precedente si rifanno */
+  v?: number;
 }
+
+/** 2 = prezzi ancorati alle operazioni e al prezzo attuale (vedi makePriceAt) */
+const BACKFILL_VERSION = 2;
 
 export interface HistorySnapshot {
   invested: number;
@@ -119,7 +124,9 @@ export const usePortfolioHistory = (
   useEffect(() => {
     if (!userId || !loaded || !pricesReady || transactions.length === 0 || backfillStartedRef.current) return;
     const first = transactions.map(t => t.date.slice(0, 10)).sort()[0];
-    const until = points[0]?.date ?? localDateKey();
+    // Si ricostruisce fino al primo giorno registrato o già ricostruito con il metodo attuale
+    const kept = points.filter(p => !p.backfilled || p.v === BACKFILL_VERSION);
+    const until = kept[0]?.date ?? localDateKey();
     if (first >= until || (new Date(until).getTime() - new Date(first).getTime()) < 10 * 86400000) return;
     backfillStartedRef.current = true;
     const metaRef = doc(db, 'portfolios', userId, 'settings', 'history_meta');
@@ -127,13 +134,13 @@ export const usePortfolioHistory = (
       try {
         const meta = await getDoc(metaRef);
         // Una ricostruzione finita senza punti (server senza prezzi) non conta come fatta: si riprova
-        const done = meta.exists() && meta.data().backfilledFrom && meta.data().backfilledFrom <= first && (meta.data().weeks ?? 1) > 0;
+        const done = meta.exists() && meta.data().backfilledFrom && meta.data().backfilledFrom <= first && (meta.data().weeks ?? 1) > 0 && meta.data().backfillVersion === BACKFILL_VERSION;
         if (done) return;
         const series = await getWeeklyCloses(backfillSymbols(transactions), first);
-        const existing = new Set(points.map(p => p.date));
+        const existing = new Set(kept.map(p => p.date));
         const rebuilt = buildBackfill(transactions, series, until, nowEurByKey).filter(p => !existing.has(p.date));
-        const weeks = await writeBackfill(userId, rebuilt);
-        await setDoc(metaRef, { backfilledFrom: first, backfilledAt: new Date().toISOString(), weeks }, { merge: true });
+        const weeks = await writeBackfill(userId, rebuilt, { v: BACKFILL_VERSION });
+        await setDoc(metaRef, { backfilledFrom: first, backfilledAt: new Date().toISOString(), weeks, backfillVersion: BACKFILL_VERSION }, { merge: true });
       } catch (err) {
         // Riproverà alla prossima apertura
         backfillStartedRef.current = false;
@@ -152,17 +159,17 @@ export const usePortfolioHistory = (
     yesterday.setDate(yesterday.getDate() - 1);
     const from = first > localDateKey(yearAgo) ? first : localDateKey(yearAgo);
     // Mancano i giorni senza punto e quelli ricostruiti solo a settimana: questi si rifanno con le chiusure giornaliere
-    const missing = missingWeekdays(new Set(points.filter(p => !p.backfilled || p.daily).map(p => p.date)), from, localDateKey(yesterday));
+    const missing = missingWeekdays(new Set(points.filter(p => !p.backfilled || (p.daily && p.v === BACKFILL_VERSION)).map(p => p.date)), from, localDateKey(yesterday));
     if (missing.length === 0) return;
     gapFillStartedRef.current = true;
     const metaRef = doc(db, 'portfolios', userId, 'settings', 'history_meta');
     (async () => {
       try {
         const meta = await getDoc(metaRef);
-        if (meta.exists() && meta.data().gapsFilledOn === localDateKey()) return;
+        if (meta.exists() && meta.data().gapsFilledOn === localDateKey() && meta.data().gapsVersion === BACKFILL_VERSION) return;
         const series = await fetchDailyYear(backfillSymbols(transactions));
-        const filled = await writeBackfill(userId, buildDailyBackfill(transactions, series, missing, nowEurByKey), { daily: true });
-        await setDoc(metaRef, { gapsFilledOn: localDateKey(), gapDaysFilled: filled }, { merge: true });
+        const filled = await writeBackfill(userId, buildDailyBackfill(transactions, series, missing, nowEurByKey), { daily: true, v: BACKFILL_VERSION });
+        await setDoc(metaRef, { gapsFilledOn: localDateKey(), gapDaysFilled: filled, gapsVersion: BACKFILL_VERSION }, { merge: true });
       } catch (err) {
         gapFillStartedRef.current = false;
         console.warn('Ricostruzione dei giorni mancanti non riuscita:', err);
