@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl, Modal, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { LogOut, Search, ChevronRight, ChevronDown, PieChart as PieChartIcon, Settings, Menu, X, User, Calculator, Cpu, Coins, Bell, Receipt, RefreshCw, CheckCircle2, AlertCircle, FolderCog, Plus, Link2 } from 'lucide-react-native';
+import { LogOut, Search, ChevronRight, ChevronDown, PieChart as PieChartIcon, Settings, Menu, X, User, Calculator, Cpu, Coins, Bell, Receipt, Landmark, RefreshCw, CheckCircle2, AlertCircle, FolderCog, Plus, Link2 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useAppTheme } from '../theme/ThemeContext';
@@ -25,8 +25,7 @@ import { calculateCashYield, interestCapFor } from '../utils/cashInterest';
 import { getTriggeredAlerts, getApproachingAlerts } from '../utils/priceAlerts';
 import { syncScalablePortfolio, saveScalableConfig } from '../services/scalableMcp';
 import { usePeriodSeries } from '../hooks/usePeriodSeries';
-import { PERIODS, PeriodKey, PeriodResult, computePeriodPerformance, periodStart } from '../utils/periodPerformance';
-import { priceKey } from '../utils/historyBackfill';
+import { PERIODS, PeriodKey, PeriodResult, computePeriodPerformance, nowEurByPriceKey, periodStart } from '../utils/periodPerformance';
 
 // Oltre questa distanza di scroll il bilancio esce dallo schermo e il titolo della barra lo riprende
 const COMPACT_HEADER_OFFSET = 96;
@@ -101,14 +100,7 @@ export const PortfolioScreen = () => {
     };
   }, [isInitialLoading, quotesError, quotesUpdatedAt, aggregation, scalableCash]);
   // Prezzo attuale in euro per quota, per chiave di prezzo: raccorda storico ricostruito e rendimento per periodo
-  const nowEurByKey = useMemo(() => {
-    const map: Record<string, number | null> = {};
-    aggregation.globalAssets.forEach(a => {
-      const price = a.hasPrice && a.valueInBase != null && a.totalQuantity > 0 ? a.valueInBase / a.totalQuantity : null;
-      transactions.filter(t => t.symbol === a.symbol).forEach(t => { map[priceKey(t)] = price; });
-    });
-    return map;
-  }, [aggregation.globalAssets, transactions]);
+  const nowEurByKey = useMemo(() => nowEurByPriceKey(aggregation.globalAssets, transactions), [aggregation.globalAssets, transactions]);
   const historyPoints = usePortfolioHistory(userId, historySnapshot, transactions, nowEurByKey);
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -749,6 +741,7 @@ export const PortfolioScreen = () => {
     { label: 'Profilo', icon: <User size={24} color={colors.text} />, onPress: () => router.push('/profile') },
     { label: 'Simulatore PAC', icon: <Calculator size={24} color={colors.text} />, onPress: () => router.push('/pac-calculator' as never) },
     { label: 'Zainetto fiscale', icon: <Receipt size={24} color={colors.text} />, onPress: () => router.push('/tax-report' as never) },
+    { label: 'Bollo e IVAFE', icon: <Landmark size={24} color={colors.text} />, onPress: () => router.push('/wealth-tax' as never) },
     { label: 'Gestisci gruppi', icon: <FolderCog size={24} color={colors.text} />, onPress: () => router.push('/manage-groups') },
     { label: 'Integrazioni broker', icon: <Cpu size={24} color={colors.text} />, onPress: () => router.push('/integrations' as never) },
     { label: 'Impostazioni', icon: <Settings size={24} color={colors.text} />, onPress: () => router.push('/settings' as never) },

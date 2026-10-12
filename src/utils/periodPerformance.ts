@@ -1,6 +1,7 @@
 import { Transaction } from '../types';
 import type { WeeklySeries } from '../services/yahooFinance';
 import { priceKey } from './historyBackfill';
+import type { AggregatedAsset } from '../types';
 
 /** Periodi come nella schermata Performance di Scalable ("1G" usa la variazione di oggi già calcolata). */
 export type PeriodKey = '1S' | '1M' | '6M' | 'YTD' | '1A';
@@ -56,7 +57,7 @@ const isForeign = (t: Transaction) => t.source !== 'scalable_mcp' && !!t.currenc
  *   così il punto di partenza è coerente con il prezzo attuale anche se Yahoo quota un'altra borsa.
  * - Titoli in valuta: chiusura × cambio di quel giorno, anch'essa riportata al prezzo attuale in euro.
  */
-const makePriceAt = (txs: Transaction[], series: Record<string, WeeklySeries>, key: string, nowEur: number | null) => {
+export const makePriceAt = (txs: Transaction[], series: Record<string, WeeklySeries>, key: string, nowEur: number | null) => {
   const s = series[key];
   const foreign = txs.find(isForeign);
   if (foreign) {
@@ -173,3 +174,13 @@ export function computePeriodPerformance(
     coverage,
   };
 }
+
+/** Prezzo attuale in euro per quota, per chiave di prezzo (ISIN per Scalable, ticker altrimenti) */
+export const nowEurByPriceKey = (assets: AggregatedAsset[], transactions: Transaction[]): Record<string, number | null> => {
+  const map: Record<string, number | null> = {};
+  assets.forEach(a => {
+    const price = a.hasPrice && a.valueInBase != null && a.totalQuantity > 0 ? a.valueInBase / a.totalQuantity : null;
+    transactions.filter(t => t.symbol === a.symbol).forEach(t => { map[priceKey(t)] = price; });
+  });
+  return map;
+};

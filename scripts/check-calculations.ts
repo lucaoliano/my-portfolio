@@ -10,6 +10,7 @@ import { calculateTransactionsXIRR, calculateXIRR } from '../src/utils/xirr';
 import { YahooQuote } from '../src/services/yahooFinance';
 import { buildBackfill, backfillSymbols, buildDailyBackfill, missingWeekdays } from '../src/utils/historyBackfill';
 import { computePeriodPerformance, periodStart } from '../src/utils/periodPerformance';
+import { estimateWealthTax } from '../src/utils/wealthTax';
 let fails = 0;
 const eq = (label: string, got: unknown, exp: unknown) => { const ok = JSON.stringify(got) === JSON.stringify(exp); if (!ok) fails++; console.log(ok ? 'OK  ' : 'FAIL', label, ok ? '' : `got ${JSON.stringify(got)} exp ${JSON.stringify(exp)}`); };
 const tx = (o: Partial<Transaction>): Transaction => ({ symbol: 'X', name: 'Acme SpA', quantity: 1, purchasePrice: 1, date: '2025-01-01', type: 'BUY', ...o });
@@ -163,5 +164,19 @@ const dbf = buildDailyBackfill([tx({symbol:'IE00X',isin:'IE00X',source:'scalable
 eq('daily backfill scaled, holiday skipped', dbf.map(p => [p.date, p.invested, p.costBasis]), [['2025-03-03', 1000, 900], ['2025-03-05', 1100, 900]]);
 eq('YTD start', periodStart('YTD', new Date(2026, 9, 12)), '2025-12-31');
 eq('1M start', periodStart('1M', new Date(2026, 9, 12)), '2026-09-12');
+// Bollo / IVAFE: 0,2% sul valore al 31/12, in proporzione ai giorni
+const r2 = (n: number) => Math.round(n * 100) / 100;
+let wt = estimateWealthTax([tx({symbol:'A',quantity:100,purchasePrice:90,date:'2024-05-01'})], 2025, () => 100);
+eq('wealth tax full year', [r2(wt.total), wt.lines[0].days], [20, 365]);
+// Comprato il 2 luglio 2025: 183 giorni su 365
+wt = estimateWealthTax([tx({symbol:'A',quantity:100,purchasePrice:90,date:'2025-07-02'})], 2025, () => 100);
+eq('wealth tax pro rata', [wt.lines[0].days, r2(wt.total)], [183, r2(10000 * 0.002 * 183 / 365)]);
+// Venduto tutto il 31 marzo 2025 a 120: paga sul controvalore per 90 giorni; nessun prezzo di fine anno richiesto
+wt = estimateWealthTax([tx({symbol:'A',quantity:100,purchasePrice:90,date:'2024-05-01'}), tx({symbol:'A',type:'SELL',quantity:100,purchasePrice:120,date:'2025-03-31'})], 2025, () => null);
+eq('wealth tax closed position', [wt.lines[0].days, r2(wt.total), wt.missing], [90, r2(12000 * 0.002 * 90 / 365), []]);
+// Liquidità: €34,20 solo sopra €5.000; titolo senza prezzo escluso e segnalato
+wt = estimateWealthTax([tx({symbol:'B',name:'Beta',quantity:1,purchasePrice:10,date:'2024-01-01'})], 2025, () => null, 6000);
+eq('wealth tax cash and missing', [wt.total, wt.missing], [34.2, ['Beta']]);
+eq('wealth tax cash under threshold', estimateWealthTax([], 2025, () => null, 4000).total, 0);
 console.log(fails ? `${fails} FAIL` : 'ALL OK');
 if (fails) process.exit(1);
