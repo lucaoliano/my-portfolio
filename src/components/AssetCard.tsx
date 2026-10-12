@@ -30,7 +30,11 @@ interface AssetCardProps {
   /** Peso della posizione sul totale investito, in percentuale */
   weightPercent?: number | null;
   /** Unico dato di rendimento mostrato nella riga, scelto in alto nella panoramica */
-  metric?: 'total' | 'daily' | 'annual';
+  metric?: 'total' | 'daily' | 'annual' | 'period';
+  /** Rendimento nel periodo scelto (metric = 'period'): guadagno in euro e TWR; null = non calcolabile */
+  periodGain?: number | null;
+  periodPercent?: number | null;
+  periodLabel?: string;
   /** "Oggi" oppure "Chiusura ven 9 ott" se l'ultimo prezzo non è di oggi */
   dailyLabel?: string;
   /** Variazione di oggi stimata (percentuale Yahoo sul prezzo Scalable) */
@@ -59,6 +63,9 @@ export const AssetCard: React.FC<AssetCardProps> = ({
   weightPercent,
   category,
   metric = 'total',
+  periodGain,
+  periodPercent,
+  periodLabel = '',
   dailyLabel = 'Oggi',
   dailyEstimated = false,
   isFirst = false,
@@ -113,6 +120,17 @@ export const AssetCard: React.FC<AssetCardProps> = ({
   const renderMetric = () => {
     if (!hasPrice) {
       return <Text style={styles.unknownNote}>{fxMissing ? 'escluso dai totali' : 'al costo'}</Text>;
+    }
+    if (metric === 'period') {
+      if (periodGain === undefined) return <Text style={styles.unknownNote}>…</Text>;
+      if (periodGain === null || periodPercent === null || periodPercent === undefined) {
+        return <Text style={styles.unknownNote}>{periodLabel} n/d</Text>;
+      }
+      return (
+        <MetricChip value={periodGain} size="md">
+          {formatSignedCurrency(periodGain)} ({periodPercent >= 0 ? '+' : ''}{formatNumber(periodPercent)}%)
+        </MetricChip>
+      );
     }
     if (metric === 'daily') {
       if (!hasDailyData) return <Text style={styles.unknownNote}>{dailyLabel} n/d</Text>;

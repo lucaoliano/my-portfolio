@@ -9,6 +9,7 @@ import { calculatePosition, calculatePortfolioAggregation } from '../src/utils/p
 import { calculateTransactionsXIRR, calculateXIRR } from '../src/utils/xirr';
 import { YahooQuote } from '../src/services/yahooFinance';
 import { buildBackfill, backfillSymbols } from '../src/utils/historyBackfill';
+import { computePeriodPerformance, periodStart } from '../src/utils/periodPerformance';
 let fails = 0;
 const eq = (label: string, got: unknown, exp: unknown) => { const ok = JSON.stringify(got) === JSON.stringify(exp); if (!ok) fails++; console.log(ok ? 'OK  ' : 'FAIL', label, ok ? '' : `got ${JSON.stringify(got)} exp ${JSON.stringify(exp)}`); };
 const tx = (o: Partial<Transaction>): Transaction => ({ symbol: 'X', name: 'Acme SpA', quantity: 1, purchasePrice: 1, date: '2025-01-01', type: 'BUY', ...o });
@@ -127,5 +128,33 @@ const bf = buildBackfill(bfTx, {
 eq('backfill weekly dates (no point before the first close)', bf.map(p => p.date), ['2025-01-10', '2025-01-17']);
 const lastBf = bf[bf.length - 1];
 eq('backfill last point value', lastBf ? [lastBf.invested, lastBf.costBasis, lastBf.complete] : null, [10 * 12 + 110 * 0.8, 100 + 90, true]);
+
+// Rendimento per periodo (TWR)
+const ser = (pts: [string, number][], currency = 'EUR') => ({ currency, points: pts.map(([date, close]) => ({ date, close })) });
+// Posseduto dall'inizio, nessun movimento: +10%
+let pp = computePeriodPerformance([tx({symbol:'A',quantity:10,purchasePrice:90,date:'2024-01-01'})], { A: ser([['2025-01-01',100],['2025-02-01',110]]) }, { A: 110 }, '2025-01-01', '2025-02-01');
+eq('period simple', pp && [Math.round(pp.gain*100)/100, Math.round(pp.percent!*100)/100], [100, 10]);
+// Versamento a metà periodo a prezzo invariato: la % resta del 10%, il guadagno cresce col nuovo capitale
+pp = computePeriodPerformance([tx({symbol:'A',quantity:10,purchasePrice:90,date:'2024-01-01'}), tx({symbol:'A',quantity:10,purchasePrice:100,date:'2025-01-15'})],
+  { A: ser([['2025-01-01',100],['2025-01-15',100],['2025-02-01',110]]) }, { A: 110 }, '2025-01-01', '2025-02-01');
+eq('period TWR ignores deposits', pp && [Math.round(pp.gain*100)/100, Math.round(pp.percent!*100)/100], [200, 10]);
+// Calo del 50% poi versamento grosso e risalita del 10%: TWR -45%, guadagno positivo
+pp = computePeriodPerformance([tx({symbol:'A',quantity:1,purchasePrice:100,date:'2024-01-01'}), tx({symbol:'A',quantity:20,purchasePrice:50,date:'2025-01-15'})],
+  { A: ser([['2025-01-01',100],['2025-01-15',50],['2025-02-01',55]]) }, { A: 55 }, '2025-01-01', '2025-02-01');
+eq('period TWR vs money gain', pp && [Math.round(pp.gain*100)/100, Math.round(pp.percent!*100)/100], [55*21 - 100 - 1000, -45]);
+// Titolo senza prezzi storici: fuori dal calcolo e contato
+pp = computePeriodPerformance([tx({symbol:'A',quantity:1,purchasePrice:100,date:'2024-01-01'}), tx({symbol:'B',quantity:1,purchasePrice:100,date:'2024-01-01'})],
+  { A: ser([['2025-01-01',100]]) }, { A: 100, B: 100 }, '2025-01-01', '2025-02-01');
+eq('period coverage', pp?.coverage, { withData: 1, total: 2 });
+// Prezzo Scalable diverso dalla borsa Yahoo: si usa la variazione, non il livello
+pp = computePeriodPerformance([tx({symbol:'IE00X',isin:'IE00X',source:'scalable_mcp',quantity:10,purchasePrice:90,date:'2024-01-01'})],
+  { IE00X: ser([['2025-01-01',50],['2025-02-01',55]]) }, { IE00X: 110 }, '2025-01-01', '2025-02-01');
+eq('period scales Yahoo venue to Scalable price', pp && Math.round(pp.percent!*100)/100, 10);
+// Titolo in dollari: conta anche il cambio (prezzo +10%, dollaro -10% → -1%)
+pp = computePeriodPerformance([tx({symbol:'AAPL',currency:'USD',quantity:10,purchasePrice:100,date:'2024-01-01'})],
+  { AAPL: ser([['2025-01-01',100],['2025-02-01',110]], 'USD'), 'USDEUR=X': ser([['2025-01-01',1],['2025-02-01',0.9]]) }, { AAPL: 99 }, '2025-01-01', '2025-02-01');
+eq('period foreign includes FX', pp && Math.round(pp.percent!*100)/100, -1);
+eq('YTD start', periodStart('YTD', new Date(2026, 9, 12)), '2025-12-31');
+eq('1M start', periodStart('1M', new Date(2026, 9, 12)), '2026-09-12');
 console.log(fails ? `${fails} FAIL` : 'ALL OK');
 if (fails) process.exit(1);

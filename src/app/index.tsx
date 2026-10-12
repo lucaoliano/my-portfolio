@@ -1,6 +1,6 @@
 import { ThemeColors, withAlpha } from '../theme/colors';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl, Modal, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LogOut, Search, ChevronRight, ChevronDown, PieChart as PieChartIcon, Settings, Menu, X, User, Calculator, Cpu, Coins, Bell, Receipt, RefreshCw, CheckCircle2, AlertCircle, FolderCog, Plus, Link2 } from 'lucide-react-native';
@@ -24,6 +24,9 @@ import { useScalablePriceAlerts } from '../hooks/useScalablePriceAlerts';
 import { calculateCashYield, interestCapFor } from '../utils/cashInterest';
 import { getTriggeredAlerts, getApproachingAlerts } from '../utils/priceAlerts';
 import { syncScalablePortfolio, saveScalableConfig } from '../services/scalableMcp';
+import { usePeriodSeries } from '../hooks/usePeriodSeries';
+import { PERIODS, PeriodKey, PeriodResult, computePeriodPerformance, periodStart } from '../utils/periodPerformance';
+import { priceKey } from '../utils/historyBackfill';
 
 // Oltre questa distanza di scroll il bilancio esce dallo schermo e il titolo della barra lo riprende
 const COMPACT_HEADER_OFFSET = 96;
@@ -50,12 +53,15 @@ const friendlySyncError = (msg: string) => {
   return 'Sincronizzazione non riuscita. I dati mostrati sono quelli dell\'ultima sincronizzazione.';
 };
 
-type RowMetric = 'total' | 'daily' | 'annual';
+type RowMetric = 'total' | 'daily' | 'annual' | PeriodKey;
+// Come la schermata Performance di Scalable: dal più breve al più lungo, poi i dati sul costo
 const ROW_METRICS: { key: RowMetric; label: string }[] = [
-  { key: 'total', label: 'Totale' },
   { key: 'daily', label: 'Oggi' },
+  ...PERIODS.map(p => ({ key: p.key as RowMetric, label: p.label })),
+  { key: 'total', label: 'Totale' },
   { key: 'annual', label: 'Annuo' },
 ];
+const isPeriodKey = (m: string): m is PeriodKey => PERIODS.some(p => p.key === m);
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -100,6 +106,33 @@ export const PortfolioScreen = () => {
   // I gruppi con gli stessi titoli di un altro partono chiusi: si aprono solo se l'utente lo chiede
   const [expandedDuplicates, setExpandedDuplicates] = useState<Set<string>>(new Set());
   const [rowMetric, setRowMetric] = useState<RowMetric>('total');
+  // Rendimento per periodo (TWR): i prezzi storici si scaricano solo quando si sceglie un periodo
+  const activePeriod = isPeriodKey(rowMetric) ? PERIODS.find(p => p.key === rowMetric)! : null;
+  const { series: periodSeries, loading: periodLoading, error: periodError } = usePeriodSeries(transactions, !!activePeriod);
+  const nowEurByKey = useMemo(() => {
+    const map: Record<string, number | null> = {};
+    aggregation.globalAssets.forEach(a => {
+      const price = a.hasPrice && a.valueInBase != null && a.totalQuantity > 0 ? a.valueInBase / a.totalQuantity : null;
+      transactions.filter(t => t.symbol === a.symbol).forEach(t => { map[priceKey(t)] = price; });
+    });
+    return map;
+  }, [aggregation.globalAssets, transactions]);
+  const periodResults = useMemo(() => {
+    if (!activePeriod || !periodSeries) return null;
+    const start = periodStart(activePeriod.key);
+    const run = (txs: typeof transactions) => computePeriodPerformance(txs, periodSeries, nowEurByKey, start);
+    const groups: Record<string, PeriodResult | null> = {};
+    const assets: Record<string, PeriodResult | null> = {};
+    const byGroup: Record<string, typeof transactions> = {};
+    const bySymbol: Record<string, typeof transactions> = {};
+    transactions.forEach(tx => {
+      (tx.groups || (tx.group ? [tx.group] : ['Generale'])).forEach(g => { (byGroup[g] ||= []).push(tx); });
+      (bySymbol[tx.symbol] ||= []).push(tx);
+    });
+    Object.entries(byGroup).forEach(([g, txs]) => { groups[g] = run(txs); });
+    Object.entries(bySymbol).forEach(([sym, txs]) => { assets[sym] = run(txs); });
+    return { portfolio: run(transactions), groups, assets };
+  }, [activePeriod, periodSeries, nowEurByKey, transactions]);
   const [compositionGroup, setCompositionGroup] = useState<GroupedPortfolio | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [showCompactTitle, setShowCompactTitle] = useState(false);
@@ -187,8 +220,8 @@ export const PortfolioScreen = () => {
           const parsed = JSON.parse(savedExpanded);
           if (Array.isArray(parsed)) setExpandedDuplicates(new Set(parsed));
         }
-        if (savedMetric === 'total' || savedMetric === 'daily' || savedMetric === 'annual') {
-          setRowMetric(savedMetric);
+        if (savedMetric && ROW_METRICS.some(m => m.key === savedMetric)) {
+          setRowMetric(savedMetric as RowMetric);
         }
       } catch (e) {
         console.error("Errore nel caricamento delle preferenze:", e);
@@ -433,6 +466,23 @@ export const PortfolioScreen = () => {
 
   /** Un solo dato per gruppo, scelto dal selettore Totale / Oggi / Annuo. */
   const renderGroupMetric = (group: GroupedPortfolio) => {
+    if (activePeriod) {
+      if (!periodResults) {
+        return <Text style={styles.metricMissing}>{periodError ? `${activePeriod.label} n/d` : '…'}</Text>;
+      }
+      const r = periodResults.groups[group.groupName];
+      if (!r || r.percent === null) return <Text style={styles.metricMissing}>{activePeriod.label} n/d</Text>;
+      return (
+        <>
+          <MetricChip value={r.gain} style={{ alignSelf: 'flex-start' }}>
+            {activePeriod.label} {formatSignedCurrency(r.gain)} ({signedPercent(r.percent)})
+          </MetricChip>
+          {r.coverage.withData < r.coverage.total && (
+            <Text style={styles.footnote}>su {r.coverage.withData} di {r.coverage.total} titoli</Text>
+          )}
+        </>
+      );
+    }
     if (rowMetric === 'daily') {
       const { withData, total } = group.dailyCoverage;
       if (withData === 0) return <Text style={styles.metricMissing}>{dailyLabel} n/d</Text>;
@@ -466,7 +516,7 @@ export const PortfolioScreen = () => {
   const metricSelector = (
     <View style={styles.groupsHeader}>
       <Text style={styles.groupsHeading} accessibilityRole="header">Gruppi</Text>
-      <View style={styles.metricSelector} accessibilityRole="tablist" aria-label="Dato mostrato per gruppi e titoli">
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.metricScroll} contentContainerStyle={styles.metricSelector} accessibilityRole="tablist" aria-label="Dato mostrato per gruppi e titoli">
       {ROW_METRICS.map(m => (
         <TouchableOpacity
           key={m.key}
@@ -481,9 +531,37 @@ export const PortfolioScreen = () => {
           </Text>
         </TouchableOpacity>
       ))}
-      </View>
+      </ScrollView>
     </View>
   );
+
+  // Riga del periodo sotto il rendimento totale: risponde a "come è andata nell'ultimo mese?" come in Scalable
+  const periodLine = activePeriod ? (() => {
+    const label = activePeriod.spoken.charAt(0).toUpperCase() + activePeriod.spoken.slice(1);
+    const r = periodResults?.portfolio;
+    return (
+      <View style={{ marginTop: 4 }}>
+        <Text style={[styles.secondaryMetrics, styles.secondaryMetricsLarge]}>
+          <Text style={styles.metricSeparator}>{label} </Text>
+          {!periodResults ? (
+            <Text style={styles.metricSeparator}>{periodError ? 'n/d: prezzi storici non raggiungibili' : periodLoading ? 'calcolo in corso…' : '…'}</Text>
+          ) : !r || r.percent === null ? (
+            <Text style={styles.metricSeparator}>n/d</Text>
+          ) : (
+            <>
+              <Text style={{ color: r.gain >= 0 ? colors.positive : colors.negative }}>
+                {formatSignedCurrency(r.gain)} ({signedPercent(r.percent)})
+              </Text>
+              {r.coverage.withData < r.coverage.total && (
+                <Text style={styles.metricSeparator}> su {r.coverage.withData} di {r.coverage.total} titoli</Text>
+              )}
+            </>
+          )}
+        </Text>
+        <Text style={styles.footnote}>Rendimento ponderato per il tempo: acquisti e vendite non lo alterano. Prezzi storici Yahoo Finance.</Text>
+      </View>
+    );
+  })() : null;
 
   // Prezzi non aggiornati: lo diciamo subito sotto il numero che ne dipende, con il rimedio a portata di dito
   const quotesErrorLine = quotesError ? (
@@ -557,6 +635,7 @@ export const PortfolioScreen = () => {
             estimated: globalDailyEstimated,
             large: true,
           })}
+          {periodLine}
           {!quotesError && statusParts.length > 0 && <Text style={styles.footnote}>{statusParts.join(' · ')}</Text>}
           {incompleteItems.length > 0 && (
             <TouchableOpacity
@@ -890,7 +969,10 @@ export const PortfolioScreen = () => {
                     currency={asset.currency}
                     annualizedReturn={asset.annualizedReturn}
                     isAnnualizedExtrapolated={asset.isAnnualizedExtrapolated}
-                    metric={rowMetric}
+                    metric={activePeriod ? 'period' : (rowMetric as 'total' | 'daily' | 'annual')}
+                    periodLabel={activePeriod?.label}
+                    periodGain={!activePeriod ? undefined : !periodResults ? (periodError ? null : undefined) : (periodResults.assets[asset.symbol]?.percent == null ? null : periodResults.assets[asset.symbol]!.gain)}
+                    periodPercent={periodResults?.assets[asset.symbol]?.percent ?? null}
                     dailyLabel={dailyLabel}
                     dailyEstimated={asset.dailyChangeEstimated}
                     hasPrice={asset.hasPrice}
@@ -1279,12 +1361,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 6,
   },
   groupsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
     gap: 8,
     marginTop: 24,
+  },
+  metricScroll: {
+    flexGrow: 0,
+    marginHorizontal: -20,
   },
   groupsHeading: {
     color: colors.text,
@@ -1293,20 +1375,21 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   metricSelector: {
     flexDirection: 'row',
-    padding: 3,
-    borderRadius: 10,
-    backgroundColor: colors.inputBackground,
+    gap: 6,
+    paddingHorizontal: 20,
   },
   metricOption: {
-    minHeight: 36,
+    minHeight: 40,
+    backgroundColor: colors.inputBackground,
+    borderWidth: 1,
+    borderColor: 'transparent',
     paddingHorizontal: 14,
     justifyContent: 'center',
     borderRadius: 8,
   },
   metricOptionActive: {
     backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.text,
   },
   metricOptionText: {
     fontSize: 13,

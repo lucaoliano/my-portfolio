@@ -348,7 +348,7 @@ export const getDailyChanges = onCall(async (request: CallableRequest<{ symbols?
  * Chiusure settimanali per ricostruire lo storico del portafoglio prima che l'app lo registrasse.
  * Accetta ticker, ISIN (tradotti nel simbolo Yahoo) e cambi ("USDEUR=X"). Prezzi in pence convertiti in sterline.
  */
-export const getWeeklyCloses = onCall(async (request: CallableRequest<{ symbols?: string[]; from?: string }>) => {
+export const getWeeklyCloses = onCall(async (request: CallableRequest<{ symbols?: string[]; from?: string; interval?: "1d" | "1wk" }>) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Devi essere autenticato.");
   }
@@ -367,7 +367,9 @@ export const getWeeklyCloses = onCall(async (request: CallableRequest<{ symbols?
     try {
       const yahooSymbol = ISIN_PATTERN.test(sym) ? await resolveYahooSymbol(sym) : sym;
       if (!yahooSymbol) return;
-      const rows = await yf.historical(yahooSymbol, { period1, interval: "1wk" });
+      // Giornaliero per i periodi fino a un anno (rendimento per periodo), settimanale per lo storico lungo
+      const interval = request.data.interval === "1d" ? "1d" : "1wk";
+      const rows = await yf.historical(yahooSymbol, { period1, interval });
       let currency: string | null = sym.endsWith("=X") ? "EUR" : null;
       if (!currency) {
         try {
