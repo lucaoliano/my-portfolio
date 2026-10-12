@@ -110,8 +110,8 @@ export interface WeeklySeries {
 }
 
 /** Chiusure settimanali dal giorno indicato (ticker, ISIN o cambi "USDEUR=X"). */
-export const getWeeklyCloses = async (symbols: string[], from: string): Promise<Record<string, WeeklySeries>> => {
+export const getWeeklyCloses = async (symbols: string[], from: string, interval: '1d' | '1wk' = '1wk'): Promise<Record<string, WeeklySeries>> => {
   const fn = httpsCallable(functions, 'getWeeklyCloses');
-  const res = await fn({ symbols, from });
+  const res = await fn({ symbols, from, interval });
   return ((res.data as { series?: Record<string, WeeklySeries> })?.series) ?? {};
 };
