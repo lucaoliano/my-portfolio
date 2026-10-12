@@ -12,6 +12,8 @@ import { Transaction } from '../../types';
 import { formatNumber, formatDate, formatSignedCurrency, getCurrencySymbol } from '../../utils/formatters';
 import { CopyableText } from '../../components/CopyableText';
 import { MetricChip } from '../../components/MetricChip';
+import { AssetPriceChart } from '../../components/AssetPriceChart';
+import { priceKey } from '../../utils/historyBackfill';
 import { calculatePosition } from '../../utils/portfolioAggregator';
 import { usePortfolioOverview } from '../../hooks/usePortfolioOverview';
 import { calculateTransactionsXIRR } from '../../utils/xirr';
@@ -237,6 +239,8 @@ export const AssetDetailsScreen = () => {
   const overviewAsset = aggregation.globalAssets.find(a => a.symbol === effectiveSymbol);
   const isForeignAsset = !!overviewAsset && overviewAsset.currency !== 'EUR';
 
+  const chartKey = transactions.length > 0 ? priceKey(transactions[0]) : effectiveSymbol;
+
   const isPositive = profitOrLoss >= 0;
   const changeSign = isPositive ? '+' : '';
 
@@ -248,32 +252,9 @@ export const AssetDetailsScreen = () => {
     showAlert('Copiato', 'Ticker copiato negli appunti!');
   };
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{displayName}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-            <Text style={styles.headerSubtitle}>{effectiveSymbol}</Text>
-            <TouchableOpacity onPress={handleCopy} style={{ marginLeft: 6, padding: 4 }}>
-              <Copy size={14} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-        <TouchableOpacity 
-          style={styles.addButton} 
-          onPress={() => {
-            const groupsParam = activeGroups.length > 0 ? activeGroups.join(',') : (groupName || 'Generale');
-            router.push({ pathname: '/add-transaction', params: { symbol: effectiveSymbol, name: displayName, preselectedGroups: groupsParam } })
-          }}
-        >
-          <Plus size={24} color={colors.text} />
-        </TouchableOpacity>
-      </View>
-
+  // Riepilogo, grafico e avvisi scorrono insieme alle transazioni: il grafico non ruba spazio all'elenco
+  const summary = (
+    <View>
       <View style={styles.overview}>
         <CopyableText style={styles.overviewValue} valueToCopy={currentValue.toString()}>{currencySymbol}{formatNumber(currentValue)}</CopyableText>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -325,6 +306,16 @@ export const AssetDetailsScreen = () => {
           <CopyableText style={styles.metricValue} valueToCopy={numericCurrentPrice.toString()}>{currencySymbol}{formatNumber(numericCurrentPrice)}</CopyableText>
         </View>
       </View>
+
+      {transactions.length > 0 && (
+        <AssetPriceChart
+          priceKey={chartKey}
+          currentPrice={hasRealPrice ? numericCurrentPrice : null}
+          currencySymbol={currencySymbol}
+          averagePrice={totalQuantity > 0 && averagePrice > 0 ? averagePrice : null}
+          purchaseDates={transactions.filter(t => (t.type || 'BUY') === 'BUY').map(t => t.date.slice(0, 10))}
+        />
+      )}
 
       {/* Classe di attivo: una riga ben visibile, non un link nascosto nell'intestazione */}
       <TouchableOpacity
@@ -399,15 +390,49 @@ export const AssetDetailsScreen = () => {
       })}
 
       <Text style={styles.sectionTitle}>Transazioni</Text>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
+          <ArrowLeft size={24} color={colors.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle} numberOfLines={1}>{displayName}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+            <Text style={styles.headerSubtitle}>{effectiveSymbol}</Text>
+            <TouchableOpacity onPress={handleCopy} style={{ marginLeft: 6, padding: 4 }}>
+              <Copy size={14} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <TouchableOpacity 
+          style={styles.addButton} 
+          onPress={() => {
+            const groupsParam = activeGroups.length > 0 ? activeGroups.join(',') : (groupName || 'Generale');
+            router.push({ pathname: '/add-transaction', params: { symbol: effectiveSymbol, name: displayName, preselectedGroups: groupsParam } })
+          }}
+        >
+          <Plus size={24} color={colors.text} />
+        </TouchableOpacity>
+      </View>
+
       
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.positive} />
-        </View>
+        <>
+          {summary}
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color={colors.positive} />
+          </View>
+        </>
       ) : (
         <FlatList
           data={transactions}
           keyExtractor={item => item.id!}
+          ListHeaderComponent={summary}
+          ListHeaderComponentStyle={{ marginHorizontal: -20 }}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
             const isSell = item.type === 'SELL';

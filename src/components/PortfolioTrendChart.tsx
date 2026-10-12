@@ -163,7 +163,7 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({ points
         >
           <Text style={{ color: tone, fontWeight: '700' }}>{formatSignedCurrency(delta)}</Text>
           {` di guadagno rispetto ${activeRange === 'Tutto' ? `al ${formatDate(first.date)}` : `a ${rangeLabel}`} · versamenti esclusi`}
-          {hasBackfill ? ' · settimane passate ricostruite dai prezzi di chiusura' : ''}
+          {hasBackfill ? ' · giorni passati ricostruiti dai prezzi di chiusura' : ''}
           {hasIncomplete ? ' · alcuni giorni con dati incompleti' : ''}
         </Text>
       )}
