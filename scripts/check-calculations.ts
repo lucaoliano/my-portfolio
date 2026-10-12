@@ -8,7 +8,7 @@ import { calculateCashYield } from '../src/utils/cashInterest';
 import { calculatePosition, calculatePortfolioAggregation } from '../src/utils/portfolioAggregator';
 import { calculateTransactionsXIRR, calculateXIRR } from '../src/utils/xirr';
 import { YahooQuote } from '../src/services/yahooFinance';
-import { buildBackfill, backfillSymbols } from '../src/utils/historyBackfill';
+import { buildBackfill, backfillSymbols, buildDailyBackfill, missingWeekdays } from '../src/utils/historyBackfill';
 import { computePeriodPerformance, periodStart } from '../src/utils/periodPerformance';
 let fails = 0;
 const eq = (label: string, got: unknown, exp: unknown) => { const ok = JSON.stringify(got) === JSON.stringify(exp); if (!ok) fails++; console.log(ok ? 'OK  ' : 'FAIL', label, ok ? '' : `got ${JSON.stringify(got)} exp ${JSON.stringify(exp)}`); };
@@ -154,6 +154,13 @@ eq('period scales Yahoo venue to Scalable price', pp && Math.round(pp.percent!*1
 pp = computePeriodPerformance([tx({symbol:'AAPL',currency:'USD',quantity:10,purchasePrice:100,date:'2024-01-01'})],
   { AAPL: ser([['2025-01-01',100],['2025-02-01',110]], 'USD'), 'USDEUR=X': ser([['2025-01-01',1],['2025-02-01',0.9]]) }, { AAPL: 99 }, '2025-01-01', '2025-02-01');
 eq('period foreign includes FX', pp && Math.round(pp.percent!*100)/100, -1);
+
+// Giorni mancanti: solo feriali e non già registrati (2025-03-07 è venerdì)
+eq('missing weekdays', missingWeekdays(new Set(['2025-03-04']), '2025-03-03', '2025-03-10'), ['2025-03-03', '2025-03-05', '2025-03-06', '2025-03-07', '2025-03-10']);
+// Ricostruzione giornaliera: riportata al prezzo attuale (Yahoo 50→55, Scalable ora 110), giorno senza chiusura saltato
+const dbf = buildDailyBackfill([tx({symbol:'IE00X',isin:'IE00X',source:'scalable_mcp',quantity:10,purchasePrice:90,date:'2025-01-01'})],
+  { IE00X: ser([['2025-03-03',50],['2025-03-05',55]]) }, ['2025-03-03', '2025-03-04', '2025-03-05'], { IE00X: 110 });
+eq('daily backfill scaled, holiday skipped', dbf.map(p => [p.date, p.invested, p.costBasis]), [['2025-03-03', 1000, 900], ['2025-03-05', 1100, 900]]);
 eq('YTD start', periodStart('YTD', new Date(2026, 9, 12)), '2025-12-31');
 eq('1M start', periodStart('1M', new Date(2026, 9, 12)), '2026-09-12');
 console.log(fails ? `${fails} FAIL` : 'ALL OK');

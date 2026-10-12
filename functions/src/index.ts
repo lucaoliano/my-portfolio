@@ -345,7 +345,7 @@ export const getDailyChanges = onCall(async (request: CallableRequest<{ symbols?
 });
 
 /**
- * Chiusure settimanali per ricostruire lo storico del portafoglio prima che l'app lo registrasse.
+ * Chiusure settimanali o giornaliere: storico del portafoglio, rendimento per periodo e grafico del titolo.
  * Accetta ticker, ISIN (tradotti nel simbolo Yahoo) e cambi ("USDEUR=X"). Prezzi in pence convertiti in sterline.
  */
 export const getWeeklyCloses = onCall(async (request: CallableRequest<{ symbols?: string[]; from?: string; interval?: "1d" | "1wk" }>) => {
@@ -357,9 +357,11 @@ export const getWeeklyCloses = onCall(async (request: CallableRequest<{ symbols?
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || symbols.length === 0) {
     throw new HttpsError("invalid-argument", "Servono simboli e una data di inizio (AAAA-MM-GG).");
   }
-  // Al massimo dieci anni indietro
+  // Al massimo dieci anni indietro con il settimanale, poco più di un anno con il giornaliero
+  const daily = request.data.interval === "1d";
   const minFrom = new Date();
-  minFrom.setUTCFullYear(minFrom.getUTCFullYear() - 10);
+  if (daily) minFrom.setUTCDate(minFrom.getUTCDate() - 400);
+  else minFrom.setUTCFullYear(minFrom.getUTCFullYear() - 10);
   const period1 = from < minFrom.toISOString().slice(0, 10) ? minFrom.toISOString().slice(0, 10) : from;
 
   const series: Record<string, { currency: string | null; points: { date: string; close: number }[] }> = {};
@@ -368,7 +370,7 @@ export const getWeeklyCloses = onCall(async (request: CallableRequest<{ symbols?
       const yahooSymbol = ISIN_PATTERN.test(sym) ? await resolveYahooSymbol(sym) : sym;
       if (!yahooSymbol) return;
       // Giornaliero per i periodi fino a un anno (rendimento per periodo), settimanale per lo storico lungo
-      const interval = request.data.interval === "1d" ? "1d" : "1wk";
+      const interval = daily ? "1d" : "1wk";
       const rows = await yf.historical(yahooSymbol, { period1, interval });
       let currency: string | null = sym.endsWith("=X") ? "EUR" : null;
       if (!currency) {

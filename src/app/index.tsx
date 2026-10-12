@@ -100,15 +100,7 @@ export const PortfolioScreen = () => {
       complete: aggregation.missingPriceSymbols.length === 0 && aggregation.fxMissingSymbols.length === 0,
     };
   }, [isInitialLoading, quotesError, quotesUpdatedAt, aggregation, scalableCash]);
-  const historyPoints = usePortfolioHistory(userId, historySnapshot, transactions);
-
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-  // I gruppi con gli stessi titoli di un altro partono chiusi: si aprono solo se l'utente lo chiede
-  const [expandedDuplicates, setExpandedDuplicates] = useState<Set<string>>(new Set());
-  const [rowMetric, setRowMetric] = useState<RowMetric>('total');
-  // Rendimento per periodo (TWR): i prezzi storici si scaricano solo quando si sceglie un periodo
-  const activePeriod = isPeriodKey(rowMetric) ? PERIODS.find(p => p.key === rowMetric)! : null;
-  const { series: periodSeries, loading: periodLoading, error: periodError } = usePeriodSeries(transactions, !!activePeriod);
+  // Prezzo attuale in euro per quota, per chiave di prezzo: raccorda storico ricostruito e rendimento per periodo
   const nowEurByKey = useMemo(() => {
     const map: Record<string, number | null> = {};
     aggregation.globalAssets.forEach(a => {
@@ -117,6 +109,15 @@ export const PortfolioScreen = () => {
     });
     return map;
   }, [aggregation.globalAssets, transactions]);
+  const historyPoints = usePortfolioHistory(userId, historySnapshot, transactions, nowEurByKey);
+
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // I gruppi con gli stessi titoli di un altro partono chiusi: si aprono solo se l'utente lo chiede
+  const [expandedDuplicates, setExpandedDuplicates] = useState<Set<string>>(new Set());
+  const [rowMetric, setRowMetric] = useState<RowMetric>('total');
+  // Rendimento per periodo (TWR): i prezzi storici si scaricano solo quando si sceglie un periodo
+  const activePeriod = isPeriodKey(rowMetric) ? PERIODS.find(p => p.key === rowMetric)! : null;
+  const { series: periodSeries, loading: periodLoading, error: periodError } = usePeriodSeries(transactions, !!activePeriod);
   const periodResults = useMemo(() => {
     if (!activePeriod || !periodSeries) return null;
     const start = periodStart(activePeriod.key);
