@@ -1,7 +1,10 @@
 import { Transaction } from '../types';
 import type { WeeklySeries } from '../services/yahooFinance';
 import { priceKey } from './historyBackfill';
+import { isForeignManual as isForeign, makePriceAt } from './priceHistory';
 import type { AggregatedAsset } from '../types';
+
+export { makePriceAt };
 
 /** Periodi come nella schermata Performance di Scalable ("1G" usa la variazione di oggi già calcolata). */
 export type PeriodKey = '1S' | '1M' | '6M' | 'YTD' | '1A';
@@ -38,49 +41,6 @@ export interface PeriodResult {
   /** Titoli inclusi nel calcolo, su quanti ne servivano */
   coverage: { withData: number; total: number };
 }
-
-const closeAt = (series: WeeklySeries | undefined, date: string): number | null => {
-  if (!series) return null;
-  let found: number | null = null;
-  for (const p of series.points) {
-    if (p.date > date) break;
-    found = p.close;
-  }
-  return found;
-};
-
-const isForeign = (t: Transaction) => t.source !== 'scalable_mcp' && !!t.currency && t.currency.toUpperCase() !== 'EUR';
-
-/**
- * Prezzo in euro di una quota a una data.
- * - Titoli in euro: il prezzo attuale riportato indietro con la variazione storica (chiusura del giorno / ultima chiusura),
- *   così il punto di partenza è coerente con il prezzo attuale anche se Yahoo quota un'altra borsa.
- * - Titoli in valuta: chiusura × cambio di quel giorno, anch'essa riportata al prezzo attuale in euro.
- */
-export const makePriceAt = (txs: Transaction[], series: Record<string, WeeklySeries>, key: string, nowEur: number | null) => {
-  const s = series[key];
-  const foreign = txs.find(isForeign);
-  if (foreign) {
-    const fx = series[`${foreign.currency!.toUpperCase()}EUR=X`];
-    const latestEur = closeAt(s, '9999-12-31') !== null && closeAt(fx, '9999-12-31') !== null
-      ? closeAt(s, '9999-12-31')! * closeAt(fx, '9999-12-31')!
-      : null;
-    return (date: string): number | null => {
-      const c = closeAt(s, date);
-      const f = closeAt(fx, date);
-      if (c === null || f === null) return null;
-      // Come per i titoli in euro: variazione storica applicata al prezzo attuale, così inizio e fine sono coerenti
-      return nowEur !== null && latestEur ? nowEur * ((c * f) / latestEur) : c * f;
-    };
-  }
-  const latest = s && s.points.length > 0 ? s.points[s.points.length - 1].close : null;
-  return (date: string): number | null => {
-    const c = closeAt(s, date);
-    if (c === null) return null;
-    if (nowEur !== null && latest) return nowEur * (c / latest);
-    return s?.currency === 'EUR' ? c : null;
-  };
-};
 
 const flowEur = (t: Transaction, priceAt: (d: string) => number | null): number | null => {
   const qty = Number(t.quantity) || 0;
@@ -128,7 +88,7 @@ export function computePeriodPerformance(
   const usable: Asset[] = [];
   for (const [key, txs] of relevant) {
     const nowEur = nowEurByKey[key] ?? null;
-    const priceAt = makePriceAt(txs, series, key, nowEur);
+    const priceAt = makePriceAt(txs, series, key, nowEur, today);
     const heldNow = qtyAt(txs, today) > 1e-9;
     const flowDates = txs.map(t => t.date.slice(0, 10)).filter(d => d > start);
     const needs = [...(qtyAt(txs, start) > 1e-9 ? [start] : []), ...flowDates];

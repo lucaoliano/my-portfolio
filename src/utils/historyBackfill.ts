@@ -1,6 +1,7 @@
 import { Transaction } from '../types';
 import { calculatePosition } from './portfolioAggregator';
 import type { WeeklySeries } from '../services/yahooFinance';
+import { closeAt, isForeignManual, makePriceAt } from './priceHistory';
 
 export interface BackfillPoint {
   date: string;
@@ -15,19 +16,6 @@ const addDays = (date: string, days: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-/** Ultima chiusura disponibile fino alla data (inclusa) */
-const closeAt = (series: WeeklySeries | undefined, date: string): number | null => {
-  if (!series) return null;
-  let found: number | null = null;
-  for (const p of series.points) {
-    if (p.date > date) break;
-    found = p.close;
-  }
-  return found;
-};
-
-const isForeignManual = (t: Transaction) => t.source !== 'scalable_mcp' && !!t.currency && t.currency.toUpperCase() !== 'EUR';
-
 /** Simbolo con cui chiedere i prezzi: ISIN per i titoli Scalable, altrimenti il ticker */
 export const priceKey = (t: Transaction) => (t.source === 'scalable_mcp' && t.isin ? t.isin : t.symbol);
 
@@ -38,17 +26,18 @@ export const backfillSymbols = (transactions: Transaction[]): string[] => {
   return Array.from(symbols);
 };
 
+type PriceAt = (date: string) => number | null;
+
 /**
- * Valore del portafoglio alla chiusura di `date`: quote possedute quel giorno × chiusura × cambio;
- * costo = costo medio della posizione. "Completo" solo se tutti i titoli posseduti hanno prezzo e cambio.
- * Con `nowEurByKey` la chiusura è riportata al prezzo attuale in euro (prezzo attuale × chiusura / ultima chiusura):
- * così i giorni ricostruiti si raccordano con quelli registrati anche se Yahoo quota un'altra borsa.
+ * Valore del portafoglio alla chiusura di `date`: quote possedute quel giorno × prezzo ricostruito
+ * (chiusure Yahoo ancorate ai prezzi delle operazioni e a quello attuale, vedi makePriceAt);
+ * costo = costo medio della posizione. "Completo" solo se tutti i titoli posseduti hanno un prezzo.
  */
 const pointAt = (
   bySymbol: Map<string, Transaction[]>,
+  priceAtByKey: Map<string, PriceAt>,
   series: Record<string, WeeklySeries>,
-  date: string,
-  nowEurByKey?: Record<string, number | null>
+  date: string
 ): BackfillPoint | null => {
   let invested = 0;
   let costBasis = 0;
@@ -58,24 +47,24 @@ const pointAt = (
     const pos = calculatePosition(txs.filter(t => t.date.slice(0, 10) <= date));
     if (pos.totalQuantity <= 0) return;
     held = true;
-    const s = series[key];
-    const price = closeAt(s, date);
-    const currency = (txs.find(isForeignManual)?.currency || (txs[0].source === 'scalable_mcp' ? 'EUR' : s?.currency) || 'EUR').toUpperCase();
-    const fxSeries = series[`${currency}EUR=X`];
-    const fx = currency === 'EUR' ? 1 : closeAt(fxSeries, date);
-    if (price === null || fx === null) {
+    const unitEur = priceAtByKey.get(key)!(date);
+    if (unitEur === null) {
       complete = false;
       return;
     }
-    const nowEur = nowEurByKey?.[key] ?? null;
-    const latest = s && s.points.length > 0 ? s.points[s.points.length - 1].close : null;
-    const latestFx = currency === 'EUR' ? 1 : closeAt(fxSeries, '9999-12-31');
-    const unitEur = nowEur !== null && latest && latestFx ? nowEur * (price * fx) / (latest * latestFx) : price * fx;
+    const foreign = txs.find(isForeignManual);
+    const fx = foreign ? closeAt(series[`${foreign.currency!.toUpperCase()}EUR=X`], date) ?? 1 : 1;
     invested += pos.totalQuantity * unitEur;
     costBasis += pos.totalInvestedEur ?? pos.totalInvested * fx;
   });
   if (!held || invested <= 0) return null;
   return { date, invested: Math.round(invested * 100) / 100, costBasis: Math.round(costBasis * 100) / 100, complete };
+};
+
+const pricesByKey = (bySymbol: Map<string, Transaction[]>, series: Record<string, WeeklySeries>, nowEurByKey?: Record<string, number | null>) => {
+  const map = new Map<string, PriceAt>();
+  bySymbol.forEach((txs, key) => map.set(key, makePriceAt(txs, series, key, nowEurByKey?.[key] ?? null)));
+  return map;
 };
 
 const groupByPriceKey = (transactions: Transaction[]) => {
@@ -97,9 +86,10 @@ export const buildBackfill = (
   if (transactions.length === 0) return [];
   const first = transactions.map(t => t.date.slice(0, 10)).sort()[0];
   const bySymbol = groupByPriceKey(transactions);
+  const prices = pricesByKey(bySymbol, series, nowEurByKey);
   const points: BackfillPoint[] = [];
   for (let date = addDays(first, 7 - ((new Date(`${first}T12:00:00Z`).getUTCDay() + 2) % 7)); date < until; date = addDays(date, 7)) {
-    const p = pointAt(bySymbol, series, date, nowEurByKey);
+    const p = pointAt(bySymbol, prices, series, date);
     if (p) points.push(p);
   }
   return points;
@@ -127,9 +117,10 @@ export const buildDailyBackfill = (
   nowEurByKey?: Record<string, number | null>
 ): BackfillPoint[] => {
   const bySymbol = groupByPriceKey(transactions);
+  const prices = pricesByKey(bySymbol, series, nowEurByKey);
   const hasCloseOn = (d: string) => Object.entries(series).some(([k, s]) => !k.endsWith('=X') && s.points.some(p => p.date === d));
   return dates
     .filter(hasCloseOn)
-    .map(d => pointAt(bySymbol, series, d, nowEurByKey))
+    .map(d => pointAt(bySymbol, prices, series, d))
     .filter((p): p is BackfillPoint => p !== null);
 };

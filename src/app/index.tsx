@@ -101,6 +101,12 @@ export const PortfolioScreen = () => {
   }, [isInitialLoading, quotesError, quotesUpdatedAt, aggregation, scalableCash]);
   // Prezzo attuale in euro per quota, per chiave di prezzo: raccorda storico ricostruito e rendimento per periodo
   const nowEurByKey = useMemo(() => nowEurByPriceKey(aggregation.globalAssets, transactions), [aggregation.globalAssets, transactions]);
+  // L'ultimo punto del grafico è lo stesso numero mostrato in alto, anche con prezzi non freschi
+  // (solo il salvataggio nello storico aspetta prezzi aggiornati)
+  const trendLive = useMemo(
+    () => (isInitialLoading || aggregation.globalTotalValue <= 0 ? null : { invested: aggregation.globalTotalValue, costBasis: aggregation.globalInvested }),
+    [isInitialLoading, aggregation.globalTotalValue, aggregation.globalInvested]
+  );
   const historyPoints = usePortfolioHistory(userId, historySnapshot, transactions, nowEurByKey);
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -644,7 +650,7 @@ export const PortfolioScreen = () => {
               <ChevronRight size={14} color={colors.warning} />
             </TouchableOpacity>
           )}
-          <PortfolioTrendChart points={historyPoints} live={historySnapshot} />
+          <PortfolioTrendChart points={historyPoints} live={trendLive} />
         </View>
       )}
 
