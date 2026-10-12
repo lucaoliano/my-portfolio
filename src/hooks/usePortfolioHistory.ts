@@ -126,7 +126,9 @@ export const usePortfolioHistory = (
     (async () => {
       try {
         const meta = await getDoc(metaRef);
-        if (meta.exists() && meta.data().backfilledFrom && meta.data().backfilledFrom <= first) return;
+        // Una ricostruzione finita senza punti (server senza prezzi) non conta come fatta: si riprova
+        const done = meta.exists() && meta.data().backfilledFrom && meta.data().backfilledFrom <= first && (meta.data().weeks ?? 1) > 0;
+        if (done) return;
         const series = await getWeeklyCloses(backfillSymbols(transactions), first);
         const existing = new Set(points.map(p => p.date));
         const rebuilt = buildBackfill(transactions, series, until, nowEurByKey).filter(p => !existing.has(p.date));

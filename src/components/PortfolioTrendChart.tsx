@@ -162,7 +162,11 @@ export const PortfolioTrendChart: React.FC<PortfolioTrendChartProps> = ({ points
           accessibilityLabel={`Guadagno ${delta >= 0 ? 'aumentato' : 'diminuito'} di ${formatNumber(Math.abs(delta))} euro rispetto a ${activeRange === 'Tutto' ? formatDate(first.date) : rangeLabel}, versamenti esclusi`}
         >
           <Text style={{ color: tone, fontWeight: '700' }}>{formatSignedCurrency(delta)}</Text>
-          {` di guadagno rispetto ${activeRange === 'Tutto' ? `al ${formatDate(first.date)}` : `a ${rangeLabel}`} · versamenti esclusi`}
+          {activeRange === 'Tutto' && Math.abs(first.gain) >= 1
+            // Lo storico non parte dal primo acquisto: il guadagno di quel giorno spiega la differenza col totale
+            ? ` dal ${formatDate(first.date)}, primo giorno dello storico, quando il guadagno era già di ${formatSignedCurrency(first.gain)}`
+            : ` di guadagno rispetto ${activeRange === 'Tutto' ? `al ${formatDate(first.date)}` : `a ${rangeLabel}`}`}
+          {' · versamenti esclusi'}
           {hasBackfill ? ' · giorni passati ricostruiti dai prezzi di chiusura' : ''}
           {hasIncomplete ? ' · alcuni giorni con dati incompleti' : ''}
         </Text>

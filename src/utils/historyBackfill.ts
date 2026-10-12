@@ -117,7 +117,8 @@ export const missingWeekdays = (existing: Set<string>, from: string, to: string)
 
 /**
  * Riempie i giorni in cui l'app non è stata aperta, con le chiusure giornaliere.
- * Un giorno senza chiusura (festivo di borsa) non produce un punto.
+ * Un giorno senza chiusura (festivo di borsa) non produce un punto. Un titolo senza prezzo resta fuori
+ * da valore e costo (il guadagno degli altri resta giusto) e il punto è segnato come incompleto.
  */
 export const buildDailyBackfill = (
   transactions: Transaction[],
@@ -130,5 +131,5 @@ export const buildDailyBackfill = (
   return dates
     .filter(hasCloseOn)
     .map(d => pointAt(bySymbol, series, d, nowEurByKey))
-    .filter((p): p is BackfillPoint => p !== null && p.complete);
+    .filter((p): p is BackfillPoint => p !== null);
 };
