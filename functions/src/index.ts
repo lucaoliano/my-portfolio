@@ -371,22 +371,16 @@ export const getWeeklyCloses = onCall(async (request: CallableRequest<{ symbols?
       if (!yahooSymbol) return;
       // Giornaliero per i periodi fino a un anno (rendimento per periodo), settimanale per lo storico lungo
       const interval = daily ? "1d" : "1wk";
-      const rows = await yf.historical(yahooSymbol, { period1, interval });
-      let currency: string | null = sym.endsWith("=X") ? "EUR" : null;
-      if (!currency) {
-        try {
-          const q = await yf.quote(yahooSymbol);
-          currency = (q as { currency?: string } | undefined)?.currency ?? null;
-        } catch {
-          currency = null;
-        }
-      }
+      // chart() con la data di fine esplicita: historical() la passa vuota e chart() rifiuta le opzioni
+      const result = await yf.chart(yahooSymbol, { period1, period2: new Date(), interval });
+      const rows = result?.quotes ?? [];
+      const currency: string | null = sym.endsWith("=X") ? "EUR" : (result?.meta?.currency ?? null);
       const pence = currency === "GBp" || currency === "GBX";
       series[sym] = {
         currency: pence ? "GBP" : currency ? currency.toUpperCase() : null,
-        points: (rows || [])
-          .filter((r) => typeof r.close === "number" && r.close > 0)
-          .map((r) => ({ date: new Date(r.date).toISOString().slice(0, 10), close: pence ? r.close / 100 : r.close })),
+        points: rows.flatMap((r) => (typeof r.close === "number" && r.close > 0 ?
+          [{ date: new Date(r.date).toISOString().slice(0, 10), close: pence ? r.close / 100 : r.close }] :
+          [])),
       };
     } catch (err) {
       console.warn(`Weekly closes failed for ${sym}:`, err instanceof Error ? err.message : String(err));
