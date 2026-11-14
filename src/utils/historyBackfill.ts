@@ -61,9 +61,14 @@ const pointAt = (
   return { date, invested: Math.round(invested * 100) / 100, costBasis: Math.round(costBasis * 100) / 100, complete };
 };
 
-const pricesByKey = (bySymbol: Map<string, Transaction[]>, series: Record<string, WeeklySeries>, nowEurByKey?: Record<string, number | null>) => {
+const pricesByKey = (
+  bySymbol: Map<string, Transaction[]>,
+  series: Record<string, WeeklySeries>,
+  nowEurByKey?: Record<string, number | null>,
+  today?: string
+) => {
   const map = new Map<string, PriceAt>();
-  bySymbol.forEach((txs, key) => map.set(key, makePriceAt(txs, series, key, nowEurByKey?.[key] ?? null)));
+  bySymbol.forEach((txs, key) => map.set(key, makePriceAt(txs, series, key, nowEurByKey?.[key] ?? null, today)));
   return map;
 };
 
@@ -81,12 +86,13 @@ export const buildBackfill = (
   transactions: Transaction[],
   series: Record<string, WeeklySeries>,
   until: string,
-  nowEurByKey?: Record<string, number | null>
+  nowEurByKey?: Record<string, number | null>,
+  today?: string
 ): BackfillPoint[] => {
   if (transactions.length === 0) return [];
   const first = transactions.map(t => t.date.slice(0, 10)).sort()[0];
   const bySymbol = groupByPriceKey(transactions);
-  const prices = pricesByKey(bySymbol, series, nowEurByKey);
+  const prices = pricesByKey(bySymbol, series, nowEurByKey, today);
   const points: BackfillPoint[] = [];
   for (let date = addDays(first, 7 - ((new Date(`${first}T12:00:00Z`).getUTCDay() + 2) % 7)); date < until; date = addDays(date, 7)) {
     const p = pointAt(bySymbol, prices, series, date);
@@ -114,10 +120,11 @@ export const buildDailyBackfill = (
   transactions: Transaction[],
   series: Record<string, WeeklySeries>,
   dates: string[],
-  nowEurByKey?: Record<string, number | null>
+  nowEurByKey?: Record<string, number | null>,
+  today?: string
 ): BackfillPoint[] => {
   const bySymbol = groupByPriceKey(transactions);
-  const prices = pricesByKey(bySymbol, series, nowEurByKey);
+  const prices = pricesByKey(bySymbol, series, nowEurByKey, today);
   const hasCloseOn = (d: string) => Object.entries(series).some(([k, s]) => !k.endsWith('=X') && s.points.some(p => p.date === d));
   return dates
     .filter(hasCloseOn)
