@@ -741,7 +741,7 @@ export const PortfolioScreen = () => {
         </Text>
       )}
     </View>
-  ) : null;
+  ) : undefined;
 
   const menuItems: { label: string; icon: React.ReactNode; onPress: () => void }[] = [
     { label: 'Profilo', icon: <User size={24} color={colors.text} />, onPress: () => router.push('/profile') },
