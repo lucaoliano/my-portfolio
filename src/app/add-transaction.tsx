@@ -3,7 +3,13 @@ import { useLocalSearchParams } from 'expo-router';
 import { TransactionForm } from '../components/TransactionForm';
 
 export const AddTransactionScreen = () => {
-  const params = useLocalSearchParams<{ symbol?: string; name?: string; fromSearch?: string; preselectedGroups?: string }>();
+  const params = useLocalSearchParams<{
+    symbol?: string;
+    name?: string;
+    fromSearch?: string;
+    preselectedGroups?: string;
+    preselectedPortfolioId?: string;
+  }>();
   const preselectedGroups = useMemo(
     () => (params.preselectedGroups ? params.preselectedGroups.split(',').filter(Boolean) : undefined),
     [params.preselectedGroups]
@@ -14,6 +20,7 @@ export const AddTransactionScreen = () => {
       symbol={params.symbol ?? ''}
       name={params.name ?? ''}
       preselectedGroups={preselectedGroups}
+      preselectedPortfolioId={params.preselectedPortfolioId}
       fromSearch={params.fromSearch === 'true' || params.fromSearch === '1'}
     />
   );

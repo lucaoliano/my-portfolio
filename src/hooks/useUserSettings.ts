@@ -3,6 +3,9 @@ import { doc, getDoc, setDoc, onSnapshot, updateDoc, collection, query, getDocs 
 import { db } from '../config/firebase';
 import { UserSettings } from '../types';
 import { COLLECTIONS, getUserPreferencesPath } from '../constants/collections';
+import { DEFAULT_PORTFOLIO, DEFAULT_PORTFOLIO_ID, cleanPortfolio, cleanPortfolios } from '../utils/portfolioManager';
+
+export { DEFAULT_PORTFOLIO, DEFAULT_PORTFOLIO_ID };
 
 export const useUserSettings = (userId: string | undefined) => {
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -27,10 +30,47 @@ export const useUserSettings = (userId: string | undefined) => {
         let currentSettings: UserSettings;
 
         if (!snap.exists()) {
-          currentSettings = { groups: ['Generale'], defaultGroup: 'Generale' };
+          currentSettings = {
+            groups: ['Generale'],
+            defaultGroup: 'Generale',
+            portfolios: [DEFAULT_PORTFOLIO],
+            defaultPortfolioId: DEFAULT_PORTFOLIO_ID,
+          };
           await setDoc(prefRef, currentSettings);
         } else {
           currentSettings = snap.data() as UserSettings;
+          let needsUpdate = false;
+          const fallbackGroups = currentSettings.groups && currentSettings.groups.length > 0 ? currentSettings.groups : ['Generale'];
+
+          if (!currentSettings.portfolios || currentSettings.portfolios.length === 0) {
+            currentSettings.portfolios = [{
+              ...DEFAULT_PORTFOLIO,
+              groups: [...fallbackGroups],
+              defaultGroup: currentSettings.defaultGroup || fallbackGroups[0],
+            }];
+            currentSettings.defaultPortfolioId = DEFAULT_PORTFOLIO_ID;
+            needsUpdate = true;
+          } else {
+            const normalized = currentSettings.portfolios.map(p => {
+              if (!p.groups || p.groups.length === 0) {
+                needsUpdate = true;
+                return cleanPortfolio({
+                  ...p,
+                  groups: [...fallbackGroups],
+                  defaultGroup: p.defaultGroup || currentSettings.defaultGroup || fallbackGroups[0],
+                });
+              }
+              return cleanPortfolio(p);
+            });
+            currentSettings.portfolios = normalized;
+          }
+
+          if (needsUpdate) {
+            await updateDoc(prefRef, {
+              portfolios: currentSettings.portfolios,
+              defaultPortfolioId: currentSettings.defaultPortfolioId || DEFAULT_PORTFOLIO_ID,
+            });
+          }
         }
 
         // Sincronizzazione iniziale one-time dei gruppi legacy dalle transazioni
@@ -65,7 +105,23 @@ export const useUserSettings = (userId: string | undefined) => {
         // Listen for remote changes to preferences
         unsubscribeSettings = onSnapshot(prefRef, (s) => {
           if (s.exists()) {
-            setSettings(s.data() as UserSettings);
+            const sData = s.data() as UserSettings;
+            const fallbackGroups = sData.groups && sData.groups.length > 0 ? sData.groups : ['Generale'];
+            if (!sData.portfolios || sData.portfolios.length === 0) {
+              sData.portfolios = [{
+                ...DEFAULT_PORTFOLIO,
+                groups: [...fallbackGroups],
+                defaultGroup: sData.defaultGroup || fallbackGroups[0],
+              }];
+              sData.defaultPortfolioId = DEFAULT_PORTFOLIO_ID;
+            } else {
+              sData.portfolios = cleanPortfolios(sData.portfolios).map(p => ({
+                ...p,
+                groups: p.groups && p.groups.length > 0 ? p.groups : [...fallbackGroups],
+                defaultGroup: p.defaultGroup || sData.defaultGroup || fallbackGroups[0],
+              }));
+            }
+            setSettings(sData);
           }
         });
 

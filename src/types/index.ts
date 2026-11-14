@@ -8,6 +8,7 @@ export interface Transaction {
   type?: 'BUY' | 'SELL';
   group?: string; // Legacy single group
   groups?: string[]; // New multiple groups
+  portfolioId?: string; // ID del portafoglio (default: 'default')
   source?: string; // e.g. 'scalable_mcp'
   externalId?: string;
   currency?: string;
@@ -50,6 +51,10 @@ export interface AggregatedAsset {
   dailyChangeEstimated?: boolean;
   /** Ora di mercato dell'ultimo prezzo, se nota (ISO) */
   marketTime?: string;
+  /** ID del portafoglio a cui appartiene la posizione */
+  portfolioId?: string;
+  /** Nome del portafoglio a cui appartiene la posizione */
+  portfolioName?: string;
 }
 
 /** Quanti titoli contribuiscono a un dato aggregato (es. variazione di oggi). */
@@ -60,6 +65,8 @@ export interface Coverage {
 
 export interface GroupedPortfolio {
   groupName: string;
+  portfolioId?: string;
+  portfolioName?: string;
   totalInvested: number;
   currentTotalValue: number;
   profitOrLoss: number;
@@ -83,15 +90,30 @@ export type RootStackParamList = {
   Portfolio: undefined;
   Search: undefined;
   ManageGroups: undefined;
+  ManagePortfolios: undefined;
   AddTransaction: { symbol: string; name: string };
   AssetDetails: { symbol: string; name: string; currentPrice: number; dailyChange: number; dailyChangePercent: number; currency: string; groupName: string };
   EditTransaction: { id: string; symbol: string; name: string; quantity: number; purchasePrice: number; date: string; groups: string[]; type?: 'BUY' | 'SELL' };
   ChangeGroupModal: { transactionId: string; symbol: string; currentGroups: string[] };
 };
 
+export interface Portfolio {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+  createdAt?: string;
+  description?: string;
+  /** Gruppi configurati per questo portafoglio */
+  groups?: string[];
+  /** Gruppo predefinito per nuove transazioni */
+  defaultGroup?: string;
+}
+
 export interface UserSettings {
   groups: string[];
   defaultGroup: string;
+  portfolios?: Portfolio[];
+  defaultPortfolioId?: string;
 }
 
 export interface ScalableMcpConfig {

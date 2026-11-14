@@ -1,6 +1,7 @@
-import { Transaction, GroupedPortfolio, UserSettings, AggregatedAsset, Coverage } from '../types';
+import { Transaction, GroupedPortfolio, UserSettings, AggregatedAsset, Coverage, Portfolio } from '../types';
 import { YahooQuote } from '../services/yahooFinance';
 import { calculateTransactionsXIRR } from './xirr';
+import { getPortfolioGroups } from './portfolioManager';
 
 export interface PositionSummary {
   totalQuantity: number;
@@ -105,7 +106,9 @@ const valuePosition = (
   txList: Transaction[],
   quotes: Record<string, YahooQuote>,
   assetCategories: Record<string, string>,
-  fxRates: FxRates
+  fxRates: FxRates,
+  portfolioId?: string,
+  portfolioName?: string
 ): PositionValuation => {
   const { totalQuantity, totalInvested, averagePrice, totalInvestedEur } = calculatePosition(txList);
   const isin = txList.find(t => t.isin)?.isin;
@@ -146,6 +149,8 @@ const valuePosition = (
       hasDailyChange,
       dailyChangeEstimated: hasDailyChange && quote?.source === 'scalable',
       marketTime: quote?.marketTime,
+      portfolioId,
+      portfolioName,
       valueInBase: rate !== null ? currentTotalValue * rate : null,
       ...fxBreakdown(currency, rate, hasPrice, totalQuantity, currentPrice, averagePrice, totalInvestedEur),
     },
@@ -181,7 +186,8 @@ export const calculatePortfolioAggregation = (
   quotes: Record<string, YahooQuote>,
   assetCategories: Record<string, string>,
   settings: UserSettings | null,
-  fxRates: FxRates = {}
+  fxRates: FxRates = {},
+  options?: { selectedPortfolioId?: string | null }
 ): {
   groupedData: GroupedPortfolio[];
   globalTotalValue: number;
@@ -197,7 +203,7 @@ export const calculatePortfolioAggregation = (
   /** Simboli in valuta estera senza cambio disponibile: esclusi dai totali in euro */
   fxMissingSymbols: string[];
   globalDailyCoverage: Coverage;
-  /** Un titolo per simbolo su tutte le transazioni, valori in euro: una transazione in più gruppi conta una volta */
+  /** Un titolo per simbolo/portafoglio, valori in euro */
   globalAssets: AggregatedAsset[];
   /** Almeno un rendimento annuo mostrato (globale, gruppo o titolo) è una stima su meno di un anno */
   hasExtrapolatedAnnualized: boolean;
@@ -208,24 +214,63 @@ export const calculatePortfolioAggregation = (
   /** Ora di mercato più vecchia: se è di un altro giorno, alcune borse non hanno ancora un prezzo di oggi */
   oldestMarketTime: string | null;
 } => {
-  const groupsMap: Record<string, GroupedPortfolio> = {};
-  settings?.groups?.forEach(g => {
-    groupsMap[g] = emptyGroup(g);
-  });
+  const portfoliosList = settings?.portfolios || [];
+  const portMap = new Map<string, Portfolio>();
+  portfoliosList.forEach(p => portMap.set(p.id, p));
 
-  const groupTxs: Record<string, Record<string, Transaction[]>> = {};
-  const globalTxs: Record<string, Transaction[]> = {};
+  const getPortfolioName = (id?: string) => {
+    const key = id || 'default';
+    const found = portMap.get(key);
+    if (found?.name) return found.name;
+    return key === 'default' ? 'Principale' : key;
+  };
+
+  const groupsMap: Record<string, GroupedPortfolio> = {};
+  const selectedPortfolioId = options?.selectedPortfolioId;
+  const isSinglePortfolio = Boolean(selectedPortfolioId && selectedPortfolioId !== 'all');
+
+  if (isSinglePortfolio) {
+    const activePort = portMap.get(selectedPortfolioId!);
+    const pGroups = getPortfolioGroups(activePort, settings?.groups);
+    pGroups.forEach(g => {
+      groupsMap[g] = emptyGroup(g);
+    });
+  } else {
+    if (portfoliosList.length > 0) {
+      portfoliosList.forEach(p => {
+        getPortfolioGroups(p, settings?.groups).forEach(g => {
+          if (!groupsMap[g]) groupsMap[g] = emptyGroup(g);
+        });
+      });
+    } else {
+      (settings?.groups || ['Generale']).forEach(g => {
+        if (!groupsMap[g]) groupsMap[g] = emptyGroup(g);
+      });
+    }
+  }
+
+  // groupTxs[groupName][posKey] = { symbol, portfolioId, txs }
+  const groupTxs: Record<string, Record<string, { symbol: string; portfolioId: string; txs: Transaction[] }>> = {};
+  const globalTxs: Record<string, { symbol: string; portfolioId: string; txs: Transaction[] }> = {};
 
   transactions.forEach(tx => {
+    const txPortId = tx.portfolioId || 'default';
     const txGroups = tx.groups || (tx.group ? [tx.group] : ['Generale']);
+    const posKey = `${tx.symbol}__${txPortId}`;
+
     txGroups.forEach(gName => {
       if (!groupsMap[gName]) groupsMap[gName] = emptyGroup(gName);
       groupTxs[gName] = groupTxs[gName] || {};
-      groupTxs[gName][tx.symbol] = groupTxs[gName][tx.symbol] || [];
-      groupTxs[gName][tx.symbol].push(tx);
+      if (!groupTxs[gName][posKey]) {
+        groupTxs[gName][posKey] = { symbol: tx.symbol, portfolioId: txPortId, txs: [] };
+      }
+      groupTxs[gName][posKey].txs.push(tx);
     });
-    globalTxs[tx.symbol] = globalTxs[tx.symbol] || [];
-    globalTxs[tx.symbol].push(tx);
+
+    if (!globalTxs[posKey]) {
+      globalTxs[posKey] = { symbol: tx.symbol, portfolioId: txPortId, txs: [] };
+    }
+    globalTxs[posKey].txs.push(tx);
   });
 
   let hasExtrapolatedAnnualized = false;
@@ -235,8 +280,9 @@ export const calculatePortfolioAggregation = (
     const groupAssetsMap = groupTxs[g.groupName] || {};
     const groupXirrTxs: Transaction[] = [];
 
-    Object.entries(groupAssetsMap).forEach(([symbol, txList]) => {
-      const { asset, rate } = valuePosition(symbol, txList, quotes, assetCategories, fxRates);
+    Object.values(groupAssetsMap).forEach(({ symbol, portfolioId, txs: txList }) => {
+      const portName = getPortfolioName(portfolioId);
+      const { asset, rate } = valuePosition(symbol, txList, quotes, assetCategories, fxRates, portfolioId, portName);
       // Posizioni chiuse (tutto venduto): non sono più in portafoglio
       if (asset.totalQuantity <= 0) return;
       g.assets.push(asset);
@@ -271,9 +317,12 @@ export const calculatePortfolioAggregation = (
     g.assets.sort((a, b) => a.name.localeCompare(b.name));
   });
 
-  const groupedData = Object.values(groupsMap).sort((a, b) => a.groupName.localeCompare(b.groupName));
+  // Filtriamo i gruppi vuoti per evitare card con 0 titoli e 0€
+  const groupedData = Object.values(groupsMap)
+    .filter(g => g.assets.length > 0)
+    .sort((a, b) => a.groupName.localeCompare(b.groupName));
 
-  // Totali globali in euro, un titolo per simbolo
+  // Totali globali in euro
   let globalInvested = 0;
   let globalTotalValue = 0;
   let globalDailyChange = 0;
@@ -284,16 +333,17 @@ export const calculatePortfolioAggregation = (
   const globalXirrTxs: Transaction[] = [];
   let globalDailyEstimated = false;
 
-  Object.entries(globalTxs).forEach(([symbol, txList]) => {
-    const { asset, rate } = valuePosition(symbol, txList, quotes, assetCategories, fxRates);
+  Object.values(globalTxs).forEach(({ symbol, portfolioId, txs: txList }) => {
+    const portName = getPortfolioName(portfolioId);
+    const { asset, rate } = valuePosition(symbol, txList, quotes, assetCategories, fxRates, portfolioId, portName);
     if (asset.totalQuantity <= 0) return;
 
     globalDailyCoverage.total += 1;
     if (rate === null) {
-      fxMissingSymbols.push(symbol);
+      if (!fxMissingSymbols.includes(symbol)) fxMissingSymbols.push(symbol);
       return;
     }
-    if (!asset.hasPrice) missingPriceSymbols.push(symbol);
+    if (!asset.hasPrice && !missingPriceSymbols.includes(symbol)) missingPriceSymbols.push(symbol);
     if (asset.hasDailyChange && asset.dailyChangeEstimated) globalDailyEstimated = true;
     if (asset.hasDailyChange) globalDailyCoverage.withData += 1;
 

@@ -120,7 +120,7 @@ function InnerLayout() {
     const signedOut = !loading && !user;
     return (
       <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
-        <SafeAreaView style={{ flex: 1 }}>
+        <SafeAreaView style={{ flex: 1, paddingTop: 16 }} edges={['top', 'left', 'right']}>
           {signedOut ? (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
               <ActivityIndicator color={colors.textSecondary} />
@@ -138,7 +138,7 @@ function InnerLayout() {
       <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
         <ExpoThemeProvider value={CustomTheme}>
           <StatusBar style={theme === 'dark' ? "light" : "dark"} />
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, paddingTop: 8 }}>
             <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: colors.card, justifyContent: 'center', alignItems: 'center', marginBottom: 24 }} aria-hidden>
               <Lock size={48} color={colors.text} />
             </View>
@@ -192,6 +192,7 @@ function InnerLayout() {
           <Stack.Screen name="index" />
           <Stack.Screen name="search" options={{ presentation: 'modal' }} />
           <Stack.Screen name="manage-groups" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="manage-portfolios" options={{ presentation: 'modal' }} />
           <Stack.Screen name="add-transaction" options={{ presentation: 'modal' }} />
           <Stack.Screen name="edit-transaction" options={{ presentation: 'modal' }} />
           <Stack.Screen name="profile" options={{ presentation: 'modal' }} />

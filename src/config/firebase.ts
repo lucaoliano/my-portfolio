@@ -66,9 +66,12 @@ export const auth = authInstance;
 // Collega l'app agli emulatori locali durante lo sviluppo (se non disabilitato esplicitamente)
 if (__DEV__ && process.env.EXPO_PUBLIC_DISABLE_EMULATORS !== 'true') {
   try {
-    connectFirestoreEmulator(db, '127.0.0.1', 8080);
-    connectFunctionsEmulator(functions, '127.0.0.1', 5001);
-    connectAuthEmulator(auth, 'http://127.0.0.1:9099');
+    const host = Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hostname
+      ? window.location.hostname
+      : '127.0.0.1';
+    connectFirestoreEmulator(db, host, 8080);
+    connectFunctionsEmulator(functions, host, 5001);
+    connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true });
   } catch (e) {
     console.warn("Could not connect to Firebase Emulators:", e);
   }

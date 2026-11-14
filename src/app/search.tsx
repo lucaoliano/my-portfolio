@@ -2,7 +2,7 @@ import { ThemeColors } from '../theme/colors';
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Plus } from 'lucide-react-native';
 import { useAppTheme } from '../theme/ThemeContext';
 import { searchSymbol, YahooSearchResult } from '../services/yahooFinance';
@@ -53,6 +53,7 @@ export const SearchScreen = () => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{ portfolioId?: string }>();
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<YahooSearchResult[]>([]);
@@ -115,7 +116,8 @@ export const SearchScreen = () => {
       params: {
         symbol: item.symbol,
         name: item.longname || item.shortname,
-        fromSearch: 'true'
+        fromSearch: 'true',
+        preselectedPortfolioId: searchParams.portfolioId,
       }
     });
   };
@@ -137,7 +139,7 @@ export const SearchScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -222,7 +224,9 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     paddingLeft: 8,
     paddingRight: 16,
-    paddingVertical: 8,
+    paddingTop: 16,
+    paddingBottom: 8,
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },

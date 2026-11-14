@@ -1,4 +1,4 @@
-import { ThemeColors } from '../theme/colors';
+import { ThemeColors, withAlpha } from '../theme/colors';
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useAppTheme } from '../theme/ThemeContext';
@@ -9,6 +9,7 @@ import { MetricChip } from './MetricChip';
 interface AssetCardProps {
   symbol: string;
   name: string;
+  portfolioName?: string;
   price: number;
   changePercent: number;
   changeAbsolute: number;
@@ -47,6 +48,7 @@ interface AssetCardProps {
 export const AssetCard: React.FC<AssetCardProps> = ({ 
   symbol, 
   name, 
+  portfolioName,
   price, 
   changePercent, 
   changeAbsolute, 
@@ -96,6 +98,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({
   const fxMissing = isForeign && valueInBase === null;
   const accessibilityParts = [
     name,
+    portfolioName ? `Portafoglio ${portfolioName}` : null,
     category ?? null,
     `${quantity} ${quantity === 1 ? 'quota' : 'quote'}`,
     `valore ${currencySymbol}${formatNumber(totalValue)}`,
@@ -186,7 +189,14 @@ export const AssetCard: React.FC<AssetCardProps> = ({
       <View style={styles.body}>
         <View style={styles.row}>
           <View style={styles.nameColumn}>
-            <Text style={styles.name} numberOfLines={2}>{name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+              <Text style={styles.name} numberOfLines={2}>{name}</Text>
+              {portfolioName ? (
+                <View testID="asset-portfolio-badge" style={styles.portfolioBadge}>
+                  <Text style={styles.portfolioBadgeText}>{portfolioName}</Text>
+                </View>
+              ) : null}
+            </View>
             {category && <Text style={styles.categoryText} numberOfLines={1}>{category}</Text>}
           </View>
           <View style={styles.valueColumn}>
@@ -297,6 +307,19 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  portfolioBadge: {
+    backgroundColor: withAlpha(colors.text, 0.08),
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'center',
+  },
+  portfolioBadgeText: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   name: {
     color: colors.text,

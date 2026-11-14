@@ -20,9 +20,11 @@ import { useAppTheme } from '../theme/ThemeContext';
 import { ThemeColors, withAlpha } from '../theme/colors';
 import { db, auth } from '../config/firebase';
 import { useTransactions } from '../hooks/useTransactions';
+import { DEFAULT_PORTFOLIO } from '../hooks/useUserSettings';
 import { getHistoricalQuote, HistoricalQuote } from '../services/yahooFinance';
 import { formatDate, formatInputNumber, formatNumber, parseLocalNumber } from '../utils/formatters';
-import { Transaction } from '../types';
+import { Portfolio, Transaction } from '../types';
+import { getPortfolioGroups, addPortfolioGroup, cleanPortfolios } from '../utils/portfolioManager';
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF'];
 const ISIN_PATTERN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
@@ -48,6 +50,7 @@ export interface TransactionFormProps {
   /** Transazione da modificare, letta dal database (non dai parametri di navigazione) */
   initial?: Transaction & { id: string };
   preselectedGroups?: string[];
+  preselectedPortfolioId?: string;
   fromSearch?: boolean;
 }
 
@@ -66,7 +69,7 @@ const confirmAction = (title: string, message: string, confirmLabel: string, onC
  * Inserimento e modifica di una transazione: un solo modulo, così regole e aspetto coincidono.
  * Errori accanto al campo, mai un numero arrotondato in silenzio, mai un prezzo digitato sovrascritto.
  */
-export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, name, initial, preselectedGroups, fromSearch }) => {
+export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, name, initial, preselectedGroups, preselectedPortfolioId, fromSearch }) => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const router = useRouter();
@@ -86,6 +89,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
   const [currency, setCurrency] = useState((initial?.currency || 'EUR').toUpperCase());
   const [fxRate, setFxRate] = useState(initial?.fxRate ? formatInputNumber(initial.fxRate) : '');
   const [fee, setFee] = useState(initial?.fee ? formatInputNumber(initial.fee) : '');
+  const [portfolioId, setPortfolioId] = useState<string>(
+    initial?.portfolioId || preselectedPortfolioId || 'default'
+  );
+  const [portfoliosList, setPortfoliosList] = useState<Portfolio[]>([DEFAULT_PORTFOLIO]);
   const [groups, setGroups] = useState<Set<string>>(new Set(initialGroups));
   const [allGroups, setAllGroups] = useState<string[]>(initialGroups);
   const [newGroupOpen, setNewGroupOpen] = useState(false);
@@ -108,16 +115,46 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
   const isScalable = initial?.source === 'scalable_mcp';
   const currencyOptions = CURRENCIES.includes(currency) ? CURRENCIES : [...CURRENCIES, currency];
 
-  // Gruppi esistenti dalle preferenze, più quelli già assegnati alla transazione
+  // Gruppi e portafogli esistenti dalle preferenze
   useEffect(() => {
     if (!userId) return;
     getDoc(doc(db, 'portfolios', userId, 'settings', 'preferences'))
       .then(snap => {
-        const saved = snap.exists() ? ((snap.data().groups as string[] | undefined) ?? []) : ['Generale'];
-        setAllGroups(Array.from(new Set([...saved, ...initialGroups])).sort((a, b) => a.localeCompare(b)));
+        const data = snap.exists() ? snap.data() : {};
+        const savedPortfolios = (data.portfolios as Portfolio[] | undefined) ?? [DEFAULT_PORTFOLIO];
+        const pList = savedPortfolios.length > 0 ? cleanPortfolios(savedPortfolios) : [DEFAULT_PORTFOLIO];
+        setPortfoliosList(pList);
+
+        const activeId = initial?.portfolioId || preselectedPortfolioId || data.defaultPortfolioId || 'default';
+        setPortfolioId(activeId);
+
+        const currentPort = pList.find(p => p.id === activeId);
+        const pGroups = getPortfolioGroups(currentPort, data.groups as string[] | undefined);
+        const mergedAllGroups = Array.from(new Set([...pGroups, ...initialGroups])).sort((a, b) => a.localeCompare(b));
+        setAllGroups(mergedAllGroups);
+
+        if (mode === 'add' && !preselectedGroups?.length) {
+          const defGroup = currentPort?.defaultGroup || pGroups[0] || 'Generale';
+          setGroups(new Set([defGroup]));
+        }
       })
-      .catch(err => console.error('Errore lettura gruppi:', err));
-  }, [userId, initialGroups]);
+      .catch(err => console.error('Errore lettura preferenze:', err));
+  }, [userId, initialGroups, initial?.portfolioId, preselectedPortfolioId, mode, preselectedGroups]);
+
+  const handleSelectPortfolio = (newId: string) => {
+    markDirty();
+    setPortfolioId(newId);
+    const targetPort = portfoliosList.find(p => p.id === newId);
+    const pGroups = getPortfolioGroups(targetPort);
+    setAllGroups(pGroups);
+
+    setGroups(prev => {
+      const valid = Array.from(prev).filter(g => pGroups.includes(g));
+      if (valid.length > 0) return new Set(valid);
+      const defGroup = targetPort?.defaultGroup || pGroups[0] || 'Generale';
+      return new Set([defGroup]);
+    });
+  };
 
   const applyQuote = useCallback((quote: HistoricalQuote, current: { currency: boolean; fxRate: boolean }) => {
     setPrice(formatInputNumber(quote.price));
@@ -203,6 +240,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
       purchasePrice: priceValue,
       type,
       currency,
+      portfolioId: portfolioId || 'default',
       groups: Array.from(groups),
       fee: feeValue > 0 ? feeValue : undefined,
       fxRate: isForeign && fxValue > 0 ? fxValue : undefined,
@@ -226,6 +264,9 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
         if (type !== (initial.type || 'BUY')) changed.type = type;
         if (date !== initialDate) changed.date = date;
         if (currency !== (initial.currency || 'EUR').toUpperCase()) changed.currency = currency;
+        if ((portfolioId || 'default') !== (initial.portfolioId || 'default')) {
+          changed.portfolioId = portfolioId || 'default';
+        }
         if ((fields.fee ?? null) !== (initial.fee ?? null)) changed.fee = fields.fee ?? null;
         if ((fields.fxRate ?? null) !== (initial.fxRate ?? null)) changed.fxRate = fields.fxRate ?? null;
         const groupList = Array.from(groups);
@@ -291,8 +332,15 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
       const nextGroups = [...allGroups, groupName].sort((a, b) => a.localeCompare(b));
       setAllGroups(nextGroups);
       if (userId) {
-        updateDoc(doc(db, 'portfolios', userId, 'settings', 'preferences'), { groups: nextGroups })
-          .catch(err => console.error('Impossibile salvare il nuovo gruppo:', err));
+        const activePid = portfolioId || 'default';
+        const result = addPortfolioGroup(portfoliosList, activePid, groupName);
+        if (!result.error) {
+          setPortfoliosList(result.portfolios);
+          updateDoc(doc(db, 'portfolios', userId, 'settings', 'preferences'), {
+            portfolios: result.portfolios,
+            groups: Array.from(new Set([...allGroups, groupName])),
+          }).catch(err => console.error('Impossibile salvare il nuovo gruppo:', err));
+        }
       }
     }
     setGroups(prev => new Set(prev).add(groupName));
@@ -354,7 +402,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
   const busy = saving || deleting;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.iconButton} onPress={close} accessibilityRole="button" accessibilityLabel="Chiudi">
           <X size={24} color={colors.text} />
@@ -494,6 +542,27 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
         )}
 
         <View style={styles.inputGroup}>
+          <Text style={styles.label}>Portafoglio</Text>
+          <View style={styles.chips}>
+            {portfoliosList.map(p => {
+              const selected = (portfolioId || 'default') === p.id;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[styles.chip, selected && styles.chipActive]}
+                  onPress={() => handleSelectPortfolio(p.id)}
+                  accessibilityRole="radio"
+                  aria-checked={selected}
+                >
+                  {selected && <Check size={14} color={colors.text} style={{ marginRight: 6 }} />}
+                  <Text style={[styles.chipText, selected && styles.chipTextActive]}>{p.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.inputGroup}>
           <Text style={styles.label}>Gruppi</Text>
           <View style={styles.chips}>
             {allGroups.map(g => {
@@ -593,7 +662,9 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingTop: 12,
+    paddingBottom: 4,
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },

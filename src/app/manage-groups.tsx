@@ -9,6 +9,15 @@ import { db, auth } from '../config/firebase';
 import { doc, getDoc, setDoc, collection, query, getDocs, writeBatch } from 'firebase/firestore';
 import type { DocumentData, DocumentReference } from 'firebase/firestore';
 import { UserSettings } from '../types';
+import {
+  cleanPortfolios,
+  getPortfolioGroups,
+  addPortfolioGroup,
+  renamePortfolioGroup,
+  removePortfolioGroup,
+  reorderPortfolioGroups,
+  DEFAULT_PORTFOLIO,
+} from '../utils/portfolioManager';
 
 // Gruppo in cui la sincronizzazione Scalable scrive le transazioni (targetGroup)
 const SCALABLE_GROUP = 'Scalable';
@@ -40,6 +49,7 @@ export const ManageGroupsScreen = () => {
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState<string>('default');
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [newGroup, setNewGroup] = useState('');
@@ -52,6 +62,23 @@ export const ManageGroupsScreen = () => {
     [userId],
   );
   const [loadKey, setLoadKey] = useState(0);
+
+  const portfoliosList = useMemo(() => {
+    if (!settings?.portfolios || settings.portfolios.length === 0) {
+      return [DEFAULT_PORTFOLIO];
+    }
+    return cleanPortfolios(settings.portfolios);
+  }, [settings]);
+
+  const activePort = useMemo(() => {
+    return portfoliosList.find(p => p.id === selectedPortfolioId) || portfoliosList[0];
+  }, [portfoliosList, selectedPortfolioId]);
+
+  const currentGroups = useMemo(() => {
+    return getPortfolioGroups(activePort, settings?.groups);
+  }, [activePort, settings]);
+
+  const defaultGroup = activePort.defaultGroup || currentGroups[0] || 'Generale';
 
   // window.confirm sul web (Alert.alert lì non mostra pulsanti), Alert.alert su iOS/Android
   const confirmDestructive = (title: string, message: string, confirmLabel: string, onConfirm: () => void) => {
@@ -74,10 +101,19 @@ export const ManageGroupsScreen = () => {
         if (cancelled) return;
         setLoadError(false);
         if (snap.exists()) {
-          setSettings(snap.data() as UserSettings);
+          const data = snap.data() as UserSettings;
+          setSettings(data);
+          if (data.defaultPortfolioId) {
+            setSelectedPortfolioId(data.defaultPortfolioId);
+          }
         } else {
           // Di norma lo crea useUserSettings; qui basta un valore iniziale (si salva con merge)
-          setSettings({ groups: ['Generale'], defaultGroup: 'Generale' });
+          setSettings({
+            groups: ['Generale'],
+            defaultGroup: 'Generale',
+            portfolios: [DEFAULT_PORTFOLIO],
+            defaultPortfolioId: DEFAULT_PORTFOLIO.id,
+          });
         }
       } catch (error) {
         if (cancelled) return;
@@ -108,17 +144,30 @@ export const ManageGroupsScreen = () => {
     const name = newGroup.trim();
     if (!name || !settings || !settingsDocRef || saving) return;
     setNotice(null);
-    if (settings.groups.includes(name)) {
-      setNotice('Esiste già un gruppo con questo nome.');
+    if (currentGroups.includes(name)) {
+      setNotice('Esiste già un gruppo con questo nome in questo portafoglio.');
       return;
     }
 
     setSaving(true);
     try {
-      // In coda, senza riordinare
-      const updatedGroups = [...settings.groups, name];
-      await saveSettings({ groups: updatedGroups, defaultGroup: settings.defaultGroup });
-      setSettings({ ...settings, groups: updatedGroups });
+      const result = addPortfolioGroup(portfoliosList, activePort.id, name);
+      if (result.error) {
+        setNotice(result.error);
+        setSaving(false);
+        return;
+      }
+      const updatedPortfolios = result.portfolios;
+      const updatedLegacyGroups = Array.from(new Set([...(settings.groups || []), name]));
+      await saveSettings({
+        portfolios: updatedPortfolios,
+        groups: updatedLegacyGroups,
+      });
+      setSettings({
+        ...settings,
+        portfolios: updatedPortfolios,
+        groups: updatedLegacyGroups,
+      });
       setNewGroup('');
     } catch (e) {
       console.warn(e);
@@ -131,15 +180,14 @@ export const ManageGroupsScreen = () => {
   const moveGroup = async (index: number, delta: -1 | 1) => {
     if (!settings || !settingsDocRef || saving) return;
     const target = index + delta;
-    if (target < 0 || target >= settings.groups.length) return;
-    const newGroups = [...settings.groups];
-    [newGroups[target], newGroups[index]] = [newGroups[index], newGroups[target]];
+    if (target < 0 || target >= currentGroups.length) return;
+    const updatedPortfolios = reorderPortfolioGroups(portfoliosList, activePort.id, index, delta);
 
     setNotice(null);
     setSaving(true);
     try {
-      await saveSettings({ groups: newGroups, defaultGroup: settings.defaultGroup });
-      setSettings({ ...settings, groups: newGroups });
+      await saveSettings({ portfolios: updatedPortfolios });
+      setSettings({ ...settings, portfolios: updatedPortfolios });
     } catch (e) {
       console.warn(e);
       setNotice('Ordine non salvato. Riprova.');
@@ -174,7 +222,7 @@ export const ManageGroupsScreen = () => {
       setNotice(SCALABLE_LOCKED_MESSAGE);
       return;
     }
-    if (settings?.groups.includes(newName)) {
+    if (currentGroups.includes(newName)) {
       setNotice('Esiste già un gruppo con questo nome.');
       return;
     }
@@ -184,25 +232,31 @@ export const ManageGroupsScreen = () => {
     try {
       if (!userId || !settings || !settingsDocRef) throw new Error('Non autorizzato');
 
-      const updatedGroups = settings.groups.map(g => g === oldName ? newName : g);
-      const defaultGroup = oldName === settings.defaultGroup ? newName : settings.defaultGroup;
+      const result = renamePortfolioGroup(portfoliosList, activePort.id, oldName, newName);
+      if (result.error) {
+        setNotice(result.error);
+        setSaving(false);
+        return;
+      }
+      const updatedPortfolios = result.portfolios;
 
       const snapshot = await getDocs(query(collection(db, 'portfolios', userId, 'transactions')));
       const updates: TxUpdate[] = [];
       snapshot.forEach(docSnap => {
-        const txGroups = txGroupsOf(docSnap.data());
+        const data = docSnap.data();
+        const txPortId = data.portfolioId || 'default';
+        if (txPortId !== activePort.id) return;
+        const txGroups = txGroupsOf(data);
         if (txGroups.includes(oldName)) {
           const renamed = txGroups.map(g => g === oldName ? newName : g);
           updates.push({ ref: docSnap.ref, data: { groups: renamed, group: renamed[0] } });
         }
       });
 
-      // Prima le transazioni, poi le preferenze: se un blocco fallisce il gruppo resta in elenco
-      // e la sincronizzazione dei gruppi legacy non perde transazioni orfane
       await commitTxUpdates(updates);
-      await saveSettings({ groups: updatedGroups, defaultGroup });
+      await saveSettings({ portfolios: updatedPortfolios });
 
-      setSettings({ ...settings, groups: updatedGroups, defaultGroup });
+      setSettings({ ...settings, portfolios: updatedPortfolios });
       handleCancelEdit();
     } catch (e) {
       console.warn(e);
@@ -213,7 +267,7 @@ export const ManageGroupsScreen = () => {
   };
 
   const handleDelete = async (groupName: string) => {
-    if (!settings || groupName === settings.defaultGroup || saving) return;
+    if (!settings || groupName === defaultGroup || saving) return;
     setNotice(null);
     if (groupName === SCALABLE_GROUP) {
       setNotice(SCALABLE_LOCKED_MESSAGE);
@@ -221,7 +275,6 @@ export const ManageGroupsScreen = () => {
     }
     if (!userId || !settingsDocRef) return;
 
-    // Conta prima le transazioni, così la conferma dice esattamente cosa succede
     setSaving(true);
     const updates: TxUpdate[] = [];
     let moved = 0;
@@ -229,11 +282,14 @@ export const ManageGroupsScreen = () => {
     try {
       const snapshot = await getDocs(query(collection(db, 'portfolios', userId, 'transactions')));
       snapshot.forEach(docSnap => {
-        const txGroups = txGroupsOf(docSnap.data());
+        const data = docSnap.data();
+        const txPortId = data.portfolioId || 'default';
+        if (txPortId !== activePort.id) return;
+        const txGroups = txGroupsOf(data);
         if (!txGroups.includes(groupName)) return;
         const remaining = txGroups.filter(g => g !== groupName);
         if (remaining.length === 0) {
-          remaining.push(settings.defaultGroup);
+          remaining.push(defaultGroup);
           moved++;
         } else {
           kept++;
@@ -250,10 +306,10 @@ export const ManageGroupsScreen = () => {
 
     const lines: string[] = [];
     if (moved === 0 && kept === 0) {
-      lines.push(`Il gruppo "${groupName}" non contiene transazioni.`);
+      lines.push(`Il gruppo "${groupName}" non contiene transazioni nel portafoglio "${activePort.name}".`);
     } else {
       if (moved > 0) {
-        lines.push(`${moved} ${plural(moved, 'transazione', 'transazioni')} ${plural(moved, 'passa', 'passano')} al gruppo "${settings.defaultGroup}".`);
+        lines.push(`${moved} ${plural(moved, 'transazione', 'transazioni')} ${plural(moved, 'passa', 'passano')} al gruppo "${defaultGroup}".`);
       }
       if (kept > 0) {
         lines.push(`${kept} ${plural(kept, 'transazione resta', 'transazioni restano')} negli altri gruppi a cui ${plural(kept, 'appartiene', 'appartengono')}.`);
@@ -264,11 +320,16 @@ export const ManageGroupsScreen = () => {
     confirmDestructive('Elimina gruppo', lines.join('\n'), 'Elimina', async () => {
       setSaving(true);
       try {
-        const updatedGroups = settings.groups.filter(g => g !== groupName);
-        // Prima le transazioni, per ultime le preferenze
+        const result = removePortfolioGroup(portfoliosList, activePort.id, groupName);
+        if (result.error) {
+          setNotice(result.error);
+          setSaving(false);
+          return;
+        }
+        const updatedPortfolios = result.portfolios;
         await commitTxUpdates(updates);
-        await saveSettings({ groups: updatedGroups, defaultGroup: settings.defaultGroup });
-        setSettings({ ...settings, groups: updatedGroups });
+        await saveSettings({ portfolios: updatedPortfolios });
+        setSettings({ ...settings, portfolios: updatedPortfolios });
       } catch (e) {
         console.warn(e);
         setNotice('Gruppo non eliminato. Riprova.');
@@ -302,15 +363,50 @@ export const ManageGroupsScreen = () => {
     return (
       <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} keyboardShouldPersistTaps="handled">
         <Text style={styles.description}>
-          Crea, rinomina, riordina o elimina i gruppi. Il gruppo predefinito &quot;{settings.defaultGroup}&quot; non si può eliminare.
+          Crea, rinomina, riordina o elimina i gruppi di ciascun portafoglio. Il gruppo predefinito &quot;{defaultGroup}&quot; non si può eliminare.
         </Text>
+
+        {portfoliosList.length > 1 && (
+          <View style={styles.portfolioSelectorBar}>
+            <Text style={styles.portfolioSelectorLabel}>Portafoglio:</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.portfolioScroll}
+              accessibilityRole="tablist"
+              aria-label="Portafogli"
+            >
+              {portfoliosList.map(p => {
+                const isSelected = activePort.id === p.id;
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={[styles.portfolioPill, isSelected && styles.portfolioPillActive]}
+                    onPress={() => {
+                      setSelectedPortfolioId(p.id);
+                      setEditingGroup(null);
+                      setNotice(null);
+                    }}
+                    accessibilityRole="tab"
+                    aria-selected={isSelected}
+                    accessibilityLabel={`Portafoglio ${p.name}`}
+                  >
+                    <Text style={[styles.portfolioPillText, isSelected && styles.portfolioPillTextActive]}>
+                      {p.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         <View style={styles.addGroupContainer}>
           <TextInput
             style={styles.input}
             value={newGroup}
             onChangeText={setNewGroup}
-            placeholder="Nome del nuovo gruppo"
+            placeholder={`Nuovo gruppo per ${activePort.name}`}
             placeholderTextColor={colors.textSecondary}
             editable={!saving}
             maxLength={MAX_GROUP_NAME}
@@ -335,12 +431,12 @@ export const ManageGroupsScreen = () => {
         )}
 
         <View style={styles.groupsList}>
-          {settings.groups.map((group, index) => {
-            const isDefault = group === settings.defaultGroup;
+          {currentGroups.map((group, index) => {
+            const isDefault = group === defaultGroup;
             const isScalable = group === SCALABLE_GROUP;
             const isEditing = editingGroup === group;
             const isFirst = index === 0;
-            const isLast = index === settings.groups.length - 1;
+            const isLast = index === currentGroups.length - 1;
             const upDisabled = isFirst || saving;
             const downDisabled = isLast || saving;
 
@@ -453,7 +549,7 @@ export const ManageGroupsScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -481,7 +577,9 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingTop: 16,
+    paddingBottom: 8,
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -528,8 +626,45 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   description: {
     color: colors.textSecondary,
     fontSize: 14,
-    marginBottom: 24,
+    marginBottom: 20,
     lineHeight: 20,
+  },
+  portfolioSelectorBar: {
+    marginBottom: 20,
+  },
+  portfolioSelectorLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  portfolioScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  portfolioPill: {
+    minHeight: 34,
+    backgroundColor: colors.inputBackground,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 17,
+  },
+  portfolioPillActive: {
+    backgroundColor: colors.card,
+    borderColor: colors.text,
+  },
+  portfolioPillText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  portfolioPillTextActive: {
+    color: colors.text,
+    fontWeight: '600',
   },
   addGroupContainer: {
     flexDirection: 'row',

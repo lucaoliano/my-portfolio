@@ -43,6 +43,7 @@ export const AssetDetailsScreen = () => {
     groupName?: string;
     dailyChange?: string;
     dailyChangePercent?: string;
+    portfolioId?: string;
   }>();
 
   const effectiveSymbol = params.symbol || params.id || '';
@@ -168,6 +169,11 @@ export const AssetDetailsScreen = () => {
 
       snapshot.forEach(docSnap => {
         const data = docSnap.data();
+        const txPortfolioId = data.portfolioId || 'default';
+        if (params.portfolioId && params.portfolioId !== 'all' && txPortfolioId !== params.portfolioId) {
+          return;
+        }
+
         const txGroups = data.groups || (data.group ? [data.group] : ['Generale']);
         
         const type = data.type || 'BUY';
@@ -202,7 +208,7 @@ export const AssetDetailsScreen = () => {
     });
 
     return () => unsubscribe();
-  }, [effectiveSymbol, groupName]);
+  }, [effectiveSymbol, groupName, params.portfolioId]);
 
   const { totalQuantity, totalInvested, averagePrice } = React.useMemo(() => {
     return calculatePosition(transactions);
@@ -235,9 +241,19 @@ export const AssetDetailsScreen = () => {
   }, [transactions, currentValue]);
 
   // Titoli in valuta estera: guadagno in euro e quanto ne dipende dal cambio (serve il cambio degli acquisti)
-  const { aggregation } = usePortfolioOverview(auth.currentUser?.uid);
+  const { aggregation, portfolios } = usePortfolioOverview(auth.currentUser?.uid, params.portfolioId);
   const overviewAsset = aggregation.globalAssets.find(a => a.symbol === effectiveSymbol);
   const isForeignAsset = !!overviewAsset && overviewAsset.currency !== 'EUR';
+
+  const activePortfolio = params.portfolioId && params.portfolioId !== 'all'
+    ? portfolios.find(p => p.id === params.portfolioId)
+    : null;
+  const getPortfolioName = (pId?: string) => {
+    const id = pId || 'default';
+    const found = portfolios.find(p => p.id === id);
+    if (found?.name) return found.name;
+    return id === 'default' ? 'Principale' : id;
+  };
 
   const chartKey = transactions.length > 0 ? priceKey(transactions[0]) : effectiveSymbol;
 
@@ -295,11 +311,11 @@ export const AssetDetailsScreen = () => {
       <View style={styles.metricsRow}>
         <View style={styles.metricCard}>
           <Text style={styles.metricLabel}>Quantità</Text>
-          <CopyableText style={styles.metricValue} valueToCopy={totalQuantity.toString()}>{totalQuantity}</CopyableText>
+          <CopyableText testID="metric-quantity" style={styles.metricValue} valueToCopy={totalQuantity.toString()}>{totalQuantity}</CopyableText>
         </View>
         <View style={styles.metricCard}>
           <Text style={styles.metricLabel}>Prezzo Medio</Text>
-          <CopyableText style={styles.metricValue} valueToCopy={averagePrice.toString()}>{currencySymbol}{formatNumber(averagePrice)}</CopyableText>
+          <CopyableText testID="metric-average-price" style={styles.metricValue} valueToCopy={averagePrice.toString()}>{currencySymbol}{formatNumber(averagePrice)}</CopyableText>
         </View>
         <View style={styles.metricCard}>
           <Text style={styles.metricLabel}>Prezzo Attuale</Text>
@@ -394,25 +410,40 @@ export const AssetDetailsScreen = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle} numberOfLines={1}>{displayName}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 6 }}>
             <Text style={styles.headerSubtitle}>{effectiveSymbol}</Text>
-            <TouchableOpacity onPress={handleCopy} style={{ marginLeft: 6, padding: 4 }}>
+            <TouchableOpacity onPress={handleCopy} style={{ padding: 2 }}>
               <Copy size={14} color={colors.textSecondary} />
             </TouchableOpacity>
+            {activePortfolio && (
+              <View testID="asset-header-portfolio-badge" style={{ backgroundColor: withAlpha(colors.text, 0.08), borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 2 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: '600' }}>
+                  {activePortfolio.name}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
         <TouchableOpacity 
           style={styles.addButton} 
           onPress={() => {
             const groupsParam = activeGroups.length > 0 ? activeGroups.join(',') : (groupName || 'Generale');
-            router.push({ pathname: '/add-transaction', params: { symbol: effectiveSymbol, name: displayName, preselectedGroups: groupsParam } })
+            router.push({
+              pathname: '/add-transaction',
+              params: {
+                symbol: effectiveSymbol,
+                name: displayName,
+                preselectedGroups: groupsParam,
+                preselectedPortfolioId: params.portfolioId && params.portfolioId !== 'all' ? params.portfolioId : undefined,
+              }
+            });
           }}
         >
           <Plus size={24} color={colors.text} />
@@ -453,15 +484,23 @@ export const AssetDetailsScreen = () => {
                   purchasePrice: item.purchasePrice,
                   date: item.date,
                   type: item.type || 'BUY',
-                  groups: item.groups || (item.group ? [item.group] : ['Generale'])
+                  groups: item.groups || (item.group ? [item.group] : ['Generale']),
+                  portfolioId: item.portfolioId || 'default'
                 }})}
               >
                 <View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                     <Text style={styles.transactionDate}>{formatDate(item.date)}</Text>
                     {item.source === 'scalable_mcp' && (
-                      <View style={{ backgroundColor: withAlpha(colors.scalable, 0.125), borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 6 }}>
+                      <View style={{ backgroundColor: withAlpha(colors.scalable, 0.125), borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1 }}>
                         <Text style={{ color: colors.scalable, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>SCALABLE</Text>
+                      </View>
+                    )}
+                    {portfolios.length > 1 && (
+                      <View testID="tx-portfolio-badge" style={{ backgroundColor: withAlpha(colors.text, 0.08), borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1 }}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: '600', letterSpacing: 0.2 }}>
+                          {getPortfolioName(item.portfolioId)}
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -533,7 +572,9 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingTop: 20,
+    paddingBottom: 12,
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },

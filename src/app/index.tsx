@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl, Modal, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { LogOut, Search, ChevronRight, ChevronDown, PieChart as PieChartIcon, Settings, Menu, X, User, Calculator, Cpu, Coins, Bell, Receipt, Landmark, RefreshCw, CheckCircle2, AlertCircle, FolderCog, Plus, Link2 } from 'lucide-react-native';
+import { LogOut, Search, ChevronRight, ChevronDown, PieChart as PieChartIcon, Settings, Menu, X, User, Calculator, Cpu, Coins, Bell, Receipt, Landmark, RefreshCw, CheckCircle2, AlertCircle, FolderCog, Plus, Link2, Briefcase } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useAppTheme } from '../theme/ThemeContext';
@@ -72,9 +72,26 @@ export const PortfolioScreen = () => {
   const router = useRouter();
   const userId = auth.currentUser?.uid;
 
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState<string>('all');
+
+  useEffect(() => {
+    AsyncStorage.getItem('active_portfolio_id')
+      .then(val => {
+        if (val) setSelectedPortfolioId(val);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSelectPortfolio = (id: string) => {
+    setSelectedPortfolioId(id);
+    AsyncStorage.setItem('active_portfolio_id', id).catch(() => {});
+  };
+
   const {
+    allTransactions,
     transactions,
     settings,
+    portfolios,
     scalableConfig,
     isScalableConnected,
     scalableCash,
@@ -85,12 +102,13 @@ export const PortfolioScreen = () => {
     allAssets,
     healthCheck,
     isInitialLoading,
-  } = usePortfolioOverview(userId);
+  } = usePortfolioOverview(userId, selectedPortfolioId);
   const { alerts: scalableAlerts } = useScalablePriceAlerts(userId);
   const { quotes, refreshing, error: quotesError, updatedAt: quotesUpdatedAt, refresh: refreshQuotes } = quotesState;
 
-  // Fotografia del giorno per lo storico: solo con prezzi freschi, altrimenti meglio non scrivere
+  // Fotografia del giorno per lo storico: solo con prezzi freschi e per la vista globale (non per singoli sottoportafogli)
   const historySnapshot = useMemo<HistorySnapshot | null>(() => {
+    if (selectedPortfolioId !== 'all' && (portfolios?.length || 0) > 1) return null;
     if (isInitialLoading || quotesError || !quotesUpdatedAt || aggregation.globalTotalValue <= 0) return null;
     return {
       invested: aggregation.globalTotalValue,
@@ -98,7 +116,7 @@ export const PortfolioScreen = () => {
       cash: scalableCash,
       complete: aggregation.missingPriceSymbols.length === 0 && aggregation.fxMissingSymbols.length === 0,
     };
-  }, [isInitialLoading, quotesError, quotesUpdatedAt, aggregation, scalableCash]);
+  }, [selectedPortfolioId, portfolios?.length, isInitialLoading, quotesError, quotesUpdatedAt, aggregation, scalableCash]);
   // Prezzo attuale in euro per quota, per chiave di prezzo: raccorda storico ricostruito e rendimento per periodo
   const nowEurByKey = useMemo(() => nowEurByPriceKey(aggregation.globalAssets, transactions), [aggregation.globalAssets, transactions]);
   // L'ultimo punto del grafico è lo stesso numero mostrato in alto, anche con prezzi non freschi
@@ -378,7 +396,8 @@ export const PortfolioScreen = () => {
 
   // Sorting Sections based on settings
   const sections = [...groupedData].sort((a, b) => {
-    const orderList = settings?.groups || [];
+    const activePort = portfolios.find(p => p.id === selectedPortfolioId);
+    const orderList = activePort?.groups || settings?.groups || [];
     const indexA = orderList.indexOf(a.groupName);
     const indexB = orderList.indexOf(b.groupName);
 
@@ -459,8 +478,10 @@ export const PortfolioScreen = () => {
   const statusParts: string[] = [];
   if (quotesStatusLabel) statusParts.push(quotesStatusLabel);
   if (isScalableConnected && lastSyncLabel && lastSyncDate && !isToday(lastSyncDate)) statusParts.push(lastSyncLabel);
+  const activePortfolio = portfolios.find(p => p.id === selectedPortfolioId);
+  const portfolioPrefix = activePortfolio && selectedPortfolioId !== 'all' ? `${activePortfolio.name} · ` : '';
   const cashExcluded = scalableCash > 0 && !includeCashInTotal;
-  const heroLabel = cashExcluded ? 'Valore dei titoli' : 'Bilancio totale';
+  const heroLabel = cashExcluded ? `${portfolioPrefix}Valore dei titoli` : `${portfolioPrefix}Bilancio totale`;
   const unreachable = quotesError ? 'servizio prezzi non raggiungibile' : 'cambio non disponibile';
 
   /** Un solo dato per gruppo, scelto dal selettore Totale / Oggi / Annuo. */
@@ -748,6 +769,7 @@ export const PortfolioScreen = () => {
     { label: 'Simulatore PAC', icon: <Calculator size={24} color={colors.text} />, onPress: () => router.push('/pac-calculator' as never) },
     { label: 'Zainetto fiscale', icon: <Receipt size={24} color={colors.text} />, onPress: () => router.push('/tax-report' as never) },
     { label: 'Bollo e IVAFE', icon: <Landmark size={24} color={colors.text} />, onPress: () => router.push('/wealth-tax' as never) },
+    { label: 'Gestisci portafogli', icon: <Briefcase size={24} color={colors.text} />, onPress: () => router.push('/manage-portfolios' as never) },
     { label: 'Gestisci gruppi', icon: <FolderCog size={24} color={colors.text} />, onPress: () => router.push('/manage-groups') },
     { label: 'Integrazioni broker', icon: <Cpu size={24} color={colors.text} />, onPress: () => router.push('/integrations' as never) },
     { label: 'Impostazioni', icon: <Settings size={24} color={colors.text} />, onPress: () => router.push('/settings' as never) },
@@ -778,7 +800,9 @@ export const PortfolioScreen = () => {
               </Text>
             </View>
           ) : (
-            <Text style={styles.topBarTitle} accessibilityRole="header">Panoramica</Text>
+            <Text style={styles.topBarTitle} accessibilityRole="header">
+              {selectedPortfolioId === 'all' ? 'Panoramica' : (activePortfolio?.name || 'Portafoglio')}
+            </Text>
           )}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -832,7 +856,10 @@ export const PortfolioScreen = () => {
           )}
           <TouchableOpacity
             style={styles.iconButton}
-            onPress={() => router.push('/search')}
+            onPress={() => router.push({
+              pathname: '/search',
+              params: selectedPortfolioId !== 'all' ? { portfolioId: selectedPortfolioId } : undefined,
+            })}
             accessibilityRole="button"
             accessibilityLabel="Cerca un titolo"
           >
@@ -841,20 +868,93 @@ export const PortfolioScreen = () => {
         </View>
       </View>
 
+      {/* Selettore Portafogli in pillole */}
+      <View style={styles.portfolioBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.portfolioScroll}
+          accessibilityRole="tablist"
+          aria-label="Portafogli"
+        >
+          <TouchableOpacity
+            style={[styles.portfolioPill, selectedPortfolioId === 'all' && styles.portfolioPillActive]}
+            onPress={() => handleSelectPortfolio('all')}
+            accessibilityRole="tab"
+            aria-selected={selectedPortfolioId === 'all'}
+            accessibilityLabel="Tutti i portafogli"
+          >
+            <Text style={[styles.portfolioPillText, selectedPortfolioId === 'all' && styles.portfolioPillTextActive]}>
+              Tutti i portafogli
+            </Text>
+          </TouchableOpacity>
+          {portfolios.map(p => {
+            const isSelected = selectedPortfolioId === p.id;
+            return (
+              <TouchableOpacity
+                key={p.id}
+                style={[styles.portfolioPill, isSelected && styles.portfolioPillActive]}
+                onPress={() => handleSelectPortfolio(p.id)}
+                accessibilityRole="tab"
+                aria-selected={isSelected}
+                accessibilityLabel={`Portafoglio ${p.name}`}
+              >
+                <Text style={[styles.portfolioPillText, isSelected && styles.portfolioPillTextActive]}>
+                  {p.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity
+            style={styles.portfolioPillManage}
+            onPress={() => router.push('/manage-portfolios' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Gestisci portafogli"
+          >
+            <Plus size={13} color={colors.textSecondary} style={{ marginRight: 3 }} />
+            <Text style={styles.portfolioPillManageText}>Gestisci</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+
       <View style={{ flex: 1 }}>
       {transactions.length === 0 ? (
         <View style={styles.centerContainer}>
-          <Text style={styles.emptyText}>Il tuo portafoglio è vuoto</Text>
-          <Text style={styles.emptySubText}>Aggiungi il primo titolo o collega il tuo conto Scalable per importare le transazioni.</Text>
-          <TouchableOpacity style={styles.emptyPrimaryButton} onPress={() => router.push('/search')} accessibilityRole="button">
-            <Plus size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
-            <Text style={styles.emptyPrimaryButtonText}>Cerca un titolo</Text>
-          </TouchableOpacity>
-          {!isScalableConnected && (
-            <TouchableOpacity style={styles.emptySecondaryButton} onPress={() => router.push('/integrations/scalable')} accessibilityRole="button">
-              <Link2 size={18} color={colors.text} style={{ marginRight: 8 }} />
-              <Text style={styles.emptySecondaryButtonText}>Collega Scalable</Text>
-            </TouchableOpacity>
+          {allTransactions.length === 0 ? (
+            <>
+              <Text style={styles.emptyText}>Il tuo portafoglio è vuoto</Text>
+              <Text style={styles.emptySubText}>Aggiungi il primo titolo o collega il tuo conto Scalable per importare le transazioni.</Text>
+              <TouchableOpacity style={styles.emptyPrimaryButton} onPress={() => router.push('/search')} accessibilityRole="button">
+                <Plus size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
+                <Text style={styles.emptyPrimaryButtonText}>Cerca un titolo</Text>
+              </TouchableOpacity>
+              {!isScalableConnected && (
+                <TouchableOpacity style={styles.emptySecondaryButton} onPress={() => router.push('/integrations/scalable')} accessibilityRole="button">
+                  <Link2 size={18} color={colors.text} style={{ marginRight: 8 }} />
+                  <Text style={styles.emptySecondaryButtonText}>Collega Scalable</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <>
+              <Text style={styles.emptyText}>
+                {activePortfolio ? `“${activePortfolio.name}” è vuoto` : 'Questo portafoglio è vuoto'}
+              </Text>
+              <Text style={styles.emptySubText}>
+                Non ci sono transazioni assegnate a questo portafoglio.
+              </Text>
+              <TouchableOpacity
+                style={styles.emptyPrimaryButton}
+                onPress={() => router.push({
+                  pathname: '/search',
+                  params: selectedPortfolioId !== 'all' ? { portfolioId: selectedPortfolioId } : undefined,
+                })}
+                accessibilityRole="button"
+              >
+                <Plus size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
+                <Text style={styles.emptyPrimaryButtonText}>Aggiungi a questo portafoglio</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       ) : (
@@ -956,9 +1056,10 @@ export const PortfolioScreen = () => {
 
                 {!isCollapsed && group.assets.map((asset, index) => (
                   <AssetCard
-                    key={asset.symbol + index}
+                    key={asset.symbol + (asset.portfolioId || '') + index}
                     symbol={asset.symbol}
                     name={asset.name}
+                    portfolioName={selectedPortfolioId === 'all' && (portfolios?.length || 0) > 1 ? asset.portfolioName : undefined}
                     price={asset.currentPrice}
                     changePercent={asset.profitOrLossPercent}
                     changeAbsolute={asset.profitOrLoss}
@@ -982,7 +1083,21 @@ export const PortfolioScreen = () => {
                     weightPercent={asset.valueInBase && displayTotalValue > 0 ? (asset.valueInBase / displayTotalValue) * 100 : null}
                     isFirst={index === 0}
                     isLast={index === group.assets.length - 1}
-                    onPress={() => router.push({ pathname: '/asset/[id]', params: { id: asset.symbol, symbol: asset.symbol, name: asset.name, currentPrice: asset.currentPrice, currency: asset.currency, groupName: group.groupName, dailyChange: asset.dailyChange, dailyChangePercent: asset.dailyChangePercent, hasPrice: asset.hasPrice ? '1' : '0' } })}
+                    onPress={() => router.push({
+                      pathname: '/asset/[id]',
+                      params: {
+                        id: asset.symbol,
+                        symbol: asset.symbol,
+                        name: asset.name,
+                        currentPrice: asset.currentPrice,
+                        currency: asset.currency,
+                        groupName: group.groupName,
+                        dailyChange: asset.dailyChange,
+                        dailyChangePercent: asset.dailyChangePercent,
+                        hasPrice: asset.hasPrice ? '1' : '0',
+                        portfolioId: selectedPortfolioId !== 'all' ? selectedPortfolioId : (asset.portfolioId || undefined),
+                      }
+                    })}
                   />
                 ))}
               </View>
@@ -1200,6 +1315,56 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   topBarScrolled: {
     borderBottomColor: colors.border,
+  },
+  portfolioBar: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  portfolioScroll: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  portfolioPill: {
+    minHeight: 32,
+    backgroundColor: colors.inputBackground,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 16,
+  },
+  portfolioPillActive: {
+    backgroundColor: colors.card,
+    borderColor: colors.text,
+  },
+  portfolioPillText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  portfolioPillTextActive: {
+    color: colors.text,
+    fontWeight: '600',
+  },
+  portfolioPillManage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 32,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  portfolioPillManageText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
   iconButton: {
     width: 44,
