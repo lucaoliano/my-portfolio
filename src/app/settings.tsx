@@ -1,15 +1,17 @@
-import { ThemeColors } from '../theme/colors';
-import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ChevronLeft, Check } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { useAppTheme, ThemePreference } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { radii, continuousCurve } from '../theme/radius';
+import { ThemedText } from '../components/ui/ThemedText';
 import { useBiometrics } from '../hooks/useBiometrics';
 import { auth } from '../config/firebase';
 
 export default function SettingsScreen() {
-  const router = useRouter();
   const { colors, preference, setPreference } = useAppTheme();
   const { isSupported, isEnabled, toggleBiometric } = useBiometrics(auth.currentUser?.uid);
   const styles = getStyles(colors);
@@ -17,9 +19,9 @@ export default function SettingsScreen() {
   const [biometricError, setBiometricError] = useState<string | null>(null);
 
   const options: { label: string; value: ThemePreference }[] = [
-    { label: 'Come il sistema', value: 'automatic' },
+    { label: 'Scuro (predefinito)', value: 'dark' },
     { label: 'Chiaro', value: 'light' },
-    { label: 'Scuro', value: 'dark' },
+    { label: 'Come il sistema', value: 'automatic' },
   ];
 
   const onToggleBiometric = async (value: boolean) => {
@@ -42,22 +44,16 @@ export default function SettingsScreen() {
     : "All'apertura l'app chiede Face ID, impronta o il codice del dispositivo.";
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
-          accessibilityRole="button"
-          aria-label="Indietro"
-        >
-          <ChevronLeft size={28} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} role="heading">Impostazioni</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <ScreenHeader title="Impostazioni" />
 
-      <View style={styles.content}>
-        <Text style={styles.sectionTitle} role="heading">Aspetto</Text>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={styles.content}
+      >
+        <ThemedText variant="subheadBold" color={colors.textSecondary} style={styles.sectionTitle} role="heading">
+          Aspetto
+        </ThemedText>
 
         <View style={styles.optionsCard} accessibilityRole="radiogroup" aria-label="Aspetto">
           {options.map((option, index) => {
@@ -73,7 +69,7 @@ export default function SettingsScreen() {
                 accessibilityRole="radio"
                 aria-checked={selected}
               >
-                <Text style={styles.optionText}>{option.label}</Text>
+                <ThemedText variant="bodyMedium">{option.label}</ThemedText>
                 {selected && (
                   <Check size={20} color={colors.text} />
                 )}
@@ -84,12 +80,16 @@ export default function SettingsScreen() {
 
         {isSupported && (
           <>
-            <Text style={[styles.sectionTitle, { marginTop: 24 }]} role="heading">Sicurezza</Text>
+            <ThemedText variant="subheadBold" color={colors.textSecondary} style={[styles.sectionTitle, { marginTop: spacing.xl }]} role="heading">
+              Sicurezza
+            </ThemedText>
             <View style={styles.optionsCard}>
               <View style={[styles.optionRow, { borderBottomWidth: 0 }]}>
                 <View style={styles.optionLabel}>
-                  <Text style={styles.optionText}>Blocca l&apos;app con Face ID o passkey</Text>
-                  <Text style={styles.optionDescription}>{lockDescription}</Text>
+                  <ThemedText variant="bodyMedium">Blocca l&apos;app con Face ID o passkey</ThemedText>
+                  <ThemedText variant="subhead" color={colors.textSecondary} style={styles.optionDescription}>
+                    {lockDescription}
+                  </ThemedText>
                 </View>
                 {biometricPending
                   ? <ActivityIndicator color={colors.textSecondary} style={styles.switchSpinner} />
@@ -97,10 +97,9 @@ export default function SettingsScreen() {
                     <Switch
                       value={isEnabled}
                       onValueChange={(val) => { void onToggleBiometric(val); }}
-                      trackColor={{ false: colors.inputBorder, true: colors.selection }}
+                      trackColor={{ false: colors.inputBorder, true: colors.positive }}
                       thumbColor={colors.card}
-                      // react-native-web usa activeThumbColor per il pallino acceso
-                      {...({ activeThumbColor: colors.onStrong } as object)}
+                      {...({ activeThumbColor: colors.onAccent } as object)}
                       accessibilityLabel="Blocca l'app con Face ID o passkey"
                       aria-checked={isEnabled}
                     />
@@ -108,11 +107,13 @@ export default function SettingsScreen() {
               </View>
             </View>
             {biometricError && (
-              <Text style={styles.errorText} role="alert">{biometricError}</Text>
+              <ThemedText variant="caption" color={colors.negative} style={styles.errorText} role="alert">
+                {biometricError}
+              </ThemedText>
             )}
           </>
         )}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -122,44 +123,19 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-  headerSpacer: {
-    width: 44,
-  },
-  headerTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '600',
-  },
   content: {
-    flex: 1,
-    padding: 24,
+    paddingHorizontal: spacing.screenPaddingHorizontal,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.huge,
   },
   sectionTitle: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 12,
-    marginLeft: 8,
+    marginBottom: spacing.sm,
+    marginLeft: spacing.xs,
   },
   optionsCard: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: radii.md,
+    ...continuousCurve,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
@@ -169,32 +145,23 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     minHeight: 52,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  optionText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '500',
-  },
   optionLabel: {
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   optionDescription: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   switchSpinner: {
     width: 51,
   },
   errorText: {
-    color: colors.negative,
-    fontSize: 14,
-    marginTop: 8,
-    marginLeft: 8,
+    marginTop: spacing.sm,
+    marginLeft: spacing.xs,
   },
 });

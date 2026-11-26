@@ -1,4 +1,7 @@
 import { ThemeColors, withAlpha } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { radii, continuousCurve } from '../theme/radius';
+import { shadows } from '../theme/shadows';
 import React, { useState, useMemo } from 'react';
 import {
   View,
@@ -10,9 +13,8 @@ import {
   Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { ScreenHeader } from '../components/ScreenHeader';
 import {
-  ChevronLeft,
   ChevronDown,
   Check,
   Sliders,
@@ -88,7 +90,6 @@ const pct = (value: number) => {
 };
 
 export default function PacCalculatorScreen() {
-  const router = useRouter();
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
 
@@ -273,10 +274,10 @@ export default function PacCalculatorScreen() {
     '. Sono stime, non previsioni.';
 
   const switchColors = {
-    trackColor: { false: colors.inputBorder, true: colors.selection },
+    trackColor: { false: colors.inputBorder, true: colors.positive },
     thumbColor: colors.card,
     // react-native-web usa activeThumbColor per il pallino acceso
-    ...({ activeThumbColor: colors.onStrong } as object),
+    ...({ activeThumbColor: colors.onAccent } as object),
   };
 
   const handleLoadSavedSimulation = (loaded: PacParams) => {
@@ -316,37 +317,35 @@ export default function PacCalculatorScreen() {
     </TouchableOpacity>
   );
 
-  const TABS: { key: ActiveTab; label: string; Icon: typeof BarChart3 }[] = [
+  const TABS: { key: ActiveTab; label: string; Icon: typeof BarChart3 | typeof Cpu }[] = [
     { key: 'pac', label: 'PAC e rendita', Icon: BarChart3 },
     { key: 'goal', label: 'Obiettivo', Icon: Target },
     { key: 'scenarios', label: 'Scenari', Icon: TrendingUp },
     { key: 'montecarlo', label: 'Monte Carlo', Icon: Sliders },
     { key: 'feedrag', label: 'Costi e TER', Icon: Percent },
     { key: 'fire', label: 'FIRE', Icon: Flame },
+    {
+      key: 'scalable_plans',
+      label: `PAC Scalable${scalablePlans.length > 0 ? ` (${scalablePlans.length})` : ''}`,
+      Icon: Cpu,
+    },
   ];
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-          role="button"
-          aria-label="Indietro"
-        >
-          <ChevronLeft size={28} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} role="heading">Pianificazione patrimoniale</Text>
-        <TouchableOpacity
-          style={styles.headerActionBtn}
-          onPress={() => setShowSavedModal(true)}
-          role="button"
-          aria-label="Piani salvati ed esportazione"
-        >
-          <Bookmark size={22} color={colors.text} />
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <ScreenHeader
+        title="Pianificazione patrimoniale"
+        rightAction={
+          <TouchableOpacity
+            style={styles.headerActionBtn}
+            onPress={() => setShowSavedModal(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Piani salvati ed esportazione"
+          >
+            <Bookmark size={22} color={colors.text} />
+          </TouchableOpacity>
+        }
+      />
 
       {/* Navigation Tabs Bar */}
       <ScrollView
@@ -366,26 +365,11 @@ export default function PacCalculatorScreen() {
               role="tab"
               aria-selected={active}
             >
-              <Icon size={16} color={active ? colors.onStrong : colors.textSecondary} style={{ marginRight: 6 }} />
+              <Icon size={16} color={active ? colors.text : colors.textSecondary} style={{ marginRight: 6 }} />
               <Text style={[styles.tabItemText, active && styles.tabItemTextActive]}>{label}</Text>
             </TouchableOpacity>
           );
         })}
-
-        <TouchableOpacity
-          style={[
-            styles.tabItem,
-            activeTab === 'scalable_plans' && { backgroundColor: colors.scalableSurface, borderColor: colors.scalable },
-          ]}
-          onPress={() => setActiveTab('scalable_plans')}
-          role="tab"
-          aria-selected={activeTab === 'scalable_plans'}
-        >
-          <Cpu size={16} color={activeTab === 'scalable_plans' ? colors.scalable : colors.textSecondary} style={{ marginRight: 6 }} />
-          <Text style={[styles.tabItemText, activeTab === 'scalable_plans' && { color: colors.scalable, fontWeight: '700' }]}>
-            PAC Scalable {scalablePlans.length > 0 ? `(${scalablePlans.length})` : ''}
-          </Text>
-        </TouchableOpacity>
       </ScrollView>
 
       <ScrollView
@@ -1663,26 +1647,6 @@ const getStyles = (colors: ThemeColors) =>
       flex: 1,
       backgroundColor: colors.background,
     },
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    backButton: {
-      width: 44,
-      height: 44,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    headerTitle: {
-      color: colors.text,
-      fontSize: 18,
-      fontWeight: '600',
-    },
     headerActionBtn: {
       width: 44,
       height: 44,
@@ -1706,15 +1670,17 @@ const getStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 14,
-      minHeight: 44,
-      borderRadius: 22,
+      minHeight: 40,
+      borderRadius: radii.pill,
+      ...continuousCurve,
       backgroundColor: colors.inputBackground,
       borderWidth: 1,
       borderColor: colors.border,
     },
     tabItemActive: {
-      backgroundColor: colors.selection,
-      borderColor: colors.selection,
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      boxShadow: shadows.segmentLift,
     },
     tabItemText: {
       color: colors.textSecondary,
@@ -1722,18 +1688,20 @@ const getStyles = (colors: ThemeColors) =>
       fontWeight: '600',
     },
     tabItemTextActive: {
-      color: colors.onStrong,
+      color: colors.text,
       fontWeight: 'bold',
     },
     scrollView: {
       flex: 1,
     },
     scrollContent: {
-      padding: 16,
+      paddingHorizontal: spacing.screenPaddingHorizontal,
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.huge,
     },
     titleSection: {
-      marginBottom: 18,
-      marginTop: 4,
+      marginBottom: spacing.lg,
+      marginTop: spacing.xs,
     },
     mainTitle: {
       color: colors.text,
@@ -1749,13 +1717,14 @@ const getStyles = (colors: ThemeColors) =>
       lineHeight: 20,
     },
     moduleSection: {
-      marginBottom: 10,
+      marginBottom: spacing.md,
     },
     phaseHeaderBox: {
       backgroundColor: colors.inputBackground,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 8,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radii.sm,
+      ...continuousCurve,
       marginBottom: 14,
     },
     phaseHeaderTitle: {
@@ -1764,19 +1733,20 @@ const getStyles = (colors: ThemeColors) =>
       fontWeight: 'bold',
     },
     inputCard: {
-      marginBottom: 16,
+      marginBottom: spacing.lg,
     },
     fieldHeading: {
       color: colors.text,
       fontSize: 14,
       fontWeight: '600',
-      marginBottom: 8,
+      marginBottom: spacing.sm,
     },
     bbvaInputBox: {
-      backgroundColor: colors.card,
-      borderRadius: 8,
-      borderWidth: 1.5,
-      borderColor: colors.inputBorder,
+      backgroundColor: colors.inputBackground,
+      borderRadius: radii.sm,
+      ...continuousCurve,
+      borderWidth: 1,
+      borderColor: colors.border,
       paddingHorizontal: 16,
       paddingTop: 8,
       paddingBottom: 8,
@@ -1784,10 +1754,11 @@ const getStyles = (colors: ThemeColors) =>
       justifyContent: 'center',
     },
     bbvaSelectBox: {
-      backgroundColor: colors.card,
-      borderRadius: 8,
-      borderWidth: 1.5,
-      borderColor: colors.inputBorder,
+      backgroundColor: colors.inputBackground,
+      borderRadius: radii.sm,
+      ...continuousCurve,
+      borderWidth: 1,
+      borderColor: colors.border,
       paddingHorizontal: 16,
       paddingTop: 8,
       paddingBottom: 8,
@@ -1833,31 +1804,33 @@ const getStyles = (colors: ThemeColors) =>
       marginTop: 8,
     },
     presetChip: {
-      backgroundColor: colors.card,
+      backgroundColor: colors.inputBackground,
       paddingHorizontal: 14,
-      minHeight: 44,
+      minHeight: 40,
       justifyContent: 'center',
-      borderRadius: 22,
+      borderRadius: radii.pill,
+      ...continuousCurve,
       borderWidth: 1,
-      borderColor: colors.inputBorder,
+      borderColor: colors.border,
     },
     presetChipActive: {
-      borderColor: colors.selection,
-      backgroundColor: colors.selection,
+      borderColor: colors.positive,
+      backgroundColor: withAlpha(colors.positive, 0.12),
     },
     presetChipText: {
-      color: colors.text,
+      color: colors.textSecondary,
       fontSize: 13,
       fontWeight: '500',
       fontVariant: ['tabular-nums'],
     },
     presetChipTextActive: {
-      color: colors.onStrong,
+      color: colors.positive,
       fontWeight: 'bold',
     },
     sectionCard: {
       backgroundColor: colors.card,
-      borderRadius: 16,
+      borderRadius: radii.lg,
+      ...continuousCurve,
       padding: 16,
       marginBottom: 16,
       borderWidth: 1,
@@ -1903,7 +1876,8 @@ const getStyles = (colors: ThemeColors) =>
     },
     todayEuroSwitchCard: {
       backgroundColor: colors.inputBackground,
-      borderRadius: 12,
+      borderRadius: radii.md,
+      ...continuousCurve,
       padding: 14,
       marginBottom: 16,
       borderWidth: 1,
@@ -1911,7 +1885,8 @@ const getStyles = (colors: ThemeColors) =>
     },
     startingWithdrawalBadge: {
       backgroundColor: colors.card,
-      borderRadius: 8,
+      borderRadius: radii.sm,
+      ...continuousCurve,
       padding: 10,
       marginTop: 10,
       borderWidth: 1,
@@ -1928,7 +1903,8 @@ const getStyles = (colors: ThemeColors) =>
       backgroundColor: colors.warningSurface,
       borderWidth: 1,
       borderColor: withAlpha(colors.warning, 0.5),
-      borderRadius: 12,
+      borderRadius: radii.md,
+      ...continuousCurve,
       padding: 12,
       marginTop: 6,
       marginBottom: 14,
@@ -1970,7 +1946,8 @@ const getStyles = (colors: ThemeColors) =>
     },
     statCard: {
       backgroundColor: colors.card,
-      borderRadius: 12,
+      borderRadius: radii.md,
+      ...continuousCurve,
       padding: 12,
       width: '48%',
       borderWidth: 1,
@@ -2009,7 +1986,8 @@ const getStyles = (colors: ThemeColors) =>
     },
     dutyInfoBadge: {
       backgroundColor: colors.inputBackground,
-      borderRadius: 8,
+      borderRadius: radii.sm,
+      ...continuousCurve,
       padding: 10,
       marginTop: 10,
       alignItems: 'center',
@@ -2020,14 +1998,15 @@ const getStyles = (colors: ThemeColors) =>
     },
     toggleTableBtn: {
       backgroundColor: colors.card,
-      borderRadius: 12,
+      borderRadius: radii.sm,
+      ...continuousCurve,
       padding: 12,
       minHeight: 44,
       justifyContent: 'center',
       alignItems: 'center',
       marginTop: 12,
       borderWidth: 1,
-      borderColor: colors.inputBorder,
+      borderColor: colors.border,
     },
     toggleTableBtnText: {
       color: colors.primary,
@@ -2036,7 +2015,8 @@ const getStyles = (colors: ThemeColors) =>
     },
     tableCard: {
       backgroundColor: colors.card,
-      borderRadius: 12,
+      borderRadius: radii.md,
+      ...continuousCurve,
       marginTop: 10,
       borderWidth: 1,
       borderColor: colors.border,
@@ -2079,19 +2059,24 @@ const getStyles = (colors: ThemeColors) =>
     modeSwitchBox: {
       flexDirection: 'row',
       backgroundColor: colors.inputBackground,
-      borderRadius: 10,
-      padding: 4,
+      borderRadius: radii.sm,
+      ...continuousCurve,
+      padding: 3,
       marginBottom: 16,
     },
     modeSwitchBtn: {
       flex: 1,
-      minHeight: 44,
+      minHeight: 40,
       justifyContent: 'center',
       alignItems: 'center',
-      borderRadius: 8,
+      borderRadius: radii.xs,
+      ...continuousCurve,
     },
     modeSwitchBtnActive: {
-      backgroundColor: colors.selection,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      boxShadow: shadows.segmentLift,
     },
     modeSwitchText: {
       color: colors.textSecondary,
@@ -2099,12 +2084,13 @@ const getStyles = (colors: ThemeColors) =>
       fontWeight: '600',
     },
     modeSwitchTextActive: {
-      color: colors.onStrong,
+      color: colors.text,
       fontWeight: 'bold',
     },
     heroResultCard: {
       backgroundColor: colors.card,
-      borderRadius: 16,
+      borderRadius: radii.lg,
+      ...continuousCurve,
       padding: 18,
       borderWidth: 1,
       borderColor: colors.border,
@@ -2158,14 +2144,15 @@ const getStyles = (colors: ThemeColors) =>
     },
     scenarioCard: {
       backgroundColor: colors.card,
-      borderRadius: 16,
+      borderRadius: radii.lg,
+      ...continuousCurve,
       padding: 16,
       marginBottom: 12,
       borderWidth: 1,
       borderColor: colors.border,
     },
     scenarioCardBase: {
-      borderWidth: 2,
+      borderWidth: 1.5,
       borderColor: colors.inputBorder,
     },
     scenarioTitle: {
@@ -2228,7 +2215,8 @@ const getStyles = (colors: ThemeColors) =>
     },
     scalablePacSyncBanner: {
       backgroundColor: colors.scalableSurface,
-      borderRadius: 14,
+      borderRadius: radii.lg,
+      ...continuousCurve,
       padding: 14,
       marginBottom: 16,
       borderWidth: 1,
@@ -2350,10 +2338,11 @@ const getStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.scalable,
-      borderRadius: 12,
+      borderRadius: radii.pill,
+      ...continuousCurve,
       paddingVertical: 12,
       paddingHorizontal: 16,
-      minHeight: 44,
+      minHeight: 50,
       marginTop: 16,
     },
     simulatePacButtonText: {

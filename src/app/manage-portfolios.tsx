@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Trash2, Edit2, Check, Plus, ChevronUp, ChevronDown, X, Star } from 'lucide-react-native';
+import { Trash2, Edit2, Check, Plus, ChevronUp, ChevronDown, X, Star } from 'lucide-react-native';
 import { useAppTheme } from '../theme/ThemeContext';
 import { ThemeColors, withAlpha } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { radii, continuousCurve } from '../theme/radius';
+import { Button } from '../components/ui/Button';
 import { db, auth } from '../config/firebase';
 import { doc, getDoc, setDoc, collection, query, getDocs, writeBatch } from 'firebase/firestore';
 import type { DocumentReference } from 'firebase/firestore';
 import { Portfolio, UserSettings } from '../types';
+import { ScreenHeader } from '../components/ScreenHeader';
 import {
   DEFAULT_PORTFOLIO,
   DEFAULT_PORTFOLIO_ID,
@@ -41,7 +44,6 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 export const ManagePortfoliosScreen = () => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
-  const router = useRouter();
   const userId = auth.currentUser?.uid;
 
   const [loading, setLoading] = useState(true);
@@ -420,24 +422,17 @@ export const ManagePortfoliosScreen = () => {
             maxLength={100}
             accessibilityLabel="Descrizione del nuovo portafoglio"
           />
-          <TouchableOpacity
-            style={[styles.addButton, addDisabled && styles.buttonDisabled]}
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            title="Aggiungi portafoglio"
+            loading={saving}
             disabled={addDisabled}
+            icon={<Plus size={18} color={colors.onAccent} />}
             onPress={handleAddNew}
-            accessibilityRole="button"
-            aria-busy={saving}
-          >
-            {saving ? (
-              <ActivityIndicator size="small" color={colors.onAccent} />
-            ) : (
-              <>
-                <Plus size={18} color={colors.onAccent} style={{ marginRight: 6 }} />
-                <Text style={styles.addButtonText}>
-                  Aggiungi portafoglio
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
+            style={{ marginTop: spacing.md }}
+          />
         </View>
 
         {/* Elenco portafogli */}
@@ -471,23 +466,22 @@ export const ManagePortfoliosScreen = () => {
                   maxLength={100}
                 />
                 <View style={styles.editActions}>
-                  <TouchableOpacity
-                    style={styles.cancelEditBtn}
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    title="Annulla"
+                    icon={<X size={16} color={colors.text} />}
                     onPress={handleCancelEdit}
-                    accessibilityRole="button"
-                  >
-                    <X size={16} color={colors.text} style={{ marginRight: 4 }} />
-                    <Text style={styles.cancelEditBtnText}>Annulla</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.saveEditBtn, !editName.trim() && styles.buttonDisabled]}
+                  />
+                  <Button
+                    variant="primary"
+                    size="md"
+                    title="Salva"
+                    loading={saving}
                     disabled={!editName.trim() || saving}
+                    icon={<Check size={16} color={colors.onAccent} />}
                     onPress={() => handleSaveEdit(p.id)}
-                    accessibilityRole="button"
-                  >
-                    <Check size={16} color={colors.onAccent} style={{ marginRight: 4 }} />
-                    <Text style={styles.saveEditBtnText}>Salva</Text>
-                  </TouchableOpacity>
+                  />
                 </View>
               </View>
             );
@@ -577,18 +571,7 @@ export const ManagePortfoliosScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-          accessibilityRole="button"
-          accessibilityLabel="Torna indietro"
-        >
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} accessibilityRole="header">Gestisci portafogli</Text>
-        <View style={{ width: 44 }} />
-      </View>
+      <ScreenHeader title="Gestisci portafogli" />
       {renderContent()}
     </SafeAreaView>
   );
@@ -599,29 +582,6 @@ const getStyles = (colors: ThemeColors) =>
     container: {
       flex: 1,
       backgroundColor: colors.background,
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      minHeight: 56,
-      paddingTop: 16,
-      paddingBottom: 8,
-      backgroundColor: colors.background,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
-    },
-    backButton: {
-      width: 44,
-      height: 44,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    headerTitle: {
-      fontSize: 18,
-      fontWeight: '600',
-      color: colors.text,
     },
     content: {
       padding: 16,
@@ -648,9 +608,10 @@ const getStyles = (colors: ThemeColors) =>
     },
     addCard: {
       backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 24,
+      borderRadius: radii.md,
+      ...continuousCurve,
+      padding: spacing.lg,
+      marginBottom: spacing.xxl,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },
@@ -658,46 +619,31 @@ const getStyles = (colors: ThemeColors) =>
       fontSize: 16,
       fontWeight: '600',
       color: colors.text,
-      marginBottom: 12,
+      marginBottom: spacing.md,
     },
     input: {
-      height: 46,
+      height: 48,
       backgroundColor: colors.inputBackground,
-      borderRadius: 8,
-      paddingHorizontal: 14,
+      borderRadius: radii.sm,
+      ...continuousCurve,
+      paddingHorizontal: spacing.lg,
       fontSize: 15,
       color: colors.text,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-    },
-    addButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.positive,
-      height: 46,
-      borderRadius: 23,
-      marginTop: 14,
-    },
-    addButtonText: {
-      color: colors.onAccent,
-      fontSize: 15,
-      fontWeight: '600',
-    },
-    buttonDisabled: {
-      opacity: 0.45,
+      borderWidth: 1,
+      borderColor: colors.inputBorder,
     },
     sectionHeader: {
       fontSize: 16,
       fontWeight: '600',
       color: colors.text,
-      marginBottom: 12,
+      marginBottom: spacing.md,
     },
     portfolioCard: {
       backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 12,
+      borderRadius: radii.md,
+      ...continuousCurve,
+      padding: spacing.lg,
+      marginBottom: spacing.md,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
     },

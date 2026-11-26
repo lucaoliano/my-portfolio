@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
+import { loginViaEmulator } from './helpers/auth';
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, connectFirestoreEmulator, doc, setDoc } from 'firebase/firestore';
 import { initializeAuth, connectAuthEmulator, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -282,5 +283,88 @@ test.describe('Portafogli E2E Browser Test', () => {
     await expect(page.getByTestId('metric-average-price')).toHaveText(/90[.,]00/);
 
     await page.screenshot({ path: 'test-results/screenshots/scenario-asset-detail-mobile.png', fullPage: true });
+  });
+
+  test('Gestione completa portafogli: rinomina, modifica note, cambio predefinito ed eliminazione', async ({ page }) => {
+    // 1. Accedi e vai a /manage-portfolios
+    await loginViaEmulator(page);
+    await page.goto('/manage-portfolios');
+    await expect(page.getByRole('heading', { name: 'Gestisci portafogli' })).toBeVisible({ timeout: 15000 });
+
+    // 2. Crea un nuovo portafoglio temporaneo
+    const nameInput = page.getByLabel('Nome del nuovo portafoglio');
+    const descInput = page.getByLabel('Descrizione del nuovo portafoglio');
+    const addPortBtn = page.getByRole('button', { name: 'Aggiungi portafoglio' });
+
+    // Tenta di aggiungere portafoglio con nome duplicato o vuoto
+    await nameInput.fill('Principale');
+    await addPortBtn.click();
+    await page.waitForTimeout(500);
+
+    // Crea un nuovo portafoglio valido
+    await nameInput.fill('Portafoglio Test CRUD');
+    await descInput.fill('Nota iniziale');
+    await addPortBtn.click();
+
+    await expect(page.getByText('Portafoglio Test CRUD')).toBeVisible({ timeout: 10000 });
+
+    // Test riordino con freccia su e freccia giù
+    const moveUpBtn = page.getByLabel('Sposta Portafoglio Test CRUD in su');
+    if (await moveUpBtn.isVisible() && await moveUpBtn.isEnabled()) {
+      await moveUpBtn.click();
+      await page.waitForTimeout(300);
+    }
+    const moveDownBtn = page.getByLabel(/Sposta .* in giù/i).first();
+    if (await moveDownBtn.isVisible() && await moveDownBtn.isEnabled()) {
+      await moveDownBtn.click();
+      await page.waitForTimeout(300);
+    }
+
+    // 3. Modifica nome e descrizione con test di annullamento
+    const editBtn = page.getByLabel('Modifica Portafoglio Test CRUD');
+    await expect(editBtn).toBeVisible();
+    await editBtn.click();
+
+    // Testa annullamento modifica
+    const cancelEditBtn = page.getByRole('button', { name: 'Annulla' });
+    await expect(cancelEditBtn).toBeVisible();
+    await cancelEditBtn.click();
+    await expect(cancelEditBtn).not.toBeVisible();
+
+    // Riapri modifica e compila
+    await editBtn.click();
+    const editNameInput = page.getByPlaceholder('Nome portafoglio');
+    await expect(editNameInput).toBeVisible();
+    await editNameInput.fill('Portafoglio Aggiornato');
+
+    const editDescInput = page.getByPlaceholder('Descrizione (facoltativa)');
+    await editDescInput.fill('Nota aggiornata con successo');
+
+    await page.getByRole('button', { name: 'Salva' }).click();
+    await expect(page.getByText('Portafoglio Aggiornato')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Nota aggiornata con successo')).toBeVisible();
+
+    // 4. Imposta come predefinito
+    const setDefaultBtn = page.locator('text=Imposta predefinito').last();
+    if (await setDefaultBtn.isVisible()) {
+      await setDefaultBtn.click();
+      await expect(page.getByText('Predefinito').last()).toBeVisible({ timeout: 5000 });
+    }
+
+    // 5. Ripristina il primo portafoglio come predefinito prima di eliminare
+    const resetDefaultBtn = page.locator('text=Imposta predefinito').first();
+    await expect(resetDefaultBtn).toBeVisible({ timeout: 5000 });
+    await resetDefaultBtn.click();
+    await page.waitForTimeout(500);
+
+    // 6. Elimina il portafoglio gestendo il dialogo di conferma
+    page.on('dialog', async (dialog) => {
+      await dialog.accept();
+    });
+
+    const deleteBtn = page.getByLabel('Elimina Portafoglio Aggiornato');
+    await expect(deleteBtn).toBeVisible({ timeout: 5000 });
+    await deleteBtn.click();
+    await expect(page.getByText('Portafoglio Aggiornato')).not.toBeVisible({ timeout: 10000 });
   });
 });

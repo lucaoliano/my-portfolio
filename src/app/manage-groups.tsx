@@ -1,9 +1,11 @@
 import { ThemeColors } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { radii, continuousCurve } from '../theme/radius';
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Trash2, Edit2, Check, Plus, ChevronUp, ChevronDown, X } from 'lucide-react-native';
+import { Trash2, Edit2, Check, Plus, ChevronUp, ChevronDown, X } from 'lucide-react-native';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { useAppTheme } from '../theme/ThemeContext';
 import { db, auth } from '../config/firebase';
 import { doc, getDoc, setDoc, collection, query, getDocs, writeBatch } from 'firebase/firestore';
@@ -44,7 +46,6 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 export const ManageGroupsScreen = () => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
-  const router = useRouter();
   const [loading, setLoading] = useState(() => Boolean(auth.currentUser?.uid));
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -550,18 +551,7 @@ export const ManageGroupsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
-          accessibilityRole="button"
-          aria-label="Indietro"
-        >
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} role="heading">Gestione gruppi</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title="Gestione gruppi" />
       {renderBody()}
     </SafeAreaView>
   );
@@ -571,31 +561,6 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingTop: 16,
-    paddingBottom: 8,
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerSpacer: {
-    width: 44,
-  },
-  headerTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '600',
   },
   centerContainer: {
     flex: 1,
@@ -673,14 +638,15 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   input: {
     flex: 1,
     backgroundColor: colors.inputBackground,
-    borderRadius: 8,
+    borderRadius: radii.sm,
+    ...continuousCurve,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     height: 48,
     color: colors.text,
     fontSize: 16,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   editInput: {
     marginRight: 4,
@@ -690,7 +656,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.positive,
     width: 48,
     height: 48,
-    borderRadius: 8,
+    borderRadius: radii.sm,
+    ...continuousCurve,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -701,24 +668,25 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.negative,
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   noticeInfo: {
     color: colors.text,
   },
   groupsList: {
-    marginTop: 8,
-    gap: 12,
+    marginTop: spacing.sm,
+    gap: spacing.md,
   },
   groupRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
     paddingVertical: 6,
-    paddingLeft: 16,
+    paddingLeft: spacing.lg,
     paddingRight: 4,
     minHeight: 56,
-    borderRadius: 12,
+    borderRadius: radii.md,
+    ...continuousCurve,
     justifyContent: 'space-between',
   },
   groupLabel: {

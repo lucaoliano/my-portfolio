@@ -1,10 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, ChevronRight, Lock } from 'lucide-react-native';
+import { ChevronRight, Lock } from 'lucide-react-native';
+import { ScreenHeader } from '../../components/ScreenHeader';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { ThemeColors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { ThemedText } from '../../components/ui/ThemedText';
+import { Card } from '../../components/ui/Card';
 import { auth } from '../../config/firebase';
 import { useScalableConfig } from '../../hooks/useScalableConfig';
 
@@ -26,51 +30,41 @@ export default function IntegrationsScreen() {
     : null;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-          accessibilityRole="button"
-          accessibilityLabel="Indietro"
-        >
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} accessibilityRole="header">Integrazioni broker</Text>
-        <View style={styles.iconButton} />
-      </View>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <ScreenHeader title="Integrazioni broker" />
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.intro}>
+        <ThemedText variant="body" color={colors.textSecondary} style={styles.intro}>
           Collega un broker per importare in automatico transazioni, liquidità e piani di accumulo, senza inserirli a mano.
-        </Text>
+        </ThemedText>
 
         {loading ? (
-          <ActivityIndicator color={colors.textSecondary} style={{ marginTop: 24 }} />
+          <ActivityIndicator color={colors.textSecondary} style={{ marginTop: spacing.xl }} />
         ) : (
-          <TouchableOpacity
-            style={styles.card}
+          <Card
+            variant="default"
             onPress={() => router.push('/integrations/scalable' as never)}
-            activeOpacity={0.7}
-            accessibilityRole="button"
+            style={styles.card}
             accessibilityLabel={`Scalable Capital, ${status.label}${lastSync ? `, ultima sincronizzazione ${lastSync}` : ''}`}
           >
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.title}>Scalable Capital</Text>
-              <Text style={[styles.status, { color: status.color }]}>{status.label}</Text>
-              <Text style={styles.muted}>
+              <ThemedText variant="headlineCard">Scalable Capital</ThemedText>
+              <ThemedText variant="subheadBold" color={status.color} style={{ marginTop: 2 }}>
+                {status.label}
+              </ThemedText>
+              <ThemedText variant="caption" color={colors.textSecondary} style={{ marginTop: 4 }}>
                 {lastSync ? `Ultima sincronizzazione ${lastSync}` : 'Posizioni, movimenti, liquidità, piani e avvisi di prezzo.'}
-              </Text>
+              </ThemedText>
             </View>
             <ChevronRight size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
+          </Card>
         )}
 
         <View style={styles.note}>
-          <Lock size={16} color={colors.textSecondary} style={{ marginRight: 8, marginTop: 2 }} />
-          <Text style={styles.noteText}>
+          <Lock size={16} color={colors.textSecondary} style={{ marginRight: spacing.sm, marginTop: 2 }} />
+          <ThemedText variant="caption" color={colors.textSecondary} style={{ flex: 1, lineHeight: 18 }}>
             Le chiavi di accesso ai broker restano sui nostri server e non arrivano mai sul tuo dispositivo. L&apos;app legge i dati del conto e non invia ordini.
-          </Text>
+          </ThemedText>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -79,32 +73,12 @@ export default function IntegrationsScreen() {
 
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  content: { padding: 16, paddingBottom: 48 },
-  intro: { fontSize: 15, lineHeight: 21, color: colors.textSecondary, marginBottom: 16 },
+  content: { padding: spacing.screenPaddingHorizontal, paddingBottom: spacing.huge },
+  intro: { marginBottom: spacing.lg },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
     minHeight: 72,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  title: { fontSize: 17, fontWeight: '700', color: colors.text },
-  status: { fontSize: 14, fontWeight: '600', marginTop: 2 },
-  muted: { fontSize: 13, lineHeight: 18, color: colors.textSecondary, marginTop: 4 },
-  note: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 24 },
-  noteText: { flex: 1, fontSize: 13, lineHeight: 18, color: colors.textSecondary },
+  note: { flexDirection: 'row', alignItems: 'flex-start', marginTop: spacing.xxl },
 });

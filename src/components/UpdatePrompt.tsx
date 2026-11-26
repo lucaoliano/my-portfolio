@@ -1,4 +1,7 @@
 import { ThemeColors } from '../theme/colors';
+import { radii, continuousCurve } from '../theme/radius';
+import { shadows } from '../theme/shadows';
+import { spacing } from '../theme/spacing';
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -108,19 +111,16 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     maxWidth: 560,
     alignSelf: 'center',
     backgroundColor: colors.card,
-    padding: 16,
-    borderRadius: 12,
+    padding: spacing.lg,
+    borderRadius: radii.md,
+    ...continuousCurve,
     borderWidth: 1,
     borderColor: colors.border,
     zIndex: 9999,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    boxShadow: shadows.floating,
   },
   containerNarrow: {
     flexDirection: 'column',

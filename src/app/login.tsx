@@ -1,9 +1,13 @@
-import { ThemeColors } from '../theme/colors';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TrendingUp, Mail } from 'lucide-react-native';
 import { useAppTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { radii, continuousCurve } from '../theme/radius';
+import { Button } from '../components/ui/Button';
+import { ThemedText } from '../components/ui/ThemedText';
 import { auth } from '../config/firebase';
 import { GoogleAuthProvider, getRedirectResult, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 
@@ -39,7 +43,6 @@ export const LoginScreen = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Se l'accesso è passato dal redirect (popup bloccato), un eventuale errore arriva qui al ritorno
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     let cancelled = false;
@@ -62,7 +65,6 @@ export const LoginScreen = () => {
         return;
       }
       if (errorCode(err) === 'auth/popup-blocked') {
-        // Popup bloccato (succede spesso nella PWA installata su iOS): si ripiega sul redirect
         try {
           await signInWithRedirect(auth, createProvider());
           return;
@@ -80,40 +82,38 @@ export const LoginScreen = () => {
   const isWeb = Platform.OS === 'web';
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.content}>
         <View style={styles.iconContainer} aria-hidden>
           <TrendingUp size={64} color={colors.text} />
         </View>
-        <Text style={styles.title} role="heading">My Portfolio</Text>
-        <Text style={styles.subtitle}>
+        <ThemedText variant="headline" style={styles.title} role="heading">
+          My Portfolio
+        </ThemedText>
+        <ThemedText variant="body" color={colors.textSecondary} style={styles.subtitle}>
           {isWeb
             ? 'Accedi per gestire il tuo portafoglio in modo sicuro e privato.'
             : "L'accesso con Google per ora è disponibile solo dal browser. Apri My Portfolio dal sito o dall'app installata dalla schermata Home."}
-        </Text>
+        </ThemedText>
 
         {isWeb && (
-          <TouchableOpacity
-            style={[styles.loginButton, loading && { opacity: 0.7 }]}
-            onPress={handleGoogleLogin}
-            disabled={loading}
-            accessibilityRole="button"
-            aria-busy={loading}
-            aria-label="Accedi con Google"
-          >
-            {loading ? (
-              <ActivityIndicator color={colors.onAccent} />
-            ) : (
-              <>
-                <Mail size={20} color={colors.onAccent} style={{ marginRight: 12 }} />
-                <Text style={styles.loginButtonText}>Accedi con Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          <View style={styles.buttonWrapper}>
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              title="Accedi con Google"
+              loading={loading}
+              icon={<Mail size={20} color={colors.onAccent} />}
+              onPress={handleGoogleLogin}
+            />
+          </View>
         )}
 
         {error && (
-          <Text style={styles.errorText} role="alert">{error}</Text>
+          <ThemedText variant="subhead" color={colors.negative} style={styles.errorText} role="alert">
+            {error}
+          </ThemedText>
         )}
       </View>
     </SafeAreaView>
@@ -129,52 +129,36 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: spacing.xxxl,
   },
   iconContainer: {
     width: 120,
     height: 120,
-    borderRadius: 60,
+    borderRadius: radii.round,
     backgroundColor: colors.card,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: spacing.xxxl,
+    ...continuousCurve,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 12,
+    marginBottom: spacing.md,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 48,
+    marginBottom: spacing.huge,
     lineHeight: 24,
+    maxWidth: 360,
   },
-  loginButton: {
-    flexDirection: 'row',
-    backgroundColor: colors.positive,
+  buttonWrapper: {
     width: '100%',
     maxWidth: 420,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loginButtonText: {
-    color: colors.onAccent,
-    fontSize: 16,
-    fontWeight: '600',
   },
   errorText: {
-    color: colors.negative,
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 16,
+    marginTop: spacing.lg,
     textAlign: 'center',
+    lineHeight: 20,
   },
 });
 

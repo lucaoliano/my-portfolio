@@ -1,4 +1,4 @@
-function bufferToBase64url(buffer: ArrayBuffer): string {
+export function bufferToBase64url(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let str = '';
   for (const charCode of bytes) {
@@ -8,7 +8,7 @@ function bufferToBase64url(buffer: ArrayBuffer): string {
   return base64String.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
-function base64urlToBuffer(base64url: string): ArrayBuffer {
+export function base64urlToBuffer(base64url: string): ArrayBuffer {
   const padding = '==='.slice((base64url.length + 3) % 4);
   const base64String = base64url.replace(/-/g, '+').replace(/_/g, '/') + padding;
   const str = atob(base64String);
@@ -20,7 +20,7 @@ function base64urlToBuffer(base64url: string): ArrayBuffer {
   return buffer;
 }
 
-function generateRandomChallenge(): Uint8Array {
+export function generateRandomChallenge(): Uint8Array {
   const challenge = new Uint8Array(32);
   crypto.getRandomValues(challenge);
   return challenge;

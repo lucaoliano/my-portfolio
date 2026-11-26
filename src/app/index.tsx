@@ -1,9 +1,13 @@
 import { ThemeColors, withAlpha } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { radii, continuousCurve } from '../theme/radius';
+import { shadows } from '../theme/shadows';
+import { Button } from '../components/ui/Button';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl, Modal, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { LogOut, Search, ChevronRight, ChevronDown, PieChart as PieChartIcon, Settings, Menu, X, User, Calculator, Cpu, Coins, Bell, Receipt, Landmark, RefreshCw, CheckCircle2, AlertCircle, FolderCog, Plus, Link2, Briefcase } from 'lucide-react-native';
+import { LogOut, Search, ChevronRight, ChevronDown, PieChart as PieChartIcon, Settings, Menu, X, User, Calculator, Cpu, Coins, Bell, Receipt, Landmark, RefreshCw, CheckCircle2, AlertCircle, FolderCog, Plus, Link2, Briefcase, Sun, Moon } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useAppTheme } from '../theme/ThemeContext';
@@ -67,7 +71,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const signedPercent = (value: number) => `${value >= 0 ? '+' : ''}${formatNumber(value)}%`;
 
 export const PortfolioScreen = () => {
-  const { colors } = useAppTheme();
+  const { colors, theme, preference, toggleTheme } = useAppTheme();
   const styles = getStyles(colors);
   const router = useRouter();
   const userId = auth.currentUser?.uid;
@@ -423,7 +427,7 @@ export const PortfolioScreen = () => {
 
   if (isInitialLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <PortfolioSkeleton />
       </SafeAreaView>
     );
@@ -776,7 +780,7 @@ export const PortfolioScreen = () => {
   ];
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={[styles.topBar, showCompactTitle && styles.topBarScrolled]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
           <TouchableOpacity
@@ -924,15 +928,24 @@ export const PortfolioScreen = () => {
             <>
               <Text style={styles.emptyText}>Il tuo portafoglio è vuoto</Text>
               <Text style={styles.emptySubText}>Aggiungi il primo titolo o collega il tuo conto Scalable per importare le transazioni.</Text>
-              <TouchableOpacity style={styles.emptyPrimaryButton} onPress={() => router.push('/search')} accessibilityRole="button">
-                <Plus size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
-                <Text style={styles.emptyPrimaryButtonText}>Cerca un titolo</Text>
-              </TouchableOpacity>
+              <Button
+                variant="primary"
+                size="lg"
+                title="Cerca un titolo"
+                fullWidth
+                icon={<Plus size={18} color={colors.onAccent} />}
+                onPress={() => router.push('/search')}
+              />
               {!isScalableConnected && (
-                <TouchableOpacity style={styles.emptySecondaryButton} onPress={() => router.push('/integrations/scalable')} accessibilityRole="button">
-                  <Link2 size={18} color={colors.text} style={{ marginRight: 8 }} />
-                  <Text style={styles.emptySecondaryButtonText}>Collega Scalable</Text>
-                </TouchableOpacity>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  title="Collega Scalable"
+                  fullWidth
+                  style={{ marginTop: spacing.md }}
+                  icon={<Link2 size={18} color={colors.text} />}
+                  onPress={() => router.push('/integrations/scalable')}
+                />
               )}
             </>
           ) : (
@@ -943,17 +956,17 @@ export const PortfolioScreen = () => {
               <Text style={styles.emptySubText}>
                 Non ci sono transazioni assegnate a questo portafoglio.
               </Text>
-              <TouchableOpacity
-                style={styles.emptyPrimaryButton}
+              <Button
+                variant="primary"
+                size="lg"
+                title="Aggiungi a questo portafoglio"
+                fullWidth
+                icon={<Plus size={18} color={colors.onAccent} />}
                 onPress={() => router.push({
                   pathname: '/search',
                   params: selectedPortfolioId !== 'all' ? { portfolioId: selectedPortfolioId } : undefined,
                 })}
-                accessibilityRole="button"
-              >
-                <Plus size={18} color={colors.onAccent} style={{ marginRight: 8 }} />
-                <Text style={styles.emptyPrimaryButtonText}>Aggiungi a questo portafoglio</Text>
-              </TouchableOpacity>
+              />
             </>
           )}
         </View>
@@ -1281,6 +1294,25 @@ export const PortfolioScreen = () => {
             ))}
 
             <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                void toggleTheme();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Passa al tema ${theme === 'dark' ? 'chiaro' : 'scuro'}`}
+            >
+              <View style={styles.menuItemIcon}>
+                {theme === 'dark' ? <Sun size={24} color={colors.text} /> : <Moon size={24} color={colors.text} />}
+              </View>
+              <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.menuItemText}>Tema</Text>
+                <Text style={{ fontSize: 14, color: colors.textSecondary }}>
+                  {preference === 'automatic' ? 'Sistema' : theme === 'dark' ? 'Scuro' : 'Chiaro'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[styles.menuItem, { borderBottomWidth: 0 }]}
               onPress={() => {
                 setMenuVisible(false);
@@ -1307,9 +1339,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingHorizontal: spacing.headerPaddingHorizontal,
+    paddingTop: spacing.headerPaddingTop,
+    paddingBottom: spacing.headerPaddingBottom,
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: 'transparent',
   },
@@ -1431,18 +1464,15 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   syncBanner: {
     position: 'absolute',
     top: 8,
-    left: 16,
-    right: 16,
+    left: spacing.lg,
+    right: spacing.lg,
     zIndex: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-    paddingVertical: 8,
+    boxShadow: shadows.floating,
+    paddingVertical: spacing.sm,
     paddingLeft: 14,
     paddingRight: 4,
-    borderRadius: 12,
+    borderRadius: radii.md,
+    ...continuousCurve,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1753,9 +1783,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 24,
   },
   groupOuterContainer: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    borderRadius: radii.lg,
+    ...continuousCurve,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',

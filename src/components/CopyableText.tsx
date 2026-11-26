@@ -4,6 +4,8 @@ import * as Clipboard from 'expo-clipboard';
 import { Copy } from 'lucide-react-native';
 import { useAppTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { radii, continuousCurve } from '../theme/radius';
+import { shadows } from '../theme/shadows';
 
 interface CopyableTextProps extends TextProps {
   valueToCopy: string;
@@ -104,12 +106,9 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   menuBubble: {
     position: 'absolute',
     backgroundColor: colors.card,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    borderRadius: radii.md,
+    ...continuousCurve,
+    boxShadow: shadows.raised,
     borderWidth: 1,
     borderColor: colors.border,
   },

@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ChevronLeft, AlertCircle } from 'lucide-react-native';
+import { ScreenHeader } from '../components/ScreenHeader';
+import { AlertCircle } from 'lucide-react-native';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 import { useAppTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { radii, continuousCurve } from '../theme/radius';
 import { auth, db } from '../config/firebase';
 import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
 import { usePeriodSeries } from '../hooks/usePeriodSeries';
@@ -35,7 +37,6 @@ const pct = (rate: number) => `${formatNumber(rate * 100)}%`;
  * Stessa aliquota, ma chi la versa cambia: il broker italiano la trattiene, con uno estero la dichiari tu.
  */
 export default function WealthTaxScreen() {
-  const router = useRouter();
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const userId = auth.currentUser?.uid;
@@ -83,27 +84,14 @@ export default function WealthTaxScreen() {
       .filter((b): b is { id: BrokerId; label: string; estimate: WealthTaxEstimate } => b !== null && (b.estimate.lines.length > 0 || b.estimate.cash !== null || b.estimate.missing.length > 0));
   }, [isCurrentYear, series, nowEurByKey, transactions, year, isScalableConnected, scalableCash]);
 
-  const header = (
-    <View style={styles.header}>
-      <TouchableOpacity
-        style={styles.iconButton}
-        onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-        accessibilityRole="button"
-        accessibilityLabel="Indietro"
-      >
-        <ChevronLeft size={26} color={colors.text} />
-      </TouchableOpacity>
-      <Text style={styles.headerTitle} accessibilityRole="header">Bollo e IVAFE</Text>
-      <View style={styles.iconButton} />
-    </View>
-  );
+  const header = <ScreenHeader title="Bollo e IVAFE" />;
 
   const withheld = estimates?.filter(b => regimeOf(b.id) === 'bollo').reduce((s, b) => s + b.estimate.total, 0) ?? 0;
   const toPay = estimates?.filter(b => regimeOf(b.id) === 'ivafe').reduce((s, b) => s + b.estimate.total, 0) ?? 0;
   const total = estimates?.reduce((s, b) => s + b.estimate.total, 0) ?? 0;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       {header}
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.disclaimer}>
@@ -269,36 +257,36 @@ export default function WealthTaxScreen() {
 
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  center: { alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
-  content: { padding: 16, paddingBottom: 48 },
-  disclaimer: { fontSize: 12, lineHeight: 17, color: colors.textSecondary, marginBottom: 16 },
+  center: { alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xxxl },
+  content: { padding: spacing.screenPaddingHorizontal, paddingBottom: spacing.huge },
+  disclaimer: { fontSize: 12, lineHeight: 17, color: colors.textSecondary, marginBottom: spacing.lg },
   muted: { fontSize: 14, lineHeight: 20, color: colors.textSecondary },
-  emptyCard: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 16, padding: 20, marginBottom: 24, gap: 8 },
+  emptyCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    ...continuousCurve,
+    padding: spacing.xl,
+    marginBottom: spacing.xxl,
+    gap: spacing.sm,
+  },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
   segmented: {
     flexDirection: 'row',
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
+    borderRadius: radii.sm,
+    ...continuousCurve,
     padding: 3,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
-  segment: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 8, paddingHorizontal: 8 },
+  segment: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radii.xs, ...continuousCurve, paddingHorizontal: 8 },
   segmentActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   segmentText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
   segmentTextActive: { color: colors.text },
-  regimeChooser: { marginTop: 12, marginBottom: 12 },
-  hero: { marginBottom: 16 },
+  regimeChooser: { marginTop: spacing.md, marginBottom: spacing.md },
+  hero: { marginBottom: spacing.lg },
   heroLabel: { fontSize: 14, color: colors.textSecondary, marginBottom: 4 },
   heroValue: { fontSize: 32, fontWeight: '700', color: colors.text, fontVariant: ['tabular-nums'] },
   heroNote: { fontSize: 14, lineHeight: 20, color: colors.textSecondary, marginTop: 6 },
@@ -306,28 +294,45 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: colors.warningSurface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+    borderRadius: radii.md,
+    ...continuousCurve,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
-  noticeIcon: { marginRight: 8, marginTop: 2 },
+  noticeIcon: { marginRight: spacing.sm, marginTop: 2 },
   noticeText: { flex: 1, fontSize: 14, lineHeight: 20, color: colors.text },
-  card: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 20 },
+  card: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    ...continuousCurve,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
+  },
   cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.md },
   totalLabel: { fontSize: 15, fontWeight: '600', color: colors.text },
   totalValue: { fontSize: 22, fontWeight: '700', color: colors.text, fontVariant: ['tabular-nums'] },
   cardNote: { fontSize: 13, lineHeight: 18, color: colors.textSecondary, marginTop: 4, marginBottom: 4 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 10, gap: 12 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 10, gap: spacing.md },
   rowLabel: { flex: 1, fontSize: 14, lineHeight: 20, color: colors.textSecondary },
   rowValue: { fontSize: 15, fontWeight: '600', color: colors.text, fontVariant: ['tabular-nums'] },
-  lines: { marginTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
-  line: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  lines: { marginTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
+  line: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   lineName: { fontSize: 14, fontWeight: '600', color: colors.text },
   lineMeta: { fontSize: 12, lineHeight: 17, color: colors.textSecondary, marginTop: 2, fontVariant: ['tabular-nums'] },
   lineValue: { fontSize: 14, fontWeight: '600', color: colors.text, fontVariant: ['tabular-nums'] },
-  sectionTitle: { fontSize: 17, fontWeight: '700', color: colors.text, marginTop: 8, marginBottom: 12 },
-  ruleCard: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 14, padding: 14, marginBottom: 10 },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: colors.text, marginTop: spacing.sm, marginBottom: spacing.md },
+  ruleCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    ...continuousCurve,
+    padding: 14,
+    marginBottom: 10,
+  },
   ruleTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
   ruleText: { fontSize: 14, lineHeight: 20, color: colors.textSecondary, marginTop: 6 },
 });

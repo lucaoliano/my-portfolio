@@ -2,17 +2,60 @@ import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Stack, useRouter, useSegments, ThemeProvider as ExpoThemeProvider, DefaultTheme, DarkTheme } from 'expo-router';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, TouchableOpacity, AppState, AppStateStatus, ActivityIndicator, Platform } from 'react-native';
+import { View, AppState, AppStateStatus, ActivityIndicator, Platform } from 'react-native';
 import { Lock } from 'lucide-react-native';
 
 import '../global.css';
 import { ThemeProvider, useAppTheme } from '../theme/ThemeContext';
-import { auth, signOutAndClearData } from '../config/firebase';
+import { spacing } from '../theme/spacing';
+import { radii, continuousCurve } from '../theme/radius';
+import { Button } from '../components/ui/Button';
+import { ThemedText } from '../components/ui/ThemedText';
+import { auth, signOutAndClearData, db } from '../config/firebase';
+import { collection, doc, setDoc, addDoc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { PortfolioSkeleton } from '../components/PortfolioSkeleton';
 import { UpdatePrompt } from '../components/UpdatePrompt';
 import { InstallPrompt } from '../components/InstallPrompt';
 import { useBiometrics } from '../hooks/useBiometrics';
+import * as taxLossTracker from '../utils/taxLossTracker';
+import * as wealthTax from '../utils/wealthTax';
+import * as savingsPlansRebalance from '../utils/savingsPlansRebalance';
+import * as periodPerformance from '../utils/periodPerformance';
+import * as priceAlerts from '../utils/priceAlerts';
+import * as xirr from '../utils/xirr';
+import * as portfolioHealthCheck from '../utils/portfolioHealthCheck';
+import * as priceHistory from '../utils/priceHistory';
+import * as historyBackfill from '../utils/historyBackfill';
+import * as portfolioManager from '../utils/portfolioManager';
+import * as pacCalculator from '../utils/pacCalculator';
+import * as cashInterest from '../utils/cashInterest';
+import * as formatters from '../utils/formatters';
+import * as webauthn from '../utils/webauthn';
+import * as scalableMcp from '../services/scalableMcp';
+
+if (typeof window !== 'undefined') {
+  (window as unknown as { __FINANCE_UTILS__?: Record<string, unknown> }).__FINANCE_UTILS__ = {
+    auth,
+    db,
+    firestore: { collection, doc, setDoc, addDoc, getDoc },
+    taxLossTracker,
+    wealthTax,
+    savingsPlansRebalance,
+    periodPerformance,
+    priceAlerts,
+    xirr,
+    portfolioHealthCheck,
+    priceHistory,
+    historyBackfill,
+    portfolioManager,
+    pacCalculator,
+    cashInterest,
+    formatters,
+    webauthn,
+    scalableMcp,
+  };
+}
 
 function InnerLayout() {
   const [user, setUser] = React.useState<User | null>(null);
@@ -138,38 +181,39 @@ function InnerLayout() {
       <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
         <ExpoThemeProvider value={CustomTheme}>
           <StatusBar style={theme === 'dark' ? "light" : "dark"} />
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, paddingTop: 8 }}>
-            <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: colors.card, justifyContent: 'center', alignItems: 'center', marginBottom: 24 }} aria-hidden>
-              <Lock size={48} color={colors.text} />
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, paddingHorizontal: spacing.lg }}>
+            <View style={{ width: 96, height: 96, borderRadius: radii.round, backgroundColor: colors.card, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.xl, ...continuousCurve }} aria-hidden>
+              <Lock size={44} color={colors.text} />
             </View>
-            <Text style={{ fontSize: 24, fontWeight: '700', color: colors.text, marginBottom: 12 }} role="heading">App bloccata</Text>
-            <Text style={{ fontSize: 16, color: colors.textSecondary, marginBottom: 32, textAlign: 'center', paddingHorizontal: 32 }}>
+            <ThemedText variant="title" style={{ marginBottom: spacing.sm, textAlign: 'center' }} role="heading">
+              App bloccata
+            </ThemedText>
+            <ThemedText variant="body" color={colors.textSecondary} style={{ marginBottom: spacing.xxxl, textAlign: 'center', maxWidth: 360, paddingHorizontal: spacing.lg }}>
               {Platform.OS === 'web'
                 ? 'Usa la passkey di questo dispositivo per vedere il tuo portafoglio.'
                 : 'Usa Face ID, impronta o il codice del dispositivo per vedere il tuo portafoglio.'}
-            </Text>
-            <View style={{ width: '100%', maxWidth: 420, paddingHorizontal: 24, gap: 12 }}>
-              <TouchableOpacity
-                style={{ backgroundColor: colors.positive, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', opacity: unlocking ? 0.7 : 1 }}
+            </ThemedText>
+            <View style={{ width: '100%', maxWidth: 420, gap: spacing.md }}>
+              <Button
+                variant="primary"
+                size="lg"
+                fullWidth
+                title="Sblocca"
+                loading={unlocking}
                 onPress={() => void unlock()}
+              />
+              <Button
+                variant="secondary"
+                size="lg"
+                fullWidth
+                title="Esci dall'account"
                 disabled={unlocking}
-                accessibilityRole="button"
-                aria-busy={unlocking}
-              >
-                {unlocking
-                  ? <ActivityIndicator color={colors.onAccent} />
-                  : <Text style={{ color: colors.onAccent, fontSize: 16, fontWeight: '600' }}>Sblocca</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={{ height: 50, borderRadius: 25, borderWidth: 1, borderColor: colors.inputBorder, justifyContent: 'center', alignItems: 'center' }}
                 onPress={() => void signOutFromLock()}
-                disabled={unlocking}
-                accessibilityRole="button"
-              >
-                <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>Esci dall&apos;account</Text>
-              </TouchableOpacity>
+              />
               {unlockError && (
-                <Text style={{ color: colors.negative, fontSize: 14, textAlign: 'center' }} role="alert">{unlockError}</Text>
+                <ThemedText variant="caption" color={colors.negative} style={{ textAlign: 'center', marginTop: spacing.xs }} role="alert">
+                  {unlockError}
+                </ThemedText>
               )}
             </View>
           </View>

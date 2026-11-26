@@ -16,7 +16,7 @@ colors:
   loss-surface: "#37181C"
   info-blue: "#60A5FA"
   info-surface: "#1E293B"
-  selection-navy: "#004481"
+  selection-accent: "#00D166"
   chart-invested: "#E58E26"
   chart-growth: "#7BC676"
   chart-withdrawal: "#A855F7"
@@ -152,7 +152,7 @@ Un canvas neutro e scuro su cui solo i numeri accendono il colore.
 - **Scalable Teal** (scalable-teal, chiaro: scalable-teal-light): esclusivamente l'integrazione Scalable Capital: pulsante "Sincronizza", badge SCALABLE sulle transazioni, card della liquidità, chip "Scalable" nell'header. Su superficie piena usa scalable-surface.
 - **Signal Amber** (signal-amber, chiaro: signal-amber-light): price alert con soglia raggiunta (il più urgente) e avvisi non bloccanti; superficie amber-surface. Gli alert solo in avvicinamento restano nel teal Scalable, più calmo.
 - **Info Blue** (info-blue, chiaro: info-blue-light): note e suggerimenti neutri; superficie info-surface.
-- **Selection Navy** (selection-navy): segmento selezionato nei controlli del calcolatore PAC, con testo bianco.
+- **Selection Accent** (selection): elemento o controllo selezionato nei controlli del calcolatore PAC e slider, allineato al colore primario del tema.
 
 ### Chart Series
 - **Chart Invested / Growth / Withdrawal / Contributions**: le quattro serie dei grafici PAC (capitale versato, rendimento, prelievi, contributi). Nel tema chiaro hanno varianti più scure in `src/theme/colors.ts`.

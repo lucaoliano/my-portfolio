@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ChevronLeft, RefreshCw, AlertCircle, Info } from 'lucide-react-native';
+import { RefreshCw, AlertCircle, Info } from 'lucide-react-native';
+import { ScreenHeader } from '../components/ScreenHeader';
 
 import { useAppTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { radii, continuousCurve } from '../theme/radius';
 import { auth } from '../config/firebase';
 import { useTransactions } from '../hooks/useTransactions';
 import { useAssetCategories } from '../hooks/useAssetCategories';
@@ -43,7 +45,6 @@ const TREATMENT_NOTE: Record<NonNullable<RealizedTrade['treatment']>, string | n
  * Il numero può finire in una dichiarazione dei redditi: diciamo sempre come è calcolato e che fa fede il broker.
  */
 export default function TaxReportScreen() {
-  const router = useRouter();
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const [activeTab, setActiveTab] = useState<ActiveTab>('years');
@@ -66,36 +67,28 @@ export default function TaxReportScreen() {
   const report = selected?.report ?? null;
 
   const header = (
-    <View style={styles.header}>
-      <TouchableOpacity
-        style={styles.iconButton}
-        onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-        accessibilityRole="button"
-        accessibilityLabel="Indietro"
-      >
-        <ChevronLeft size={26} color={colors.text} />
-      </TouchableOpacity>
-      <Text style={styles.headerTitle} accessibilityRole="header">Zainetto fiscale</Text>
-      {isScalableConnected ? (
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={refreshTaxReport}
-          disabled={refreshing}
-          accessibilityRole="button"
-          accessibilityLabel="Aggiorna da Scalable"
-          aria-busy={refreshing}
-        >
-          {refreshing ? <ActivityIndicator size="small" color={colors.textSecondary} /> : <RefreshCw size={20} color={colors.text} />}
-        </TouchableOpacity>
-      ) : (
-        <View style={styles.iconButton} />
-      )}
-    </View>
+    <ScreenHeader
+      title="Zainetto fiscale"
+      rightAction={
+        isScalableConnected ? (
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={refreshTaxReport}
+            disabled={refreshing}
+            accessibilityRole="button"
+            accessibilityLabel="Aggiorna da Scalable"
+            aria-busy={refreshing}
+          >
+            {refreshing ? <ActivityIndicator size="small" color={colors.textSecondary} /> : <RefreshCw size={20} color={colors.text} />}
+          </TouchableOpacity>
+        ) : undefined
+      }
+    />
   );
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         {header}
         <View style={styles.center}>
           <ActivityIndicator color={colors.textSecondary} />
@@ -108,7 +101,7 @@ export default function TaxReportScreen() {
   const hasSales = brokers.some(b => b.report.realizedTrades.length > 0 || (b.report.excludedTrades?.length ?? 0) > 0);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       {header}
       <ScrollView contentContainerStyle={styles.content}>
         {/* Come è calcolato: prima del numero, non in fondo */}
@@ -337,35 +330,35 @@ const TradeRow = ({ trade, styles, colors }: { trade: RealizedTrade; styles: Ret
 
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
-  content: { padding: 16, paddingBottom: 48 },
-  disclaimer: { fontSize: 12, lineHeight: 17, color: colors.textSecondary, marginBottom: 16 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xxl },
+  content: { padding: spacing.screenPaddingHorizontal, paddingBottom: spacing.huge },
+  disclaimer: { fontSize: 12, lineHeight: 17, color: colors.textSecondary, marginBottom: spacing.lg },
   muted: { fontSize: 14, lineHeight: 20, color: colors.textSecondary, textAlign: 'left' },
-  emptyCard: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 16, padding: 20, marginBottom: 24, gap: 8 },
+  emptyCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    ...continuousCurve,
+    padding: spacing.xl,
+    marginBottom: spacing.xxl,
+    gap: spacing.sm,
+  },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
   segmented: {
     flexDirection: 'row',
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
+    borderRadius: radii.sm,
+    ...continuousCurve,
     padding: 3,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
-  segment: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 8, paddingHorizontal: 8 },
+  segment: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radii.xs, ...continuousCurve, paddingHorizontal: 8 },
   segmentActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   segmentText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
   segmentTextActive: { color: colors.text },
-  hero: { marginBottom: 16 },
+  hero: { marginBottom: spacing.lg },
   heroLabel: { fontSize: 14, color: colors.textSecondary, marginBottom: 4 },
   heroValue: { fontSize: 32, fontWeight: '700', color: colors.text, fontVariant: ['tabular-nums'] },
   heroNote: { fontSize: 14, lineHeight: 20, color: colors.textSecondary, marginTop: 6 },
@@ -373,30 +366,40 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: colors.warningSurface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+    borderRadius: radii.md,
+    ...continuousCurve,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
-  noticeIcon: { marginRight: 8, marginTop: 2 },
+  noticeIcon: { marginRight: spacing.sm, marginTop: 2 },
   noticeText: { flex: 1, fontSize: 14, lineHeight: 20, color: colors.text },
   noticeDetail: { fontSize: 13, lineHeight: 18, color: colors.text, marginTop: 4 },
-  yearCard: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 20 },
+  yearCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    ...continuousCurve,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
+  },
   cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  yearRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 10, gap: 12 },
+  yearRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 10, gap: spacing.md },
   yearLabel: { flex: 1, fontSize: 14, lineHeight: 20, color: colors.textSecondary },
   yearValue: { fontSize: 15, fontWeight: '600', color: colors.text, fontVariant: ['tabular-nums'] },
   tabs: {
     flexDirection: 'row',
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
+    borderRadius: radii.sm,
+    ...continuousCurve,
     padding: 3,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
-  tab: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 8, paddingHorizontal: 4 },
+  tab: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radii.xs, ...continuousCurve, paddingHorizontal: 4 },
   tabActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   tabText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
   tabTextActive: { color: colors.text },
-  sectionTitle: { fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 12 },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: spacing.md },
   bucketCard: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 12 },
   bucketHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   bucketStatus: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },

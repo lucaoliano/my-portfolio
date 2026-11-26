@@ -9,6 +9,8 @@ import {
   Platform,
 } from 'react-native';
 import { ThemeColors } from '../theme/colors';
+import { shadows } from '../theme/shadows';
+import { radii } from '../theme/radius';
 import { useAppTheme } from '../theme/ThemeContext';
 
 interface PacSliderProps {
@@ -196,38 +198,34 @@ const getStyles = (colors: ThemeColors) =>
     },
     trackBackground: {
       height: 6,
-      backgroundColor: colors.inputBorder,
-      borderRadius: 3,
+      backgroundColor: colors.inputBackground,
+      borderRadius: radii.xs,
       overflow: 'hidden',
       width: '100%',
     },
     trackFill: {
       height: '100%',
-      backgroundColor: colors.selection,
-      borderRadius: 3,
+      backgroundColor: colors.positive,
+      borderRadius: radii.xs,
     },
     thumb: {
       position: 'absolute',
       width: 24,
       height: 24,
-      borderRadius: 12,
-      backgroundColor: colors.selection,
+      borderRadius: radii.round,
+      backgroundColor: colors.positive,
       marginLeft: -12,
       justifyContent: 'center',
       alignItems: 'center',
       borderWidth: 3,
       borderColor: colors.card,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 3,
-      elevation: 4,
+      boxShadow: shadows.segmentLift,
     },
     thumbInner: {
       width: 6,
       height: 6,
       borderRadius: 3,
-      backgroundColor: colors.onStrong,
+      backgroundColor: colors.onAccent,
     },
     labelsRow: {
       flexDirection: 'row',

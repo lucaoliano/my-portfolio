@@ -1,10 +1,15 @@
-import { ThemeColors } from '../theme/colors';
-import { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, TextInput, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Plus } from 'lucide-react-native';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { useAppTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { radii, continuousCurve } from '../theme/radius';
+import { ThemedText } from '../components/ui/ThemedText';
+import { Button } from '../components/ui/Button';
 import { searchSymbol, YahooSearchResult } from '../services/yahooFinance';
 
 const QUOTE_TYPE_LABELS: Record<string, string> = {
@@ -13,7 +18,6 @@ const QUOTE_TYPE_LABELS: Record<string, string> = {
   MUTUALFUND: 'Fondo',
 };
 
-// Codici di borsa di Yahoo → nomi leggibili; i codici sconosciuti restano come arrivano
 const EXCHANGE_LABELS: Record<string, string> = {
   MIL: 'Borsa Italiana',
   GER: 'Xetra',
@@ -57,7 +61,6 @@ export const SearchScreen = () => {
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<YahooSearchResult[]>([]);
-  // Query a cui si riferiscono i risultati mostrati (per non dire "nessun risultato" mentre si cerca)
   const [resultsFor, setResultsFor] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -80,7 +83,6 @@ export const SearchScreen = () => {
   useEffect(() => {
     if (trimmed.length === 0) return;
 
-    // Una risposta arrivata dopo che la query è cambiata non deve sovrascrivere quella nuova
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
@@ -111,14 +113,15 @@ export const SearchScreen = () => {
   };
 
   const addToPortfolio = (item: YahooSearchResult) => {
+    const displayName = item.longname || item.shortname || item.symbol;
     router.push({
       pathname: '/add-transaction',
       params: {
         symbol: item.symbol,
-        name: item.longname || item.shortname,
+        name: displayName,
         fromSearch: 'true',
         preselectedPortfolioId: searchParams.portfolioId,
-      }
+      },
     });
   };
 
@@ -126,29 +129,47 @@ export const SearchScreen = () => {
     if (trimmed.length === 0) {
       return (
         <View style={styles.centerContainer}>
-          <Text style={styles.emptyText}>Cerca per nome, ticker o ISIN</Text>
+          <ThemedText variant="subhead" color={colors.textSecondary} style={styles.emptyText}>
+            Cerca per nome dell&apos;azienda, codice ticker (es. AAPL, VWCE) o codice ISIN.
+          </ThemedText>
         </View>
       );
     }
-    if (loading || resultsFor !== trimmed) return null;
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.emptyText}>Nessun risultato per “{trimmed}”</Text>
-      </View>
-    );
+    if (loading) {
+      return (
+        <View style={styles.centerContainer}>
+          <ThemedText variant="subhead" color={colors.textSecondary} style={styles.emptyText}>
+            Ricerca in corso...
+          </ThemedText>
+        </View>
+      );
+    }
+    if (resultsFor === trimmed) {
+      return (
+        <View style={styles.centerContainer}>
+          <ThemedText variant="subhead" color={colors.textSecondary} style={styles.emptyText}>
+            Nessun titolo trovato per “{trimmed}”.
+          </ThemedText>
+        </View>
+      );
+    }
+    return null;
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
+      <ScreenHeader>
+        <Pressable
+          style={({ pressed }) => [
+            styles.backButton,
+            { opacity: pressed ? 0.7 : 1 },
+          ]}
           onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
           accessibilityRole="button"
           aria-label="Indietro"
         >
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
+          <ArrowLeft size={22} color={colors.text} />
+        </Pressable>
         <View style={styles.inputWrap}>
           <TextInput
             style={styles.searchInput}
@@ -171,14 +192,20 @@ export const SearchScreen = () => {
             />
           )}
         </View>
-      </View>
+      </ScreenHeader>
 
       {error ? (
         <View style={styles.centerContainer} accessibilityLiveRegion="polite">
-          <Text style={styles.emptyText} role="alert">Ricerca non disponibile. Riprova.</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={retry} accessibilityRole="button">
-            <Text style={styles.retryText}>Riprova</Text>
-          </TouchableOpacity>
+          <ThemedText variant="bodyMedium" color={colors.textSecondary} style={styles.emptyText} role="alert">
+            Ricerca non disponibile. Riprova.
+          </ThemedText>
+          <Button
+            variant="secondary"
+            size="md"
+            title="Riprova"
+            onPress={retry}
+            style={{ marginTop: spacing.lg }}
+          />
         </View>
       ) : (
         <FlatList
@@ -194,18 +221,25 @@ export const SearchScreen = () => {
               item.exchange ? (EXCHANGE_LABELS[item.exchange] ?? item.exchange) : null,
             ].filter(Boolean).join(' · ');
             return (
-              <TouchableOpacity
-                style={styles.resultItem}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.resultItem,
+                  { backgroundColor: pressed ? colors.inputBackground : colors.background },
+                ]}
                 onPress={() => addToPortfolio(item)}
                 accessibilityRole="button"
                 aria-label={`Aggiungi ${name}`}
               >
                 <View style={styles.resultInfo}>
-                  <Text style={styles.name} numberOfLines={2}>{name}</Text>
-                  <Text style={styles.details} numberOfLines={1}>{details}</Text>
+                  <ThemedText variant="bodyBold" numberOfLines={2}>
+                    {name}
+                  </ThemedText>
+                  <ThemedText variant="subhead" color={colors.textSecondary} numberOfLines={1} style={{ marginTop: 2 }}>
+                    {details}
+                  </ThemedText>
                 </View>
                 <Plus size={20} color={colors.textSecondary} aria-hidden />
-              </TouchableOpacity>
+              </Pressable>
             );
           }}
         />
@@ -219,35 +253,27 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: 8,
-    paddingRight: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
   backButton: {
-    width: 44,
-    height: 44,
+    width: spacing.headerButtonSize,
+    height: spacing.headerButtonSize,
+    borderRadius: radii.sm,
+    ...continuousCurve,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   inputWrap: {
     flex: 1,
     justifyContent: 'center',
   },
   searchInput: {
-    height: 48,
+    height: 44,
     backgroundColor: colors.inputBackground,
-    borderRadius: 8,
+    borderRadius: radii.sm,
+    ...continuousCurve,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    paddingLeft: 16,
+    paddingLeft: spacing.lg,
     paddingRight: 44,
     color: colors.text,
     fontSize: 16,
@@ -260,51 +286,26 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
   },
   emptyText: {
-    color: colors.textSecondary,
-    fontSize: 16,
-    marginTop: 40,
+    marginTop: spacing.xxxl,
     textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: 16,
-    minHeight: 44,
-    paddingHorizontal: 24,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  retryText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
+    maxWidth: 320,
+    lineHeight: 22,
   },
   resultItem: {
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 64,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.screenPaddingHorizontal,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
   resultInfo: {
     flex: 1,
-    marginRight: 16,
-  },
-  name: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  details: {
-    color: colors.textSecondary,
-    fontSize: 14,
+    marginRight: spacing.lg,
   },
 });
 

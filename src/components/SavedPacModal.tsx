@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import { X, Trash2, Download, Plus, Check, FileText, RefreshCw, AlertCircle } from 'lucide-react-native';
 import { ThemeColors, withAlpha } from '../theme/colors';
+import { radii, continuousCurve } from '../theme/radius';
 import { useAppTheme } from '../theme/ThemeContext';
 import { formatNumber, formatDecimal } from '../utils/formatters';
 import { PacParams, PacYearData, generatePacCsv, CSV_BOM, ContributionFrequency } from '../utils/pacCalculator';
@@ -480,16 +481,17 @@ const getStyles = (colors: ThemeColors) =>
     },
     saveNewBtn: {
       flex: 1.2,
-      backgroundColor: colors.selection,
+      backgroundColor: colors.positive,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 12,
       minHeight: 44,
-      borderRadius: 10,
+      borderRadius: radii.sm,
+      ...continuousCurve,
     },
     saveNewBtnText: {
-      color: colors.onStrong,
+      color: colors.onAccent,
       fontSize: 13,
       fontWeight: 'bold',
     },
@@ -691,15 +693,16 @@ const getStyles = (colors: ThemeColors) =>
       fontSize: 13,
     },
     overwriteConfirmBtn: {
-      backgroundColor: colors.selection,
+      backgroundColor: colors.positive,
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 12,
       minHeight: 44,
-      borderRadius: 6,
+      borderRadius: radii.xs,
+      ...continuousCurve,
     },
     overwriteConfirmText: {
-      color: colors.onStrong,
+      color: colors.onAccent,
       fontSize: 13,
       fontWeight: 'bold',
     },

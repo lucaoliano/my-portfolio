@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, ChevronRight, User as UserIcon, LogOut } from 'lucide-react-native';
+import { ChevronRight, User as UserIcon, LogOut, Calculator, Settings } from 'lucide-react-native';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { useAppTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { radii, continuousCurve } from '../theme/radius';
+import { ThemedText } from '../components/ui/ThemedText';
+import { Button } from '../components/ui/Button';
 import { auth, signOutAndClearData } from '../config/firebase';
 
 export default function ProfileScreen() {
@@ -19,50 +24,71 @@ export default function ProfileScreen() {
       await signOutAndClearData();
       router.replace('/login');
     } catch (error) {
-      console.warn("Errore logout:", error);
+      console.warn('Errore logout:', error);
       setLogoutError('Uscita non riuscita. Riprova.');
     }
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
-          accessibilityRole="button"
-          aria-label="Indietro"
-        >
-          <ChevronLeft size={28} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} role="heading">Profilo</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title="Profilo" />
 
       <View style={styles.content}>
         <View style={styles.avatarContainer} aria-hidden>
-          <UserIcon size={64} color={colors.textSecondary} />
+          <UserIcon size={56} color={colors.textSecondary} />
         </View>
 
-        <Text style={styles.emailText}>{auth.currentUser?.email || 'Utente'}</Text>
+        <ThemedText variant="title" style={styles.emailText}>
+          {auth.currentUser?.email || 'Utente'}
+        </ThemedText>
 
-        <TouchableOpacity style={styles.settingsButton} onPress={() => router.push('/pac-calculator' as never)} accessibilityRole="button">
-          <Text style={styles.settingsButtonText}>Simulatore PAC</Text>
-          <ChevronRight size={20} color={colors.textSecondary} />
-        </TouchableOpacity>
+        <View style={styles.menuCard}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.menuRow,
+              { backgroundColor: pressed ? colors.inputBackground : colors.card },
+            ]}
+            onPress={() => router.push('/pac-calculator' as never)}
+            accessibilityRole="button"
+          >
+            <View style={styles.menuLeft}>
+              <Calculator size={20} color={colors.textSecondary} style={{ marginRight: spacing.md }} />
+              <ThemedText variant="bodyMedium">Simulatore PAC</ThemedText>
+            </View>
+            <ChevronRight size={20} color={colors.textSecondary} />
+          </Pressable>
 
-        <TouchableOpacity style={styles.settingsButton} onPress={() => router.push('/settings' as never)} accessibilityRole="button">
-          <Text style={styles.settingsButtonText}>Impostazioni</Text>
-          <ChevronRight size={20} color={colors.textSecondary} />
-        </TouchableOpacity>
+          <Pressable
+            style={({ pressed }) => [
+              styles.menuRow,
+              { borderBottomWidth: 0, backgroundColor: pressed ? colors.inputBackground : colors.card },
+            ]}
+            onPress={() => router.push('/settings' as never)}
+            accessibilityRole="button"
+          >
+            <View style={styles.menuLeft}>
+              <Settings size={20} color={colors.textSecondary} style={{ marginRight: spacing.md }} />
+              <ThemedText variant="bodyMedium">Impostazioni</ThemedText>
+            </View>
+            <ChevronRight size={20} color={colors.textSecondary} />
+          </Pressable>
+        </View>
 
-        {/* Uscire non è distruttivo: contorno neutro, non rosso (Meaning-Only Color) */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} accessibilityRole="button">
-          <LogOut size={20} color={colors.text} style={{ marginRight: 12 }} />
-          <Text style={styles.logoutText}>Esci dall&apos;account</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonWrapper}>
+          <Button
+            variant="secondary"
+            size="lg"
+            fullWidth
+            title="Esci dall'account"
+            icon={<LogOut size={20} color={colors.text} />}
+            onPress={handleLogout}
+          />
+        </View>
+
         {logoutError && (
-          <Text style={styles.errorText} role="alert">{logoutError}</Text>
+          <ThemedText variant="caption" color={colors.negative} style={styles.errorText} role="alert">
+            {logoutError}
+          </ThemedText>
         )}
       </View>
     </SafeAreaView>
@@ -74,93 +100,59 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-  headerSpacer: {
-    width: 44,
-  },
-  headerTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '600',
-  },
   content: {
     flex: 1,
-    padding: 24,
+    paddingHorizontal: spacing.screenPaddingHorizontal,
+    paddingTop: spacing.xxl,
     alignItems: 'center',
   },
   avatarContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 104,
+    height: 104,
+    borderRadius: radii.round,
     backgroundColor: colors.card,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
+    ...continuousCurve,
   },
   emailText: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 48,
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    paddingHorizontal: 24,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    width: '100%',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  errorText: {
-    color: colors.negative,
-    fontSize: 14,
-    marginTop: 12,
+    marginBottom: spacing.xxxl,
     textAlign: 'center',
   },
-  settingsButton: {
+  menuCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    ...continuousCurve,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    marginBottom: spacing.xxl,
+  },
+  menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.card,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    minHeight: 52,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  menuLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  buttonWrapper: {
     width: '100%',
-    marginBottom: 16,
+    maxWidth: 420,
   },
-  settingsButtonText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  logoutText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
+  errorText: {
+    marginTop: spacing.md,
+    textAlign: 'center',
   },
 });

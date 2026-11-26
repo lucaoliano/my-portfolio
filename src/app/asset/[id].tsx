@@ -1,9 +1,12 @@
 import { ThemeColors, withAlpha } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { radii, continuousCurve } from '../../theme/radius';
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Modal, Pressable, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, ChevronRight, Plus, Copy, Bell, TrendingDown, TrendingUp } from 'lucide-react-native';
+import { ChevronRight, Plus, Copy, Bell, TrendingDown, TrendingUp } from 'lucide-react-native';
+import { ScreenHeader } from '../../components/ScreenHeader';
 import * as Clipboard from 'expo-clipboard';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { db, auth } from '../../config/firebase';
@@ -411,44 +414,47 @@ export const AssetDetailsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{displayName}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 6 }}>
-            <Text style={styles.headerSubtitle}>{effectiveSymbol}</Text>
-            <TouchableOpacity onPress={handleCopy} style={{ padding: 2 }}>
-              <Copy size={14} color={colors.textSecondary} />
-            </TouchableOpacity>
-            {activePortfolio && (
-              <View testID="asset-header-portfolio-badge" style={{ backgroundColor: withAlpha(colors.text, 0.08), borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 2 }}>
-                <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: '600' }}>
-                  {activePortfolio.name}
-                </Text>
-              </View>
-            )}
+      <ScreenHeader
+        titleNode={
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{displayName}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 6 }}>
+              <Text style={styles.headerSubtitle}>{effectiveSymbol}</Text>
+              <TouchableOpacity onPress={handleCopy} style={{ padding: 2 }}>
+                <Copy size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
+              {activePortfolio && (
+                <View testID="asset-header-portfolio-badge" style={{ backgroundColor: withAlpha(colors.text, 0.08), borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 2 }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: '600' }}>
+                    {activePortfolio.name}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
-        <TouchableOpacity 
-          style={styles.addButton} 
-          onPress={() => {
-            const groupsParam = activeGroups.length > 0 ? activeGroups.join(',') : (groupName || 'Generale');
-            router.push({
-              pathname: '/add-transaction',
-              params: {
-                symbol: effectiveSymbol,
-                name: displayName,
-                preselectedGroups: groupsParam,
-                preselectedPortfolioId: params.portfolioId && params.portfolioId !== 'all' ? params.portfolioId : undefined,
-              }
-            });
-          }}
-        >
-          <Plus size={24} color={colors.text} />
-        </TouchableOpacity>
-      </View>
+        }
+        rightAction={
+          <TouchableOpacity 
+            style={styles.addButton} 
+            onPress={() => {
+              const groupsParam = activeGroups.length > 0 ? activeGroups.join(',') : (groupName || 'Generale');
+              router.push({
+                pathname: '/add-transaction',
+                params: {
+                  symbol: effectiveSymbol,
+                  name: displayName,
+                  preselectedGroups: groupsParam,
+                  preselectedPortfolioId: params.portfolioId && params.portfolioId !== 'all' ? params.portfolioId : undefined,
+                }
+              });
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Aggiungi transazione"
+          >
+            <Plus size={24} color={colors.text} />
+          </TouchableOpacity>
+        }
+      />
 
       
       {loading ? (
@@ -567,21 +573,6 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backButton: {
-    padding: 8,
-    marginLeft: -8,
-  },
   addButton: {
     padding: 8,
     marginRight: -8,
@@ -615,11 +606,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 56,
-    marginHorizontal: 20,
-    marginTop: 16,
-    paddingHorizontal: 16,
+    marginHorizontal: spacing.screenPaddingHorizontal,
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: radii.md,
+    ...continuousCurve,
     backgroundColor: colors.card,
   },
   categoryLabel: {
@@ -644,46 +636,49 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   overview: {
     alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 20,
+    paddingVertical: spacing.xxxl,
+    paddingHorizontal: spacing.screenPaddingHorizontal,
     fontSize: 16,
   },
   unpricedNote: {
     fontSize: 13,
     color: colors.warning,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   overviewValue: {
     color: colors.text,
     fontSize: 40,
     fontWeight: 'bold',
-    marginBottom: 12,
+    fontVariant: ['tabular-nums'],
+    marginBottom: spacing.md,
   },
   metricsRow: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 24,
+    paddingHorizontal: spacing.screenPaddingHorizontal,
+    marginBottom: spacing.xxl,
   },
   metricCard: {
     borderWidth: 1,
     borderColor: colors.border,
     flex: 1,
     backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: radii.md,
+    ...continuousCurve,
+    padding: spacing.lg,
     marginHorizontal: 4,
     alignItems: 'center',
   },
   metricLabel: {
     color: colors.textSecondary,
     fontSize: 12,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   metricValue: {
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   changeGroupButton: {
     borderWidth: 1,
@@ -691,10 +686,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    marginHorizontal: 20,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 32,
+    marginHorizontal: spacing.screenPaddingHorizontal,
+    padding: spacing.lg,
+    borderRadius: radii.md,
+    ...continuousCurve,
+    marginBottom: spacing.xxxl,
   },
   changeGroupText: {
     flex: 1,
@@ -707,12 +703,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.text,
     fontSize: 20,
     fontWeight: 'bold',
-    marginHorizontal: 20,
-    marginBottom: 16,
+    marginHorizontal: spacing.screenPaddingHorizontal,
+    marginBottom: spacing.lg,
   },
   listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: spacing.screenPaddingHorizontal,
+    paddingBottom: spacing.lg,
   },
   transactionCard: {
     borderWidth: 1,
@@ -720,9 +716,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     backgroundColor: colors.card,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    padding: spacing.lg,
+    borderRadius: radii.md,
+    ...continuousCurve,
+    marginBottom: spacing.md,
   },
   transactionDate: {
     color: colors.text,

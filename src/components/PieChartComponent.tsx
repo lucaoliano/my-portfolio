@@ -1,8 +1,10 @@
-import { ThemeColors, withAlpha } from '../theme/colors';
 import React from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { PieChart } from 'react-native-chart-kit';
+import { ThemeColors, withAlpha } from '../theme/colors';
 import { useAppTheme } from '../theme/ThemeContext';
+import { radii, continuousCurve } from '../theme/radius';
+import { spacing } from '../theme/spacing';
 
 interface PieChartData {
   label: string;
@@ -14,35 +16,30 @@ interface PieChartComponentProps {
   title?: string;
 }
 
-// Colori per classe di attivo, leggibili (≥3:1) sia su card scura sia su card bianca
-const CATEGORY_COLORS: Record<'dark' | 'light', Record<string, string>> = {
-  dark: {
-    'Azioni': '#F87171',
-    'Obbligazioni': '#60A5FA',
-    'Materie prime': '#FACC15',
-    'Criptovalute': '#A78BFA',
-    'Liquidità': '#34D399',
-    'Altro': '#9CA3AF',
-  },
-  light: {
-    'Azioni': '#DC2626',
-    'Obbligazioni': '#2563EB',
-    'Materie prime': '#A16207',
-    'Criptovalute': '#7C3AED',
-    'Liquidità': '#047857',
-    'Altro': '#6B7280',
-  },
-};
-const FALLBACK_COLORS: Record<'dark' | 'light', string[]> = {
-  dark: ['#FB923C', '#F472B6', '#22D3EE', '#FBBF24'],
-  light: ['#B45309', '#BE185D', '#0E7490', '#C2410C'],
+// Colori per classe di attivo centralizzati nel tema (src/theme/colors.ts)
+const getCategoryColor = (label: string, colors: ThemeColors, index: number): string => {
+  switch (label) {
+    case 'Azioni':
+      return colors.assetStocks;
+    case 'Obbligazioni':
+      return colors.assetBonds;
+    case 'Materie prime':
+      return colors.assetCommodities;
+    case 'Criptovalute':
+      return colors.assetCrypto;
+    case 'Liquidità':
+      return colors.assetCash;
+    case 'Altro':
+      return colors.assetOther;
+    default:
+      return colors.assetPalette[index % colors.assetPalette.length];
+  }
 };
 
 export const PieChartComponent: React.FC<PieChartComponentProps> = ({ data, title }) => {
-  const { colors, theme } = useAppTheme();
+  const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const { width: screenWidth } = useWindowDimensions();
-  const mode = theme;
 
   if (!data || data.length === 0) {
     return (
@@ -53,7 +50,7 @@ export const PieChartComponent: React.FC<PieChartComponentProps> = ({ data, titl
   }
 
   const chartData = data.map((item, index) => {
-    const color = CATEGORY_COLORS[mode][item.label] || FALLBACK_COLORS[mode][index % FALLBACK_COLORS[mode].length];
+    const color = getCategoryColor(item.label, colors, index);
     return {
       name: item.label,
       population: item.value,
@@ -102,21 +99,22 @@ export const PieChartComponent: React.FC<PieChartComponentProps> = ({ data, titl
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     backgroundColor: colors.card,
-    borderRadius: 12,
-    paddingVertical: 16,
+    borderRadius: radii.md,
+    ...continuousCurve,
+    paddingVertical: spacing.lg,
     paddingHorizontal: 0,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     alignItems: 'center',
   },
   title: {
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     alignSelf: 'flex-start',
   },
   emptyContainer: {
-    padding: 20,
+    padding: spacing.xl,
     alignItems: 'center',
   },
   emptyText: {
@@ -127,19 +125,19 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: spacing.lg,
     width: '100%',
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
-    marginBottom: 8,
+    marginRight: spacing.lg,
+    marginBottom: spacing.sm,
   },
   legendDot: {
     width: 12,
     height: 12,
-    borderRadius: 6,
+    borderRadius: radii.xs,
     marginRight: 6,
   },
   legendText: {

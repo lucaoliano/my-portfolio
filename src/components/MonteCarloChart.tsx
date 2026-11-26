@@ -2,6 +2,8 @@ import React, { useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, PanResponder, useWindowDimensions, GestureResponderEvent } from 'react-native';
 import Svg, { Path, Line, Text as SvgText, G, Circle } from 'react-native-svg';
 import { ThemeColors, withAlpha } from '../theme/colors';
+import { shadows } from '../theme/shadows';
+import { continuousCurve } from '../theme/radius';
 import { useAppTheme } from '../theme/ThemeContext';
 import { formatNumber, formatDecimal } from '../utils/formatters';
 import { MonteCarloYearPoint } from '../utils/pacCalculator';
@@ -294,16 +296,13 @@ const getStyles = (colors: ThemeColors) =>
       right: 12,
       backgroundColor: colors.tooltipBackground,
       borderRadius: 10,
+      ...continuousCurve,
       padding: 10,
       zIndex: 20,
       minWidth: 200,
       borderWidth: 1,
       borderColor: colors.tooltipBorder,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.3,
-      shadowRadius: 4,
-      elevation: 5,
+      boxShadow: shadows.floating,
     },
     tooltipYear: {
       color: colors.tooltipText,

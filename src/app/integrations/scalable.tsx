@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, CheckCircle2, AlertCircle, RefreshCw, Copy, ExternalLink, ChevronRight, Lock } from 'lucide-react-native';
+import { CheckCircle2, AlertCircle, RefreshCw, Copy, ExternalLink, ChevronRight, Lock } from 'lucide-react-native';
+import { ScreenHeader } from '../../components/ScreenHeader';
 import * as Clipboard from 'expo-clipboard';
 
 import { useAppTheme } from '../../theme/ThemeContext';
@@ -354,7 +355,7 @@ export default function ScalableIntegrationScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <View style={styles.center}><ActivityIndicator color={colors.textSecondary} /></View>
       </SafeAreaView>
     );
@@ -363,14 +364,8 @@ export default function ScalableIntegrationScreen() {
   const lastSync = formatWhen(config?.lastSyncedAt);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} accessibilityRole="button" accessibilityLabel="Indietro">
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} accessibilityRole="header">Scalable Capital</Text>
-        <View style={styles.iconButton} />
-      </View>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <ScreenHeader title="Scalable Capital" />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {noticeView}
@@ -701,17 +696,7 @@ export default function ScalableIntegrationScreen() {
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
   content: { padding: 16, paddingBottom: 48 },
   card: { backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
   cardWarning: { backgroundColor: colors.warningSurface },

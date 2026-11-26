@@ -12,12 +12,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Copy, X, Check, Plus, Trash2, AlertCircle } from 'lucide-react-native';
+import { Copy, Check, Plus, Trash2, AlertCircle } from 'lucide-react-native';
+import { ScreenHeader } from './ScreenHeader';
 import * as Clipboard from 'expo-clipboard';
 import { addDoc, collection, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 
 import { useAppTheme } from '../theme/ThemeContext';
 import { ThemeColors, withAlpha } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { radii, continuousCurve } from '../theme/radius';
+import { Button } from './ui/Button';
 import { db, auth } from '../config/firebase';
 import { useTransactions } from '../hooks/useTransactions';
 import { DEFAULT_PORTFOLIO } from '../hooks/useUserSettings';
@@ -403,13 +407,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton} onPress={close} accessibilityRole="button" accessibilityLabel="Chiudi">
-          <X size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} accessibilityRole="header">{mode === 'add' ? 'Nuova transazione' : 'Modifica transazione'}</Text>
-        <View style={styles.iconButton} />
-      </View>
+      <ScreenHeader
+        title={mode === 'add' ? 'Nuova transazione' : 'Modifica transazione'}
+        backIcon="close"
+        onBack={close}
+      />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.assetHeader}>
@@ -616,39 +618,29 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
           <Text style={styles.errorSummary} accessibilityRole="alert">Controlla i campi evidenziati.</Text>
         )}
 
-        <TouchableOpacity
-          style={[styles.saveButton, busy && { opacity: 0.6 }]}
-          onPress={handleSave}
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          loading={saving}
           disabled={busy}
-          accessibilityRole="button"
-          aria-busy={saving}
-        >
-          {saving ? (
-            <ActivityIndicator color={colors.onAccent} />
-          ) : (
-            <Text style={styles.saveButtonText}>
-              {sellsTooMuch && sellWarningAccepted ? 'Salva comunque' : mode === 'add' ? 'Aggiungi al portafoglio' : 'Salva modifiche'}
-            </Text>
-          )}
-        </TouchableOpacity>
+          title={sellsTooMuch && sellWarningAccepted ? 'Salva comunque' : mode === 'add' ? 'Aggiungi al portafoglio' : 'Salva modifiche'}
+          onPress={handleSave}
+          style={{ marginTop: spacing.sm }}
+        />
 
         {mode === 'edit' && (
-          <TouchableOpacity
-            style={[styles.deleteButton, busy && { opacity: 0.6 }]}
-            onPress={handleDelete}
+          <Button
+            variant="destructive"
+            size="lg"
+            fullWidth
+            loading={deleting}
             disabled={busy}
-            accessibilityRole="button"
-            aria-busy={deleting}
-          >
-            {deleting ? (
-              <ActivityIndicator color={colors.negative} />
-            ) : (
-              <>
-                <Trash2 size={18} color={colors.negative} style={{ marginRight: 8 }} />
-                <Text style={styles.deleteButtonText}>Elimina transazione</Text>
-              </>
-            )}
-          </TouchableOpacity>
+            title="Elimina transazione"
+            icon={<Trash2 size={18} color={colors.negative} />}
+            onPress={handleDelete}
+            style={{ marginTop: spacing.xxxl }}
+          />
         )}
       </ScrollView>
     </SafeAreaView>
@@ -657,47 +649,43 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
 
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingTop: 12,
-    paddingBottom: 4,
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { color: colors.text, fontSize: 18, fontWeight: '600' },
-  content: { padding: 20, paddingBottom: 48 },
-  assetHeader: { alignItems: 'center', marginTop: 4, marginBottom: 20 },
+  content: { padding: spacing.screenPaddingHorizontal, paddingBottom: spacing.huge },
+  assetHeader: { alignItems: 'center', marginTop: spacing.xs, marginBottom: spacing.xl },
   name: { color: colors.text, fontSize: 20, fontWeight: '700', textAlign: 'center' },
-  symbolButton: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingHorizontal: 12 },
+  symbolButton: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingHorizontal: spacing.md },
   symbol: { color: colors.textSecondary, fontSize: 15 },
   notice: {
     flexDirection: 'row',
     backgroundColor: colors.scalableSurface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 20,
+    borderRadius: radii.md,
+    ...continuousCurve,
+    padding: spacing.md,
+    marginBottom: spacing.xl,
   },
   noticeText: { flex: 1, fontSize: 13, lineHeight: 18, color: colors.text },
-  segmented: { flexDirection: 'row', backgroundColor: colors.inputBackground, borderRadius: 10, padding: 3, marginBottom: 24 },
-  segment: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+  segmented: {
+    flexDirection: 'row',
+    backgroundColor: colors.inputBackground,
+    borderRadius: radii.sm,
+    ...continuousCurve,
+    padding: 3,
+    marginBottom: spacing.xxl,
+  },
+  segment: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radii.xs, ...continuousCurve },
   segmentActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   segmentText: { color: colors.textSecondary, fontSize: 15, fontWeight: '600' },
   segmentTextActive: { color: colors.text },
-  inputGroup: { marginBottom: 20 },
-  labelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  label: { color: colors.textSecondary, fontSize: 14, marginBottom: 8 },
-  // Bordo visibile: il campo non deve confondersi con lo sfondo (contrasto dei componenti ≥3:1 non serve al riempimento)
+  inputGroup: { marginBottom: spacing.xl },
+  labelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
+  label: { color: colors.textSecondary, fontSize: 14, marginBottom: spacing.sm },
   input: {
     backgroundColor: colors.inputBackground,
-    borderRadius: 8,
+    borderRadius: radii.sm,
+    ...continuousCurve,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     height: 50,
     color: colors.text,
     fontSize: 16,

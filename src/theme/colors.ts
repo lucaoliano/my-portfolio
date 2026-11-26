@@ -24,10 +24,10 @@ export const darkColors = {
   // Informazioni neutre (note, suggerimenti); chiaro abbastanza da leggersi sulla sua tinta
   info: "#60A5FA",
   infoSurface: "#1E293B",
-  // Stato selezionato dei controlli segmentati del calcolatore PAC
-  selection: "#004481",
+  // Stato selezionato dei controlli segmentati e interattivi (allineato al colore primario)
+  selection: "#00D166",
   // Testo/icone sopra riempimenti pieni
-  onAccent: "#000000", // su positive / scalable / warning
+  onAccent: "#000000", // su positive / scalable / warning / selection
   onStrong: "#FFFFFF", // su selection / negative / overlay scuri
   overlay: "rgba(0, 0, 0, 0.6)",
   // Tooltip dei grafici: superficie scura fluttuante in entrambi i temi
@@ -40,6 +40,14 @@ export const darkColors = {
   chartGrowth: "#7BC676",
   chartWithdrawal: "#A855F7",
   chartContributions: "#3498DB",
+  // Categorie asset per allocazione e grafici
+  assetStocks: "#F87171",
+  assetBonds: "#60A5FA",
+  assetCommodities: "#FACC15",
+  assetCrypto: "#A78BFA",
+  assetCash: "#34D399",
+  assetOther: "#9CA3AF",
+  assetPalette: ["#FB923C", "#F472B6", "#22D3EE", "#FBBF24"] as readonly string[],
 };
 
 export const lightColors: ThemeColors = {
@@ -61,7 +69,7 @@ export const lightColors: ThemeColors = {
   negativeSurface: "#FEE2E2",
   info: "#1D4ED8",
   infoSurface: "#DBEAFE",
-  selection: "#004481",
+  selection: "#046C4E",
   onAccent: "#FFFFFF", // i riempimenti del tema chiaro sono scuri
   onStrong: "#FFFFFF",
   overlay: "rgba(15, 23, 42, 0.45)",
@@ -74,6 +82,14 @@ export const lightColors: ThemeColors = {
   chartGrowth: "#4D7C0F",
   chartWithdrawal: "#7E22CE",
   chartContributions: "#1D4ED8",
+  // Categorie asset per allocazione e grafici
+  assetStocks: "#DC2626",
+  assetBonds: "#2563EB",
+  assetCommodities: "#A16207",
+  assetCrypto: "#7C3AED",
+  assetCash: "#047857",
+  assetOther: "#6B7280",
+  assetPalette: ["#B45309", "#BE185D", "#0E7490", "#C2410C"] as readonly string[],
 };
 
 export type ThemeColors = typeof darkColors;
