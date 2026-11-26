@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { getQuotes, getDailyChanges, YahooQuote } from '../services/yahooFinance';
+import { getQuotesDetailed, getDailyChanges, YahooQuote } from '../services/yahooFinance';
 import { FxRates } from '../utils/portfolioAggregator';
 import { Transaction } from '../types';
 
@@ -95,10 +95,25 @@ export const usePortfolioQuotes = (
 
   const refresh = useCallback(async (showRefreshIndicator = false) => {
     const txs = transactionsRef.current;
-    const uniqueSymbols = Array.from(new Set(txs.map(t => t.symbol)));
+    // Ignora le posizioni completamente chiuse (quantità 0): non servono quotazioni live
+    const qtyByPosition: Record<string, number> = {};
+    txs.forEach(t => {
+      const key = `${t.portfolioId || 'default'}::${t.symbol}`;
+      const qty = Number(t.quantity) || 0;
+      qtyByPosition[key] = (qtyByPosition[key] || 0) + (t.type === 'SELL' ? -qty : qty);
+    });
+    const openSymbols = new Set<string>();
+    txs.forEach(t => {
+      const key = `${t.portfolioId || 'default'}::${t.symbol}`;
+      if ((qtyByPosition[key] || 0) > 1e-9) {
+        openSymbols.add(t.symbol);
+      }
+    });
+    const uniqueSymbols = Array.from(openSymbols);
 
     if (uniqueSymbols.length === 0) {
       setQuotes({});
+      setError(null);
       setLoading(false);
       setRefreshing(false);
       return;
@@ -119,18 +134,21 @@ export const usePortfolioQuotes = (
       // Valute estere da convertire in euro (le transazioni Scalable sono già in euro)
       const foreignCurrencies = Array.from(new Set(
         txs
-          .filter(t => t.source !== 'scalable_mcp' && t.currency && t.currency.toUpperCase() !== 'EUR')
+          .filter(t => openSymbols.has(t.symbol) && t.source !== 'scalable_mcp' && t.currency && t.currency.toUpperCase() !== 'EUR')
           .map(t => t.currency!.toUpperCase())
       ));
       const fxSymbols = foreignCurrencies.map(c => `${c}EUR=X`);
 
       const symbolsToFetch = uniqueSymbols.filter(s => !scalableQuotes[s]);
       const scalableSymbols = uniqueSymbols.filter(s => scalableQuotes[s]);
-      const [yahooQuotes, dailyChanges] = await Promise.all([
-        symbolsToFetch.length + fxSymbols.length > 0 ? getQuotes([...symbolsToFetch, ...fxSymbols]) : Promise.resolve([]),
+      const [quotesResult, dailyChanges] = await Promise.all([
+        symbolsToFetch.length + fxSymbols.length > 0
+          ? getQuotesDetailed([...symbolsToFetch, ...fxSymbols])
+          : Promise.resolve({ quotes: [] as YahooQuote[], yahooFailed: false }),
         // Scalable non dà la variazione di oggi: la prendiamo da Yahoo per lo stesso ISIN
         getDailyChanges(scalableSymbols),
       ]);
+      const yahooQuotes = quotesResult.quotes;
 
       const next: Record<string, YahooQuote> = {};
       for (const [sym, q] of Object.entries(scalableQuotes)) {
@@ -152,6 +170,7 @@ export const usePortfolioQuotes = (
       }
 
       const rates: FxRates = {};
+      const newlyScalableSymbols: string[] = [];
       yahooQuotes.forEach(q => {
         const fx = /^([A-Z]{3})EUR=X$/.exec(q.symbol);
         if (fx) {
@@ -160,6 +179,7 @@ export const usePortfolioQuotes = (
         }
         if (!next[q.symbol]) {
           const isScalable = q.source === 'scalable';
+          if (isScalable) newlyScalableSymbols.push(q.symbol);
           next[q.symbol] = {
             ...q,
             source: isScalable ? 'scalable' : 'yahoo',
@@ -168,9 +188,25 @@ export const usePortfolioQuotes = (
         }
       });
 
-      // getQuotes restituisce [] anche in caso di errore: se mancavano prezzi e non ne è arrivato nessuno,
-      // l'aggiornamento è fallito e va detto, invece di mostrare i titoli al costo come se nulla fosse.
-      const yahooFailed = symbolsToFetch.length > 0 && yahooQuotes.length === 0;
+      if (newlyScalableSymbols.length > 0) {
+        const extraChanges = await getDailyChanges(newlyScalableSymbols);
+        for (const sym of newlyScalableSymbols) {
+          const change = extraChanges[sym];
+          const q = next[sym];
+          if (change && q && q.regularMarketPrice > 0) {
+            const pct = change.changePercent;
+            next[sym] = {
+              ...q,
+              regularMarketChangePercent: pct,
+              regularMarketChange: q.regularMarketPrice - q.regularMarketPrice / (1 + pct / 100),
+              hasDailyChange: true,
+              marketTime: change.marketTime || q.marketTime,
+            };
+          }
+        }
+      }
+
+      const yahooFailed = quotesResult.yahooFailed || (symbolsToFetch.length > 0 && yahooQuotes.length === 0 && Object.keys(scalableQuotes).length === 0);
       setQuotes(prev => (yahooFailed ? { ...prev, ...next } : next));
       setFxRates(prev => (yahooFailed ? prev : rates));
       if (yahooFailed) {

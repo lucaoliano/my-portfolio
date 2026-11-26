@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
     <title>%WEB_TITLE%</title>
 
     <!-- PWA Manifest & iOS Meta Tags -->
@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <meta name="theme-color" content="#121212" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
       /* These styles make the body full-height */
@@ -31,6 +31,17 @@
         flex: 1;
         background-color: #121212;
       }
+      /* Solid fixed bar covering iOS safe-area-inset-top so WebKit does not paint a status-bar blur gradient over headers */
+      #ios-safe-area-top {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: env(safe-area-inset-top, 0px);
+        background-color: #121212;
+        pointer-events: none;
+        z-index: 100;
+      }
     </style>
   </head>
 
@@ -39,6 +50,7 @@
     <noscript>
       You need to enable JavaScript to run this app.
     </noscript>
+    <div id="ios-safe-area-top" aria-hidden="true"></div>
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
   </body>

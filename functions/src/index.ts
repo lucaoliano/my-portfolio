@@ -11,6 +11,23 @@ if (!getApps().length) {
 // Limita le istanze per contenere i costi in caso di abuso (chiunque con un account Google può autenticarsi)
 setGlobalOptions({ maxInstances: 10 });
 
+import {
+  testScalableMcp,
+  syncScalablePortfolio,
+  getScalableSavingsPlans,
+  getScalablePriceAlerts,
+  getScalableTaxReport,
+  startScalableDeviceAuth,
+  pollScalableDeviceAuth,
+  getScalableAuthUrl,
+  exchangeScalableAuthCode,
+  disconnectScalableAccount,
+  refreshScalableSession,
+  secureScalableConfig,
+  fetchScalableSecurityQuotes,
+  searchScalableSecurities,
+} from "./scalableMcp.js";
+
 export {
   testScalableMcp,
   syncScalablePortfolio,
@@ -24,7 +41,7 @@ export {
   disconnectScalableAccount,
   refreshScalableSession,
   secureScalableConfig,
-} from "./scalableMcp.js";
+};
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -68,11 +85,19 @@ export const searchSymbol = onCall(async (request: CallableRequest<{ query?: str
     );
   }
 
+  const trimmedQuery = query.trim();
+  const isIsinQuery = ISIN_PATTERN.test(trimmedQuery.toUpperCase());
+  const normalizedIsin = isIsinQuery ? trimmedQuery.toUpperCase() : undefined;
+
   try {
-    const response = await yf.search(query, { quotesCount: 10, newsCount: 0 });
+    const db = getFirestore();
+    const [response, scalableResults] = await Promise.all([
+      yf.search(trimmedQuery, { quotesCount: 10, newsCount: 0 }),
+      searchScalableSecurities(request.auth.uid, db, trimmedQuery),
+    ]);
 
     // Filtriamo per EQUITY ed ETF
-    const results = ((response.quotes ?? []) as SearchQuote[])
+    const yahooResults = ((response.quotes ?? []) as SearchQuote[])
       .filter((q: SearchQuote) => q.quoteType === "EQUITY" || q.quoteType === "ETF")
       .map((q: SearchQuote) => ({
         symbol: q.symbol,
@@ -80,9 +105,26 @@ export const searchSymbol = onCall(async (request: CallableRequest<{ query?: str
         longname: q.longname,
         exchange: q.exchange,
         quoteType: q.quoteType,
+        ...(normalizedIsin ? { isin: normalizedIsin } : {}),
       }));
 
-    return { results };
+    // Se l'utente ha cercato per ISIN (o Scalable ha risposto), includi i titoli Scalable con ISIN esatto
+    const seen = new Set(yahooResults.map((r) => (r.isin || r.symbol || "").toUpperCase()));
+    const merged = [...yahooResults];
+    for (const s of scalableResults) {
+      if (seen.has(s.isin)) continue;
+      seen.add(s.isin);
+      merged.push({
+        symbol: s.isin,
+        shortname: s.name,
+        longname: s.name,
+        exchange: "Scalable",
+        quoteType: s.type,
+        isin: s.isin,
+      });
+    }
+
+    return { results: merged };
   } catch (error: unknown) {
     console.error("Error calling Yahoo Finance search:", error instanceof Error ? error.message : String(error));
     throw new HttpsError(
@@ -148,32 +190,139 @@ export const getQuotes = onCall(async (request: CallableRequest<{ symbols?: stri
       }
     }
 
-    // 2. Fetch remaining symbols from Yahoo Finance
+    // 2. For symbols not yet in scalable_quotes, try Scalable live BrokerQuote by ISIN first
+    const yahooMissingSymbols: string[] = [];
     if (missingSymbols.length > 0) {
-      try {
-        const results = await yf.quote(missingSymbols);
-        const quotesArray = Array.isArray(results) ? results : [results];
-        for (const q of (quotesArray as MarketQuote[])) {
-          if (q && q.symbol) {
-            finalQuotes.push({
-              symbol: q.symbol,
-              shortName: q.shortName || q.longName || q.symbol,
-              longName: q.longName,
-              regularMarketPrice: q.regularMarketPrice,
-              regularMarketChangePercent: q.regularMarketChangePercent,
-              regularMarketChange: q.regularMarketChange,
-              currency: q.currency || "EUR",
-              source: "yahoo",
-              marketTime: q.regularMarketTime ? new Date(q.regularMarketTime).toISOString() : undefined,
-            });
-          }
+      const nonFxMissing = missingSymbols.filter((s) => !/=X$/i.test(s));
+      const symbolToIsin = new Map<string, string>();
+      for (const sym of nonFxMissing) {
+        if (ISIN_PATTERN.test(sym)) symbolToIsin.set(sym, sym);
+      }
+
+      const needIsinLookup = nonFxMissing.filter((s) => !symbolToIsin.has(s));
+      if (needIsinLookup.length > 0) {
+        try {
+          const txSnap = await db.collection(`portfolios/${userId}/transactions`).get();
+          txSnap.forEach((docSnap) => {
+            const d = docSnap.data();
+            const sym = d.symbol as string | undefined;
+            const isin = d.isin as string | undefined;
+            if (sym && isin && ISIN_PATTERN.test(isin) && needIsinLookup.includes(sym) && !symbolToIsin.has(sym)) {
+              symbolToIsin.set(sym, isin);
+            }
+          });
+        } catch (txErr) {
+          console.warn("Could not inspect transaction ISINs in getQuotes:", txErr);
         }
-      } catch (yfErr) {
-        console.warn("Yahoo Finance quote error for remaining symbols:", yfErr);
+      }
+
+      const candidateIsins = Array.from(new Set(symbolToIsin.values()));
+      const scalableFetched = candidateIsins.length > 0 ?
+        await fetchScalableSecurityQuotes(userId, db, candidateIsins) :
+        {};
+
+      const quotesCacheUpdate: Record<string, unknown> = {};
+      const nowIso = new Date().toISOString();
+      for (const sym of missingSymbols) {
+        const isin = symbolToIsin.get(sym);
+        const sq = isin ? scalableFetched[isin] : undefined;
+        if (sq && sq.regularMarketPrice > 0) {
+          finalQuotes.push({
+            symbol: sym,
+            shortName: sq.shortName,
+            longName: sq.longName,
+            regularMarketPrice: sq.regularMarketPrice,
+            regularMarketChangePercent: 0,
+            regularMarketChange: 0,
+            currency: sq.currency,
+            source: "scalable",
+            marketTime: sq.marketTime,
+          });
+          const cacheEntry = {
+            symbol: sym,
+            shortName: sq.shortName,
+            longName: sq.longName,
+            regularMarketPrice: sq.regularMarketPrice,
+            currency: sq.currency,
+            updatedAt: nowIso,
+          };
+          quotesCacheUpdate[sym] = cacheEntry;
+          if (isin && isin !== sym) {
+            quotesCacheUpdate[isin] = {
+              ...cacheEntry,
+              symbol: isin,
+            };
+          }
+        } else {
+          yahooMissingSymbols.push(sym);
+        }
+      }
+
+      if (Object.keys(quotesCacheUpdate).length > 0) {
+        await db.doc(`portfolios/${userId}/settings/scalable_quotes`).set(quotesCacheUpdate, { merge: true })
+          .catch((cacheErr) => console.warn("Could not persist Scalable quotes cache:", cacheErr));
       }
     }
 
-    return { quotes: finalQuotes };
+    // 3. Fetch remaining symbols from Yahoo Finance (resolving ISINs if needed)
+    let yahooFailed = false;
+    if (yahooMissingSymbols.length > 0) {
+      const resolved = await Promise.all(
+        yahooMissingSymbols.map(async (s) => [s, ISIN_PATTERN.test(s) ? await resolveYahooSymbol(s) : s] as const),
+      );
+      const yahooToOriginals = new Map<string, string[]>();
+      for (const [original, ySym] of resolved) {
+        if (!ySym) continue;
+        const list = yahooToOriginals.get(ySym) || [];
+        list.push(original);
+        yahooToOriginals.set(ySym, list);
+      }
+      const yahooSymbols = Array.from(yahooToOriginals.keys());
+
+      if (yahooSymbols.length > 0) {
+        let quotesArray: MarketQuote[] = [];
+        try {
+          const results = await yf.quote(yahooSymbols);
+          quotesArray = Array.isArray(results) ? (results as MarketQuote[]) : [results as MarketQuote];
+        } catch (yfErr) {
+          console.warn("Yahoo Finance batch quote failed, retrying per symbol:", yfErr);
+          const settled = await Promise.allSettled(yahooSymbols.map((s) => yf.quote(s)));
+          let fulfilledCount = 0;
+          for (const item of settled) {
+            if (item.status === "fulfilled" && item.value) {
+              fulfilledCount++;
+              const val = item.value;
+              if (Array.isArray(val)) quotesArray.push(...(val as MarketQuote[]));
+              else quotesArray.push(val as MarketQuote);
+            }
+          }
+          if (fulfilledCount === 0) {
+            yahooFailed = true;
+          }
+        }
+
+        for (const q of quotesArray) {
+          if (q && q.symbol && typeof q.regularMarketPrice === "number") {
+            const originals = yahooToOriginals.get(q.symbol) || [q.symbol];
+            for (const orig of originals) {
+              finalQuotes.push({
+                symbol: orig,
+                shortName: q.shortName || q.longName || orig,
+                longName: q.longName,
+                regularMarketPrice: q.regularMarketPrice,
+                regularMarketChangePercent: q.regularMarketChangePercent,
+                regularMarketChange: q.regularMarketChange,
+                currency: q.currency || "EUR",
+                source: "yahoo",
+                marketTime: q.regularMarketTime ? new Date(q.regularMarketTime).toISOString() : undefined,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return { quotes: finalQuotes, yahooFailed };
   } catch (error: unknown) {
     console.error("Error in getQuotes:", error instanceof Error ? error.message : String(error));
     if (finalQuotes.length > 0) {

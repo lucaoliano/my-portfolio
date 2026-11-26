@@ -119,6 +119,7 @@ export const SearchScreen = () => {
       params: {
         symbol: item.symbol,
         name: displayName,
+        isin: item.isin,
         fromSearch: 'true',
         preselectedPortfolioId: searchParams.portfolioId,
       },

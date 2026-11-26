@@ -13,8 +13,8 @@ export const spacing = {
   huge: 48,
 
   // Common Header layout tokens across all screens
-  headerPaddingTop: 16,
-  headerPaddingBottom: 8,
+  headerPaddingTop: 24,
+  headerPaddingBottom: 10,
   headerPaddingHorizontal: 12,
   headerMinHeight: 56,
   headerButtonSize: 44,

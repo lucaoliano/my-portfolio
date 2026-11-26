@@ -6,6 +6,7 @@ export const AddTransactionScreen = () => {
   const params = useLocalSearchParams<{
     symbol?: string;
     name?: string;
+    isin?: string;
     fromSearch?: string;
     preselectedGroups?: string;
     preselectedPortfolioId?: string;
@@ -19,6 +20,7 @@ export const AddTransactionScreen = () => {
       mode="add"
       symbol={params.symbol ?? ''}
       name={params.name ?? ''}
+      isin={params.isin}
       preselectedGroups={preselectedGroups}
       preselectedPortfolioId={params.preselectedPortfolioId}
       fromSearch={params.fromSearch === 'true' || params.fromSearch === '1'}

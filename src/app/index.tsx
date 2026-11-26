@@ -5,7 +5,7 @@ import { shadows } from '../theme/shadows';
 import { Button } from '../components/ui/Button';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl, Modal, Pressable, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LogOut, Search, ChevronRight, ChevronDown, PieChart as PieChartIcon, Settings, Menu, X, User, Calculator, Cpu, Coins, Bell, Receipt, Landmark, RefreshCw, CheckCircle2, AlertCircle, FolderCog, Plus, Link2, Briefcase, Sun, Moon } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -73,6 +73,7 @@ const signedPercent = (value: number) => `${value >= 0 ? '+' : ''}${formatNumber
 export const PortfolioScreen = () => {
   const { colors, theme, preference, toggleTheme } = useAppTheme();
   const styles = getStyles(colors);
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const userId = auth.currentUser?.uid;
 
@@ -110,9 +111,10 @@ export const PortfolioScreen = () => {
   const { alerts: scalableAlerts } = useScalablePriceAlerts(userId);
   const { quotes, refreshing, error: quotesError, updatedAt: quotesUpdatedAt, refresh: refreshQuotes } = quotesState;
 
+  const isSubPortfolio = selectedPortfolioId !== 'all' && (portfolios?.length || 0) > 1;
   // Fotografia del giorno per lo storico: solo con prezzi freschi e per la vista globale (non per singoli sottoportafogli)
   const historySnapshot = useMemo<HistorySnapshot | null>(() => {
-    if (selectedPortfolioId !== 'all' && (portfolios?.length || 0) > 1) return null;
+    if (isSubPortfolio) return null;
     if (isInitialLoading || quotesError || !quotesUpdatedAt || aggregation.globalTotalValue <= 0) return null;
     return {
       invested: aggregation.globalTotalValue,
@@ -120,7 +122,7 @@ export const PortfolioScreen = () => {
       cash: scalableCash,
       complete: aggregation.missingPriceSymbols.length === 0 && aggregation.fxMissingSymbols.length === 0,
     };
-  }, [selectedPortfolioId, portfolios?.length, isInitialLoading, quotesError, quotesUpdatedAt, aggregation, scalableCash]);
+  }, [isSubPortfolio, isInitialLoading, quotesError, quotesUpdatedAt, aggregation, scalableCash]);
   // Prezzo attuale in euro per quota, per chiave di prezzo: raccorda storico ricostruito e rendimento per periodo
   const nowEurByKey = useMemo(() => nowEurByPriceKey(aggregation.globalAssets, transactions), [aggregation.globalAssets, transactions]);
   // L'ultimo punto del grafico è lo stesso numero mostrato in alto, anche con prezzi non freschi
@@ -129,7 +131,10 @@ export const PortfolioScreen = () => {
     () => (isInitialLoading || aggregation.globalTotalValue <= 0 ? null : { invested: aggregation.globalTotalValue, costBasis: aggregation.globalInvested }),
     [isInitialLoading, aggregation.globalTotalValue, aggregation.globalInvested]
   );
-  const historyPoints = usePortfolioHistory(userId, historySnapshot, transactions, nowEurByKey);
+  const historyPoints = usePortfolioHistory(userId, historySnapshot, transactions, nowEurByKey, {
+    isSubPortfolio,
+    subPortfolioKey: `${selectedPortfolioId}:${transactions.length}`,
+  });
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   // I gruppi con gli stessi titoli di un altro partono chiusi: si aprono solo se l'utente lo chiede
@@ -196,8 +201,8 @@ export const PortfolioScreen = () => {
 
     try {
       const res = await syncScalablePortfolio({ targetGroup: 'Scalable' });
-      // I prezzi aggiornati arrivano in scalable_quotes: ricarica le quotazioni
-      refreshQuotes(true);
+      // I prezzi aggiornati arrivano in scalable_quotes: ricarica le quotazioni prima di chiudere lo spinner di sync
+      await refreshQuotes(false);
 
       const parts: string[] = [];
       if (res.importedCount > 0) {
@@ -315,9 +320,10 @@ export const PortfolioScreen = () => {
   };
 
   const onRefresh = () => {
-    refreshQuotes(true);
     if (isScalableConnected) {
       handleSyncScalable(false);
+    } else {
+      refreshQuotes(true);
     }
   };
 
@@ -587,8 +593,14 @@ export const PortfolioScreen = () => {
     );
   })() : null;
 
+  const activeNeedsYahoo =
+    missingPriceSymbols.length > 0 ||
+    fxMissingSymbols.length > 0 ||
+    allAssets.some(a => quotes[a.symbol]?.source !== 'scalable');
+  const showQuotesError = Boolean(quotesError && activeNeedsYahoo);
+
   // Prezzi non aggiornati: lo diciamo subito sotto il numero che ne dipende, con il rimedio a portata di dito
-  const quotesErrorLine = quotesError ? (
+  const quotesErrorLine = showQuotesError ? (
     <View style={styles.inlineAlert} accessibilityRole="alert">
       <AlertCircle size={16} color={colors.warning} style={{ marginRight: 8 }} />
       <Text style={styles.inlineAlertText}>
@@ -660,7 +672,7 @@ export const PortfolioScreen = () => {
             large: true,
           })}
           {periodLine}
-          {!quotesError && statusParts.length > 0 && <Text style={styles.footnote}>{statusParts.join(' · ')}</Text>}
+          {!showQuotesError && statusParts.length > 0 && <Text style={styles.footnote}>{statusParts.join(' · ')}</Text>}
           {incompleteItems.length > 0 && (
             <TouchableOpacity
               style={styles.incompleteRow}
@@ -1131,11 +1143,12 @@ export const PortfolioScreen = () => {
         />
       )}
 
-      {/* Stato della sincronizzazione: galleggia sopra la lista, così non sposta quello che stai leggendo */}
+      {/* Stato della sincronizzazione: toast in basso, così non copre il bilancio totale */}
       {syncBanner && (
         <View
           style={[
             styles.syncBanner,
+            { bottom: insets.bottom + spacing.lg },
             syncBanner.type === 'syncing' && styles.syncBannerSyncing,
             syncBanner.type === 'success' && styles.syncBannerSuccess,
             syncBanner.type === 'error' && styles.syncBannerError,
@@ -1439,9 +1452,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   syncBanner: {
     position: 'absolute',
-    top: 8,
     left: spacing.lg,
     right: spacing.lg,
+    maxWidth: 560,
+    alignSelf: 'center',
     zIndex: 10,
     boxShadow: shadows.floating,
     paddingVertical: spacing.sm,

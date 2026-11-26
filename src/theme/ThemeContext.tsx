@@ -93,6 +93,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           document.body.style.backgroundColor = colors.background;
           document.body.style.colorScheme = currentTheme;
         }
+        const topShield = document.getElementById('ios-safe-area-top');
+        if (topShield) {
+          topShield.style.backgroundColor = colors.background;
+        }
       }
     }
   }, [colors.background, currentTheme]);

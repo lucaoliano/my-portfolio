@@ -51,6 +51,7 @@ export interface TransactionFormProps {
   mode: 'add' | 'edit';
   symbol: string;
   name: string;
+  isin?: string;
   /** Transazione da modificare, letta dal database (non dai parametri di navigazione) */
   initial?: Transaction & { id: string };
   preselectedGroups?: string[];
@@ -73,7 +74,7 @@ const confirmAction = (title: string, message: string, confirmLabel: string, onC
  * Inserimento e modifica di una transazione: un solo modulo, così regole e aspetto coincidono.
  * Errori accanto al campo, mai un numero arrotondato in silenzio, mai un prezzo digitato sovrascritto.
  */
-export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, name, initial, preselectedGroups, preselectedPortfolioId, fromSearch }) => {
+export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, name, isin, initial, preselectedGroups, preselectedPortfolioId, fromSearch }) => {
   const { colors } = useAppTheme();
   const styles = getStyles(colors);
   const router = useRouter();
@@ -253,12 +254,15 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
       if (mode === 'add') {
         // Firestore rifiuta i campi undefined: li togliamo
         const clean = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
+        const resolvedIsin = isin && ISIN_PATTERN.test(isin.toUpperCase())
+          ? isin.toUpperCase()
+          : (ISIN_PATTERN.test(symbol) ? symbol : undefined);
         await addDoc(collection(db, 'portfolios', userId, 'transactions'), {
           ...clean,
           symbol,
           name,
           date,
-          ...(ISIN_PATTERN.test(symbol) ? { isin: symbol } : {}),
+          ...(resolvedIsin ? { isin: resolvedIsin } : {}),
         });
       } else if (initial) {
         // Solo i campi cambiati: un salvataggio non deve riscrivere ciò che non hai toccato

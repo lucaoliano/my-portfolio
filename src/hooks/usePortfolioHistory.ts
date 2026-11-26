@@ -73,9 +73,12 @@ export const usePortfolioHistory = (
   snapshot: HistorySnapshot | null,
   transactions: Transaction[] = [],
   /** Prezzo attuale in euro per chiave di prezzo: serve a raccordare i giorni ricostruiti con quelli registrati */
-  nowEurByKey: Record<string, number | null> = {}
+  nowEurByKey: Record<string, number | null> = {},
+  options: { isSubPortfolio?: boolean; subPortfolioKey?: string } = {}
 ) => {
+  const { isSubPortfolio = false, subPortfolioKey = '' } = options;
   const [points, setPoints] = useState<HistoryPoint[]>([]);
+  const [subState, setSubState] = useState<{ key: string; points: HistoryPoint[] }>({ key: '', points: [] });
   const [loaded, setLoaded] = useState(false);
   const lastWrittenRef = useRef<string | null>(null);
   const backfillStartedRef = useRef(false);
@@ -97,7 +100,7 @@ export const usePortfolioHistory = (
   }, [userId]);
 
   useEffect(() => {
-    if (!userId || !snapshot || snapshot.invested <= 0) return;
+    if (!userId || isSubPortfolio || !snapshot || snapshot.invested <= 0) return;
     const date = localDateKey();
     const payload: HistoryPoint = {
       date,
@@ -116,13 +119,56 @@ export const usePortfolioHistory = (
         .catch(err => console.warn('Salvataggio storico non riuscito:', err));
     }, 2000);
     return () => clearTimeout(timeoutId);
-  }, [userId, snapshot]);
+  }, [userId, isSubPortfolio, snapshot]);
 
   const pricesReady = Object.values(nowEurByKey).some(v => v !== null);
 
+  // Per un sottoportafoglio ricostruisce in memoria la curva solo dalle sue transazioni (mai dallo storico globale)
+  useEffect(() => {
+    if (!isSubPortfolio || !pricesReady || transactions.length === 0) return;
+    let cancelled = false;
+    const first = transactions.map(t => t.date.slice(0, 10)).sort()[0];
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayKey = localDateKey(yesterday);
+    if (first > yesterdayKey) {
+      return;
+    }
+
+    const yearAgo = new Date();
+    yearAgo.setDate(yearAgo.getDate() - 365);
+    const yearAgoKey = localDateKey(yearAgo);
+    const dailyFrom = first > yearAgoKey ? first : yearAgoKey;
+    const symbols = backfillSymbols(transactions);
+    const missing = missingWeekdays(new Set(), dailyFrom, yesterdayKey);
+
+    (async () => {
+      try {
+        const [dailySeries, weeklySeries] = await Promise.all([
+          missing.length > 0 ? fetchDailyYear(symbols) : Promise.resolve({}),
+          first < dailyFrom ? getWeeklyCloses(symbols, first, '1wk') : Promise.resolve({}),
+        ]);
+        if (cancelled) return;
+        const dailyPts: HistoryPoint[] = missing.length > 0
+          ? buildDailyBackfill(transactions, dailySeries, missing, nowEurByKey).map(p => ({ ...p, cash: 0, backfilled: true, daily: true }))
+          : [];
+        const weeklyPts: HistoryPoint[] = first < dailyFrom
+          ? buildBackfill(transactions, weeklySeries, dailyFrom, nowEurByKey).map(p => ({ ...p, cash: 0, backfilled: true }))
+          : [];
+        setSubState({ key: subPortfolioKey, points: [...weeklyPts, ...dailyPts] });
+      } catch (err) {
+        if (!cancelled) console.warn('Storico sottoportafoglio non disponibile:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSubPortfolio, subPortfolioKey, pricesReady, transactions, nowEurByKey]);
+
   // Una sola volta per utente: ricostruisce le settimane tra il primo acquisto e il primo giorno registrato
   useEffect(() => {
-    if (!userId || !loaded || !pricesReady || transactions.length === 0 || backfillStartedRef.current) return;
+    if (!userId || isSubPortfolio || !loaded || !pricesReady || transactions.length === 0 || backfillStartedRef.current) return;
     const first = transactions.map(t => t.date.slice(0, 10)).sort()[0];
     // Si ricostruisce fino al primo giorno registrato o già ricostruito con il metodo attuale
     const kept = points.filter(p => !p.backfilled || p.v === BACKFILL_VERSION);
@@ -147,11 +193,11 @@ export const usePortfolioHistory = (
         console.warn('Ricostruzione dello storico non riuscita:', err);
       }
     })();
-  }, [userId, loaded, pricesReady, transactions, points, nowEurByKey]);
+  }, [userId, isSubPortfolio, loaded, pricesReady, transactions, points, nowEurByKey]);
 
   // Una volta al giorno: i giorni dell'ultimo anno in cui l'app non è stata aperta si ricostruiscono dalle chiusure giornaliere
   useEffect(() => {
-    if (!userId || !loaded || !pricesReady || transactions.length === 0 || gapFillStartedRef.current) return;
+    if (!userId || isSubPortfolio || !loaded || !pricesReady || transactions.length === 0 || gapFillStartedRef.current) return;
     const first = transactions.map(t => t.date.slice(0, 10)).sort()[0];
     const yearAgo = new Date();
     yearAgo.setDate(yearAgo.getDate() - 365);
@@ -175,7 +221,10 @@ export const usePortfolioHistory = (
         console.warn('Ricostruzione dei giorni mancanti non riuscita:', err);
       }
     })();
-  }, [userId, loaded, pricesReady, transactions, points, nowEurByKey]);
+  }, [userId, isSubPortfolio, loaded, pricesReady, transactions, points, nowEurByKey]);
 
+  if (isSubPortfolio) {
+    return subState.key === subPortfolioKey ? subState.points : [];
+  }
   return points;
 };

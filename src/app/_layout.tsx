@@ -158,12 +158,12 @@ function InnerLayout() {
     }
   };
 
-  if (loading || biometricLoading) {
-    // Utente già noto come disconnesso: niente scheletro del portafoglio, si sta andando al login
-    const signedOut = !loading && !user;
-    return (
-      <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
-        <SafeAreaView style={{ flex: 1, paddingTop: 16 }} edges={['top', 'left', 'right']}>
+  const renderContent = () => {
+    if (loading || biometricLoading) {
+      // Utente già noto come disconnesso: niente scheletro del portafoglio, si sta andando al login
+      const signedOut = !loading && !user;
+      return (
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top', 'left', 'right']}>
           {signedOut ? (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
               <ActivityIndicator color={colors.textSecondary} />
@@ -172,60 +172,52 @@ function InnerLayout() {
             <PortfolioSkeleton />
           )}
         </SafeAreaView>
-      </SafeAreaProvider>
-    );
-  }
+      );
+    }
 
-  if (isLocked) {
-    return (
-      <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
-        <ExpoThemeProvider value={CustomTheme}>
-          <StatusBar style={theme === 'dark' ? "light" : "dark"} />
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, paddingHorizontal: spacing.lg }}>
-            <View style={{ width: 96, height: 96, borderRadius: radii.round, backgroundColor: colors.card, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.xl, ...continuousCurve }} aria-hidden>
-              <Lock size={44} color={colors.text} />
-            </View>
-            <ThemedText variant="title" style={{ marginBottom: spacing.sm, textAlign: 'center' }} role="heading">
-              App bloccata
-            </ThemedText>
-            <ThemedText variant="body" color={colors.textSecondary} style={{ marginBottom: spacing.xxxl, textAlign: 'center', maxWidth: 360, paddingHorizontal: spacing.lg }}>
-              {Platform.OS === 'web'
-                ? 'Usa la passkey di questo dispositivo per vedere il tuo portafoglio.'
-                : 'Usa Face ID, impronta o il codice del dispositivo per vedere il tuo portafoglio.'}
-            </ThemedText>
-            <View style={{ width: '100%', maxWidth: 420, gap: spacing.md }}>
-              <Button
-                variant="primary"
-                size="lg"
-                fullWidth
-                title="Sblocca"
-                loading={unlocking}
-                onPress={() => void unlock()}
-              />
-              <Button
-                variant="secondary"
-                size="lg"
-                fullWidth
-                title="Esci dall'account"
-                disabled={unlocking}
-                onPress={() => void signOutFromLock()}
-              />
-              {unlockError && (
-                <ThemedText variant="caption" color={colors.negative} style={{ textAlign: 'center', marginTop: spacing.xs }} role="alert">
-                  {unlockError}
-                </ThemedText>
-              )}
-            </View>
+    if (isLocked) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, paddingHorizontal: spacing.lg }}>
+          <View style={{ width: 96, height: 96, borderRadius: radii.round, backgroundColor: colors.card, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.xl, ...continuousCurve }} aria-hidden>
+            <Lock size={44} color={colors.text} />
           </View>
-        </ExpoThemeProvider>
-      </SafeAreaProvider>
-    );
-  }
+          <ThemedText variant="title" style={{ marginBottom: spacing.sm, textAlign: 'center' }} role="heading">
+            App bloccata
+          </ThemedText>
+          <ThemedText variant="body" color={colors.textSecondary} style={{ marginBottom: spacing.xxxl, textAlign: 'center', maxWidth: 360, paddingHorizontal: spacing.lg }}>
+            {Platform.OS === 'web'
+              ? 'Usa la passkey di questo dispositivo per vedere il tuo portafoglio.'
+              : 'Usa Face ID, impronta o il codice del dispositivo per vedere il tuo portafoglio.'}
+          </ThemedText>
+          <View style={{ width: '100%', maxWidth: 420, gap: spacing.md }}>
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              title="Sblocca"
+              loading={unlocking}
+              onPress={() => void unlock()}
+            />
+            <Button
+              variant="secondary"
+              size="lg"
+              fullWidth
+              title="Esci dall'account"
+              disabled={unlocking}
+              onPress={() => void signOutFromLock()}
+            />
+            {unlockError && (
+              <ThemedText variant="caption" color={colors.negative} style={{ textAlign: 'center', marginTop: spacing.xs }} role="alert">
+                {unlockError}
+              </ThemedText>
+            )}
+          </View>
+        </View>
+      );
+    }
 
-  return (
-    <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
-      <ExpoThemeProvider value={CustomTheme}>
-        <StatusBar style={theme === 'dark' ? "light" : "dark"} />
+    return (
+      <>
         <Stack
           screenOptions={{
             headerShown: false,
@@ -247,6 +239,15 @@ function InnerLayout() {
         </Stack>
         <UpdatePrompt />
         <InstallPrompt />
+      </>
+    );
+  };
+
+  return (
+    <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
+      <ExpoThemeProvider value={CustomTheme}>
+        <StatusBar style={theme === 'dark' ? "light" : "dark"} />
+        {renderContent()}
       </ExpoThemeProvider>
     </SafeAreaProvider>
   );

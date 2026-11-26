@@ -555,6 +555,35 @@ interface ScalableGraphQLResponseData {
           }>;
         }>;
       };
+      security?: {
+        id?: string;
+        isin?: string;
+        name?: string;
+        type?: string;
+        quoteTick?: {
+          venue?: string;
+          midPrice?: number;
+          currency?: string;
+          timestampUtc?: {
+            time?: string;
+          };
+          isOutdated?: boolean;
+        } | null;
+      } | null;
+      simpleSecuritySearch?: {
+        items?: Array<{
+          isin?: string;
+          name?: string;
+          type?: string;
+          quoteTick?: {
+            midPrice?: number;
+            currency?: string;
+            timestampUtc?: {
+              time?: string;
+            };
+          } | null;
+        }>;
+      } | null;
     };
   };
 }
@@ -1044,6 +1073,10 @@ async function fetchScalablePortfolioViaGraphQL(
   }>;
   accountId: string;
   portfolioId: string;
+  accessToken: string;
+  refreshToken?: string;
+  idToken?: string;
+  sessionId?: string;
 }> {
   const resolved = await resolveScalableIds(
     keyPair,
@@ -1472,7 +1505,257 @@ async function fetchScalablePortfolioViaGraphQL(
     holdings,
     accountId,
     portfolioId,
+    accessToken: currentToken,
+    refreshToken: currentRefresh,
+    idToken: currentIdToken,
+    sessionId: currentSessionId,
   };
+}
+
+const SCALABLE_ISIN_PATTERN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+
+export interface ScalableSecurityQuote {
+  isin: string;
+  shortName: string;
+  longName: string;
+  regularMarketPrice: number;
+  currency: string;
+  marketTime?: string;
+}
+
+export interface ScalableSessionContext {
+  keyPair: ScalableKeyPair;
+  accountId: string;
+  portfolioId: string;
+  accessToken: string;
+  refreshToken?: string;
+  idToken?: string;
+  sessionId?: string;
+}
+
+const BROKER_QUOTE_QUERY = `
+  query BrokerQuote(
+    $accountId: ID!
+    $portfolioId: ID!
+    $isin: ID!
+    $includeYearToDate: Boolean!
+    $quoteSource: MarketDataSource!
+  ) {
+    account(id: $accountId) {
+      brokerPortfolio(id: $portfolioId) {
+        security(isin: $isin) {
+          id
+          isin
+          name
+          type
+          quoteTick(source: $quoteSource, includeYearToDate: $includeYearToDate) {
+            venue
+            midPrice
+            currency
+            timestampUtc {
+              time
+            }
+            isOutdated
+          }
+        }
+      }
+    }
+  }
+`;
+
+const BROKER_SECURITY_SEARCH_QUERY = `
+  query BrokerSecuritySearch(
+    $accountId: ID!
+    $portfolioId: ID!
+    $searchTerm: String!
+    $includeYearToDate: Boolean!
+    $quoteSource: MarketDataSource!
+  ) {
+    account(id: $accountId) {
+      brokerPortfolio(id: $portfolioId) {
+        simpleSecuritySearch(searchTerm: $searchTerm) {
+          items {
+            isin
+            name
+            type
+            quoteTick(source: $quoteSource, includeYearToDate: $includeYearToDate) {
+              midPrice
+              currency
+              timestampUtc {
+                time
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+async function resolveScalableSessionContext(
+  userId: string,
+  db: Firestore,
+): Promise<ScalableSessionContext | null> {
+  const configSnap = await readScalableConfig(db, userId);
+  if (!configSnap.exists) return null;
+  const config = configSnap.data();
+  const apiToken = config?.apiToken as string | undefined;
+  if (
+    !config?.enabled ||
+    config.status !== "connected" ||
+    !apiToken ||
+    apiToken.toLowerCase().startsWith("demo") ||
+    apiToken.toLowerCase().startsWith("mock") ||
+    !config.dpopPrivateKey ||
+    !config.dpopPublicKeyJwk
+  ) {
+    return null;
+  }
+
+  const keyPair: ScalableKeyPair = {
+    privateKey: config.dpopPrivateKey as string,
+    publicJwk: config.dpopPublicKeyJwk as { kty: string; crv: string; x: string; y: string },
+  };
+  const resolved = await resolveScalableIds(
+    keyPair,
+    apiToken,
+    config.refreshToken as string | undefined,
+    userId,
+    db,
+    config.idToken as string | undefined,
+    config.sessionId as string | undefined,
+  );
+  return { keyPair, ...resolved };
+}
+
+/**
+ * Recupera le quotazioni live da Scalable Capital per qualsiasi ISIN trattato sul broker,
+ * anche se non è presente tra le posizioni attualmente detenute in portafoglio.
+ */
+export async function fetchScalableSecurityQuotes(
+  userId: string,
+  db: Firestore,
+  isins: string[],
+  existingSession?: ScalableSessionContext,
+): Promise<Record<string, ScalableSecurityQuote>> {
+  const uniqueIsins = Array.from(
+    new Set(
+      isins
+        .map((s) => s.trim().toUpperCase())
+        .filter((s) => SCALABLE_ISIN_PATTERN.test(s)),
+    ),
+  ).slice(0, 50);
+
+  if (uniqueIsins.length === 0) return {};
+
+  try {
+    const session = existingSession ?? (await resolveScalableSessionContext(userId, db));
+    if (!session) return {};
+
+    const out: Record<string, ScalableSecurityQuote> = {};
+    // Prima query con refreshToken abilitato per garantire un access token valido prima del fan-out parallelo
+    const queryOne = async (isin: string, allowRefresh: boolean) => {
+      const res = await executeScalableGraphQL(
+        BROKER_QUOTE_QUERY,
+        {
+          accountId: session.accountId,
+          portfolioId: session.portfolioId,
+          isin,
+          includeYearToDate: false,
+          quoteSource: "CONSOLIDATED",
+        },
+        "BrokerQuote",
+        session.keyPair,
+        session.accessToken,
+        allowRefresh ? session.refreshToken : undefined,
+        userId,
+        db,
+        session.idToken,
+        session.sessionId,
+      );
+      session.accessToken = res.currentAccessToken;
+      if (res.currentRefreshToken) session.refreshToken = res.currentRefreshToken;
+      if (res.currentIdToken) session.idToken = res.currentIdToken;
+      if (res.currentSessionId) session.sessionId = res.currentSessionId;
+
+      const sec = res.data?.account?.brokerPortfolio?.security;
+      const tick = sec?.quoteTick;
+      const midPrice = Number(tick?.midPrice || 0);
+      if (sec && midPrice > 0) {
+        const resolvedIsin = (sec.isin || isin).toUpperCase();
+        const secName = sec.name || resolvedIsin;
+        out[resolvedIsin] = {
+          isin: resolvedIsin,
+          shortName: secName,
+          longName: secName,
+          regularMarketPrice: Math.round(midPrice * 10000) / 10000,
+          currency: (tick?.currency || "EUR").toUpperCase(),
+          marketTime: tick?.timestampUtc?.time,
+        };
+      }
+    };
+
+    try {
+      await queryOne(uniqueIsins[0], true);
+    } catch (firstErr) {
+      console.warn(`[Scalable BrokerQuote] ${uniqueIsins[0]} failed:`, firstErr);
+    }
+
+    const rest = uniqueIsins.slice(1);
+    for (let i = 0; i < rest.length; i += 5) {
+      await Promise.allSettled(rest.slice(i, i + 5).map((isin) => queryOne(isin, false)));
+    }
+    return out;
+  } catch (err) {
+    console.warn("[Scalable BrokerQuote] Lookup skipped, falling back to Yahoo:", err);
+    return {};
+  }
+}
+
+/**
+ * Cerca strumenti nel catalogo Scalable Capital per nome o ISIN (solo se l'account Scalable è connesso).
+ */
+export async function searchScalableSecurities(
+  userId: string,
+  db: Firestore,
+  searchTerm: string,
+): Promise<Array<{ isin: string; name: string; type: string }>> {
+  const term = searchTerm.trim();
+  if (!term) return [];
+  try {
+    const session = await resolveScalableSessionContext(userId, db);
+    if (!session) return [];
+    const res = await executeScalableGraphQL(
+      BROKER_SECURITY_SEARCH_QUERY,
+      {
+        accountId: session.accountId,
+        portfolioId: session.portfolioId,
+        searchTerm: term,
+        includeYearToDate: false,
+        quoteSource: "CONSOLIDATED",
+      },
+      "BrokerSecuritySearch",
+      session.keyPair,
+      session.accessToken,
+      session.refreshToken,
+      userId,
+      db,
+      session.idToken,
+      session.sessionId,
+    );
+    const items = res.data?.account?.brokerPortfolio?.simpleSecuritySearch?.items || [];
+    return items
+      .filter((item): item is { isin: string; name?: string; type?: string } => !!item?.isin && SCALABLE_ISIN_PATTERN.test(item.isin))
+      .slice(0, 8)
+      .map((item) => ({
+        isin: item.isin.toUpperCase(),
+        name: item.name || item.isin,
+        type: item.type || "ETF",
+      }));
+  } catch (err) {
+    console.warn("[Scalable SecuritySearch] Fallback to Yahoo only:", err);
+    return [];
+  }
 }
 
 /**
@@ -2027,6 +2310,8 @@ export const syncScalablePortfolio = onCall(async (request: CallableRequest<Sync
     updatedAt: string;
   }> = {};
 
+  let scalableSessionContext: ScalableSessionContext | undefined;
+
   if (isDemo) {
     fetchedTransactions = getDemoScalableTransactions();
     cashBalance = 1450.50;
@@ -2054,6 +2339,15 @@ export const syncScalablePortfolio = onCall(async (request: CallableRequest<Sync
       fetchedPriceAlerts = graphResult.priceAlerts;
       fetchedTaxReport = graphResult.taxReport;
       cashBalance = graphResult.cashBalance;
+      scalableSessionContext = {
+        keyPair,
+        accountId: graphResult.accountId,
+        portfolioId: graphResult.portfolioId,
+        accessToken: graphResult.accessToken,
+        refreshToken: graphResult.refreshToken,
+        idToken: graphResult.idToken,
+        sessionId: graphResult.sessionId,
+      };
 
       // Update assets collection with holding positions and real-time Scalable quotes in EUR
       for (const h of graphResult.holdings) {
@@ -2462,6 +2756,50 @@ export const syncScalablePortfolio = onCall(async (request: CallableRequest<Sync
           { symbol: item.symbol, name: item.name, currency: item.currency || "EUR", ...update },
           { merge: true },
         );
+      }
+    }
+  }
+
+  // Fetch Scalable quotes also for non-held ISINs present in user's portfolio (manual assets / other brokers)
+  if (scalableSessionContext) {
+    const netQtyBySymbol = new Map<string, number>();
+    for (const d of existingDocs) {
+      const sym = d.symbol || d.isin;
+      if (!sym) continue;
+      const qty = Number(d.quantity || 0);
+      const isSell = (d.type || "BUY").toUpperCase() === "SELL";
+      netQtyBySymbol.set(sym, (netQtyBySymbol.get(sym) || 0) + (isSell ? -qty : qty));
+    }
+    const candidateIsins = new Set<string>();
+    for (const d of existingDocs) {
+      const sym = d.symbol || d.isin || "";
+      if ((netQtyBySymbol.get(sym) || 0) <= 0.000001) continue;
+      const assetIsin = d.symbol ? (existingAssets.get(d.symbol)?.isin as string | undefined) : undefined;
+      const isin = d.isin || assetIsin || (SCALABLE_ISIN_PATTERN.test(sym) ? sym : undefined);
+      if (isin && SCALABLE_ISIN_PATTERN.test(isin) && !scalableQuotesMap[isin]) {
+        candidateIsins.add(isin);
+      }
+    }
+    if (candidateIsins.size > 0) {
+      const extraQuotes = await fetchScalableSecurityQuotes(
+        userId,
+        db,
+        Array.from(candidateIsins),
+        scalableSessionContext,
+      );
+      const nowIso = new Date().toISOString();
+      for (const [isin, q] of Object.entries(extraQuotes)) {
+        if (!scalableQuotesMap[isin]) {
+          scalableQuotesMap[isin] = {
+            symbol: isin,
+            shortName: q.shortName,
+            longName: q.longName,
+            regularMarketPrice: q.regularMarketPrice,
+            currency: q.currency,
+            valuation: 0,
+            updatedAt: nowIso,
+          };
+        }
       }
     }
   }

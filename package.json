@@ -40,7 +40,6 @@
   },
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
@@ -53,6 +52,7 @@
     "deploy:rules": "firebase deploy --only firestore:rules",
     "deploy:indexes": "firebase deploy --only firestore:indexes",
     "deploy:all": "npm run build && firebase deploy",
+    "functions:log": "firebase functions:log",
     "test:calc": "npx --yes tsx scripts/check-calculations.ts",
     "test:portfolios": "npx --yes tsx scripts/test-portfolios-e2e.ts",
     "test:e2e": "firebase emulators:exec --only firestore,auth \"npx --yes tsx scripts/test-portfolios-e2e.ts\"",

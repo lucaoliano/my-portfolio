@@ -115,15 +115,16 @@ export const AssetDetailsScreen = () => {
             currency: q.currency || 'EUR',
             fromQuotes: true,
           });
-          setLiveQuote({
+          setLiveQuote(prev => ({
             symbol: effectiveSymbol,
-            shortName: q.shortName || effectiveSymbol,
-            longName: q.longName || effectiveSymbol,
+            shortName: q.shortName || prev?.shortName || effectiveSymbol,
+            longName: q.longName || prev?.longName || effectiveSymbol,
             regularMarketPrice: Number(q.regularMarketPrice),
-            regularMarketChangePercent: 0,
-            regularMarketChange: 0,
+            regularMarketChangePercent: prev?.regularMarketChangePercent ?? 0,
+            regularMarketChange: prev?.regularMarketChange ?? 0,
             currency: q.currency || 'EUR',
-          });
+            source: 'scalable',
+          }));
         }
       }
     });

@@ -44,20 +44,35 @@ export interface YahooSearchResult {
   longname: string;
   exchange: string;
   quoteType: string;
+  isin?: string;
 }
+
+export interface QuotesResponse {
+  quotes: YahooQuote[];
+  yahooFailed: boolean;
+}
+
+/**
+ * Fetch quotes for multiple symbols using Firebase Cloud Functions, preserving service failure state.
+ */
+export const getQuotesDetailed = async (symbols: string[]): Promise<QuotesResponse> => {
+  if (!symbols || symbols.length === 0) return { quotes: [], yahooFailed: false };
+
+  const getQuotesFn = httpsCallable(functions, 'getQuotes');
+  const result = await getQuotesFn({ symbols });
+  const data = result.data as { quotes?: YahooQuote[]; yahooFailed?: boolean } | null;
+  const quotes = data?.quotes || [];
+  const yahooFailed = typeof data?.yahooFailed === 'boolean' ? data.yahooFailed : false;
+  return { quotes, yahooFailed };
+};
 
 /**
  * Fetch quotes for multiple symbols using Firebase Cloud Functions
  */
 export const getQuotes = async (symbols: string[]): Promise<YahooQuote[]> => {
-  if (!symbols || symbols.length === 0) return [];
-
-  const getQuotesFn = httpsCallable(functions, 'getQuotes');
-  
   try {
-    const result = await getQuotesFn({ symbols });
-    const data = result.data as { quotes: YahooQuote[] };
-    return data.quotes || [];
+    const res = await getQuotesDetailed(symbols);
+    return res.quotes;
   } catch (error) {
     console.error("Error fetching quotes:", error);
     return [];

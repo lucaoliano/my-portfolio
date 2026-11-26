@@ -1,4 +1,5 @@
 import { ThemeColors } from '../theme/colors';
+import { spacing } from '../theme/spacing';
 import { View, StyleSheet } from 'react-native';
 import { Skeleton } from './Skeleton';
 import { useAppTheme } from '../theme/ThemeContext';
@@ -10,8 +11,10 @@ export const PortfolioSkeleton = () => {
     <View style={styles.container}>
       {/* Top Bar Skeleton */}
       <View style={styles.topBar}>
-        <Skeleton width={32} height={32} borderRadius={6} />
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={styles.iconSlot}>
+          <Skeleton width={28} height={28} borderRadius={6} />
+        </View>
+        <View style={styles.iconSlot}>
           <Skeleton width={28} height={28} borderRadius={14} />
         </View>
       </View>
@@ -109,16 +112,23 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 4,
+    paddingHorizontal: spacing.headerPaddingHorizontal,
+    paddingTop: spacing.headerPaddingTop,
+    paddingBottom: spacing.headerPaddingBottom,
+  },
+  iconSlot: {
+    width: spacing.headerButtonSize,
+    height: spacing.headerButtonSize,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
   },
   groupOuterContainer: {
     marginHorizontal: 16,
