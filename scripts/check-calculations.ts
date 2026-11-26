@@ -1,5 +1,5 @@
 // Verifiche del calcolo fiscale e dei numeri: npm run test:calc
-import { parseLocalNumber, formatInputNumber, formatNumber } from '../src/utils/formatters';
+import { parseLocalNumber, formatInputNumber, formatNumber, formatQuantity } from '../src/utils/formatters';
 import { computeTaxReportFromTransactions as c, classifyTaxTreatment as k, computeTaxReportsByBroker as b } from '../src/utils/taxLossTracker';
 import { Transaction, ScalablePriceAlert } from '../src/types';
 import { calculateAlertStatus } from '../src/utils/priceAlerts';
@@ -65,6 +65,7 @@ eq('BTP loss at 48.08%', r.totalActiveLosses, 48.08);
 const numberCases: [string, number][] = [["1.234,56",1234.56],["150,5",150.5],["150.50",150.5],["1 234,56",1234.56],["1.234.567",1234567],["12abc",NaN],["1,2,3",NaN],["0,4567",0.4567],["",NaN]];
 for (const [i, e] of numberCases) { const r = parseLocalNumber(i); eq(`parse ${JSON.stringify(i)}`, Number.isNaN(e) ? Number.isNaN(r) : r === e, true); }
 eq('formatInputNumber keeps decimals', [formatInputNumber(0.4567), formatInputNumber(10), formatInputNumber(0.0049)], ['0,4567', '10', '0,0049']);
+eq('formatQuantity strips float noise and keeps decimals', [formatQuantity(8.844000000000001), formatQuantity(4), formatQuantity(0.0049), formatQuantity(NaN)].map(s => s.replace('.', ',')), ['8,844', '4', '0,0049', '0']);
 
 // Avvisi di prezzo
 const alert = (o: Partial<ScalablePriceAlert>): ScalablePriceAlert => ({ id: 'a', symbol: 'X', name: 'X', targetPrice: 95, direction: 'BELOW', status: 'ACTIVE', ...o });
@@ -88,6 +89,8 @@ let pos = calculatePosition([tx({quantity:10,purchasePrice:100,date:'2025-01-01'
 eq('position avg price after partial sell', [pos.totalQuantity, pos.averagePrice, pos.totalInvested], [10, 150, 1500]);
 pos = calculatePosition([tx({quantity:5,purchasePrice:10}),tx({type:'SELL',quantity:5,purchasePrice:12,date:'2025-02-01'})]);
 eq('position closed', [pos.totalQuantity, pos.totalInvested], [0, 0]);
+pos = calculatePosition([tx({quantity:4.844000000000001,purchasePrice:103.22}),tx({quantity:4,purchasePrice:106})]);
+eq('position fractional float rounded', pos.totalQuantity, 8.844);
 pos = calculatePosition([tx({currency:'USD',fxRate:0.9,quantity:10,purchasePrice:100})]);
 eq('position cost in EUR with fx', pos.totalInvestedEur, 900);
 eq('position cost in EUR unknown without fx', calculatePosition([tx({currency:'USD',quantity:1,purchasePrice:100})]).totalInvestedEur, null);

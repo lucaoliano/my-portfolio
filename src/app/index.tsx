@@ -909,15 +909,6 @@ export const PortfolioScreen = () => {
               </TouchableOpacity>
             );
           })}
-          <TouchableOpacity
-            style={styles.portfolioPillManage}
-            onPress={() => router.push('/manage-portfolios' as never)}
-            accessibilityRole="button"
-            accessibilityLabel="Gestisci portafogli"
-          >
-            <Plus size={13} color={colors.textSecondary} style={{ marginRight: 3 }} />
-            <Text style={styles.portfolioPillManageText}>Gestisci</Text>
-          </TouchableOpacity>
         </ScrollView>
       </View>
 
@@ -1383,21 +1374,6 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   portfolioPillTextActive: {
     color: colors.text,
     fontWeight: '600',
-  },
-  portfolioPillManage: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 32,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  portfolioPillManageText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '500',
   },
   iconButton: {
     width: 44,

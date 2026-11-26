@@ -13,6 +13,25 @@ export const formatNumber = (value: number): string => {
   return amountFormatter.format(isNaN(value) ? 0 : value);
 };
 
+const quantityFormatter = (() => {
+  const options = { minimumFractionDigits: 0, maximumFractionDigits: 8 };
+  try {
+    return new Intl.NumberFormat(undefined, { ...options, useGrouping: 'always' } as Intl.NumberFormatOptions);
+  } catch {
+    return new Intl.NumberFormat(undefined, options);
+  }
+})();
+
+/**
+ * Formatta una quantità di quote/azioni rimuovendo il rumore in virgola mobile (es. 8.844000000000001 -> 8,844)
+ * e senza forzare ",00" sugli interi né troncare i decimali frazionari oltre la seconda cifra.
+ */
+export const formatQuantity = (value: number): string => {
+  if (!isFinite(value)) return '0';
+  const rounded = Math.round(value * 1e8) / 1e8;
+  return quantityFormatter.format(Object.is(rounded, -0) ? 0 : rounded);
+};
+
 export const formatDate = (dateString: string): string => {
   if (!dateString) return '';
   const parts = dateString.split('-');

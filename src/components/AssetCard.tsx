@@ -2,7 +2,7 @@ import { ThemeColors, withAlpha } from '../theme/colors';
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useAppTheme } from '../theme/ThemeContext';
-import { formatNumber, formatSignedCurrency, getCurrencySymbol } from '../utils/formatters';
+import { formatNumber, formatQuantity, formatSignedCurrency, getCurrencySymbol } from '../utils/formatters';
 import * as Clipboard from 'expo-clipboard';
 import { MetricChip } from './MetricChip';
 
@@ -100,7 +100,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({
     name,
     portfolioName ? `Portafoglio ${portfolioName}` : null,
     category ?? null,
-    `${quantity} ${quantity === 1 ? 'quota' : 'quote'}`,
+    `${formatQuantity(quantity)} ${quantity === 1 ? 'quota' : 'quote'}`,
     `valore ${currencySymbol}${formatNumber(totalValue)}`,
     isForeign && valueInBase ? `circa ${formatNumber(valueInBase)} euro` : null,
     fxMissing ? 'cambio non disponibile, escluso dai totali' : null,
@@ -219,8 +219,8 @@ export const AssetCard: React.FC<AssetCardProps> = ({
         <View style={[styles.row, styles.rowSpaced]}>
           <Text style={styles.details} numberOfLines={1}>
             {hasPrice
-              ? `${formatNumber(quantity).replace(/,00$/, '')} × ${currencySymbol}${formatNumber(price)}`
-              : `${formatNumber(quantity).replace(/,00$/, '')} ${quantity === 1 ? 'quota' : 'quote'} · prezzo n/d`}
+              ? `${formatQuantity(quantity)} × ${currencySymbol}${formatNumber(price)}`
+              : `${formatQuantity(quantity)} ${quantity === 1 ? 'quota' : 'quote'} · prezzo n/d`}
           </Text>
           {renderMetric()}
         </View>

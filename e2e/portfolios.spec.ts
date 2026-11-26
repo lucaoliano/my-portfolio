@@ -56,7 +56,9 @@ test.describe('Portafogli E2E Browser Test', () => {
     await expect(page).toHaveURL('/', { timeout: 20000 });
     await expect(page.getByRole('tab', { name: 'Tutti i portafogli' })).toBeVisible({ timeout: 20000 });
 
-    // 4. Clicca su "Gestisci" nella barra dei portafogli per aprire la schermata
+    // 4. Verifica che "Gestisci" non sia nella barra dei portafogli e apri "Gestisci portafogli" dal menu
+    await expect(page.getByRole('button', { name: 'Gestisci portafogli' })).not.toBeVisible();
+    await page.getByRole('button', { name: 'Apri il menu' }).click();
     const manageBtn = page.getByRole('button', { name: 'Gestisci portafogli' });
     await expect(manageBtn).toBeVisible();
     await manageBtn.click();

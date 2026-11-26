@@ -13,7 +13,7 @@ import { useTransactions } from '../hooks/useTransactions';
 import { useAssetCategories } from '../hooks/useAssetCategories';
 import { useScalableConfig } from '../hooks/useScalableConfig';
 import { useScalableTaxReport } from '../hooks/useScalableTaxReport';
-import { formatDate, formatNumber, formatSignedCurrency } from '../utils/formatters';
+import { formatDate, formatNumber, formatQuantity, formatSignedCurrency } from '../utils/formatters';
 import { BrokerTaxReport, RealizedTrade, TaxLossBucket } from '../types';
 
 type ActiveTab = 'years' | 'sales' | 'rules';
@@ -309,7 +309,7 @@ const TradeRow = ({ trade, styles, colors }: { trade: RealizedTrade; styles: Ret
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.tradeName} numberOfLines={2}>{trade.name}</Text>
         <Text style={styles.tradeMeta}>
-          {formatDate(trade.date)} · {formatNumber(trade.quantity).replace(/,00$/, '')} {trade.quantity === 1 ? 'quota' : 'quote'}
+          {formatDate(trade.date)} · {formatQuantity(trade.quantity)} {trade.quantity === 1 ? 'quota' : 'quote'}
         </Text>
         <Text style={styles.tradeMeta}>
           Costo {eur(trade.costBasis)}{trade.proceeds !== undefined ? ` · Incasso ${eur(trade.proceeds)}` : ''}

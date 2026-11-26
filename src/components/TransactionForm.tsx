@@ -26,7 +26,7 @@ import { db, auth } from '../config/firebase';
 import { useTransactions } from '../hooks/useTransactions';
 import { DEFAULT_PORTFOLIO } from '../hooks/useUserSettings';
 import { getHistoricalQuote, HistoricalQuote } from '../services/yahooFinance';
-import { formatDate, formatInputNumber, formatNumber, parseLocalNumber } from '../utils/formatters';
+import { formatDate, formatInputNumber, formatNumber, formatQuantity, parseLocalNumber } from '../utils/formatters';
 import { Portfolio, Transaction } from '../types';
 import { getPortfolioGroups, addPortfolioGroup, cleanPortfolios } from '../utils/portfolioManager';
 
@@ -294,7 +294,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
 
   const handleDelete = () => {
     if (!initial || !userId) return;
-    const what = `${type === 'SELL' ? 'la vendita' : "l'acquisto"} di ${formatNumber(qtyValue || Number(initial.quantity)).replace(/,00$/, '')} ${name} del ${formatDate(initialDate)}`;
+    const what = `${type === 'SELL' ? 'la vendita' : "l'acquisto"} di ${formatQuantity(qtyValue || Number(initial.quantity))} ${name} del ${formatDate(initialDate)}`;
     confirmAction('Eliminare la transazione?', `Stai per eliminare ${what}. L'operazione non si può annullare.`, 'Elimina', async () => {
       setDeleting(true);
       try {
@@ -448,7 +448,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ mode, symbol, 
         {field('quantity', 'Quantità', quantity, v => { setQuantity(v); setSellWarningAccepted(false); }, { placeholder: 'es. 10 oppure 0,5' })}
         {sellsTooMuch && (
           <Text style={styles.warningText} accessibilityLiveRegion="polite">
-            Alla data scelta risultano {formatNumber(Math.max(0, heldAtDate)).replace(/,00$/, '')} quote: vendendone di più lo zainetto fiscale non potrà calcolare questa vendita. Controlla gli acquisti registrati.
+            Alla data scelta risultano {formatQuantity(Math.max(0, heldAtDate))} quote: vendendone di più lo zainetto fiscale non potrà calcolare questa vendita. Controlla gli acquisti registrati.
           </Text>
         )}
 

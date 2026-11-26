@@ -691,6 +691,9 @@ test.describe('Financial & Fiscal Computation Utilities', () => {
       // 3. formatters
       const fNum = fmt.formatNumber(1234.56);
       const fNumNan = fmt.formatNumber(NaN);
+      const fQtyFloat = fmt.formatQuantity(8.844000000000001);
+      const fQtyInt = fmt.formatQuantity(4);
+      const fQtyNan = fmt.formatQuantity(NaN);
       const fDec = fmt.formatDecimal(12.345, 2);
       const pNum = fmt.parseLocalNumber('1.234,56');
       const pNumDots = fmt.parseLocalNumber('1.234.567');
@@ -747,6 +750,9 @@ test.describe('Financial & Fiscal Computation Utilities', () => {
         yieldCappedAnnual: yieldCapped.annualNet,
         capPrime,
         fNum,
+        fQtyFloat,
+        fQtyInt,
+        fQtyNan,
         fDec,
         pNum,
         fSignedPos,
@@ -791,6 +797,9 @@ test.describe('Financial & Fiscal Computation Utilities', () => {
     expect(results.challengeValid).toBe(true);
     expect(results.yieldCappedAnnual).toBeGreaterThan(0);
     expect(results.fNum).toContain('1');
+    expect(results.fQtyFloat).toMatch(/^8[.,]844$/);
+    expect(results.fQtyInt).toBe('4');
+    expect(results.fQtyNan).toBe('0');
     expect(results.pNum).toBe(1234.56);
     expect(results.fSignedPos).toContain('+');
     expect(results.fSignedNeg).toContain('-');

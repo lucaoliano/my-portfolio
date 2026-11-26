@@ -30,6 +30,7 @@ lib-cov
 coverage
 coverage-reports/
 assets/monocart-coverage-app.js
+test-results/
 
 # nyc test coverage
 .nyc_output

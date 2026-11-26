@@ -12,7 +12,7 @@ import { useAppTheme } from '../../theme/ThemeContext';
 import { db, auth } from '../../config/firebase';
 import { collection, query, where, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { Transaction } from '../../types';
-import { formatNumber, formatDate, formatSignedCurrency, getCurrencySymbol } from '../../utils/formatters';
+import { formatNumber, formatQuantity, formatDate, formatSignedCurrency, getCurrencySymbol } from '../../utils/formatters';
 import { CopyableText } from '../../components/CopyableText';
 import { MetricChip } from '../../components/MetricChip';
 import { AssetPriceChart } from '../../components/AssetPriceChart';
@@ -314,7 +314,17 @@ export const AssetDetailsScreen = () => {
       <View style={styles.metricsRow}>
         <View style={styles.metricCard}>
           <Text style={styles.metricLabel}>Quantità</Text>
-          <CopyableText testID="metric-quantity" style={styles.metricValue} valueToCopy={totalQuantity.toString()}>{totalQuantity}</CopyableText>
+          <CopyableText
+            testID="metric-quantity"
+            style={styles.metricValue}
+            valueToCopy={totalQuantity.toString()}
+            touchableStyle={{ maxWidth: '100%' }}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >
+            {formatQuantity(totalQuantity)}
+          </CopyableText>
         </View>
         <View style={styles.metricCard}>
           <Text style={styles.metricLabel}>Prezzo Medio</Text>
@@ -511,7 +521,7 @@ export const AssetDetailsScreen = () => {
                     )}
                   </View>
                   <Text style={styles.transactionQuantity}>
-                    {isSell ? 'Vendita: ' : ''}{formatNumber(item.quantity)} quote a {currencySymbol}{formatNumber(item.purchasePrice)}
+                    {isSell ? 'Vendita: ' : ''}{formatQuantity(item.quantity)} {Number(item.quantity) === 1 ? 'quota' : 'quote'} a {currencySymbol}{formatNumber(item.purchasePrice)}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>

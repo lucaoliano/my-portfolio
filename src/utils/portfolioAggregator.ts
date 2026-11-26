@@ -52,7 +52,8 @@ export const calculatePosition = (transactions: Transaction[]): PositionSummary 
   });
 
   if (quantity <= 1e-9) return { totalQuantity: 0, totalInvested: 0, averagePrice: 0, totalInvestedEur: costEur === null ? null : 0 };
-  return { totalQuantity: quantity, totalInvested: cost, averagePrice: cost / quantity, totalInvestedEur: costEur };
+  const cleanQuantity = Math.round(quantity * 1e8) / 1e8;
+  return { totalQuantity: cleanQuantity, totalInvested: cost, averagePrice: cost / cleanQuantity, totalInvestedEur: costEur };
 };
 
 /** @deprecated nome storico: il calcolo è a costo medio ponderato, non FIFO */
